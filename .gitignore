@@ -1,0 +1,23 @@
+# macOS junk
+.DS_Store
+
+# Editor swap / backup files
+*.swp
+*.swo
+*~
+
+# Local-only overrides (sourced by zshrc but never tracked)
+*.local
+zshrc.local
+
+# Defensive: things that should never land here even if mkrc'd by mistake
+hosts.yml
+.credentials.json
+credentials
+credentials.json
+*.pem
+*.key
+id_rsa
+id_ed25519
+.env
+.env.*

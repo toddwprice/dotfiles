@@ -1,0 +1,27 @@
+[alias]
+	br = branch
+	st = status
+	co = checkout
+	hist = log --pretty=format:\"%h %ad | %s%d [%an]\" --date=short --graph
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[user]
+	email = todd.price@dscout.com
+	name = Todd Price
+[push]
+	autoSetupRemote = true
+[core]
+	hooksPath = /Users/toddprice/.git_hooks
+[rerere]
+	enabled = true
+[safe]
+	directory = /Users/toddprice/dscout-wt
+[difftool "zed"]
+	cmd = zed --diff $LOCAL $REMOTE
+[diff]
+	tool = zed
+[difftool]
+	prompt = false
