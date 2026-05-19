@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#
+# Sync dotfiles: scan watched directories for new (non-symlinked) files,
+# offer to mkrc them, then surface uncommitted edits and prompt for a commit.
+#
+# rcm uses per-file symlinks. Edits to tracked files flow through automatically,
+# but NEW files in tracked directories live outside the repo until you mkrc them.
+# This script catches that gap.
+
+set -euo pipefail
+
+# Directories to scan for new files. Add a path here whenever you start
+# managing a new dotfile location.
+WATCHED_DIRS=(
+  "$HOME/.claude/commands"
+  "$HOME/.claude/agents"
+  "$HOME/.config/zed"
+)
+
+# Filenames to ignore when scanning. mkrc would symlink them and the .gitignore
+# would catch them at commit time, but no point in the round trip.
+SKIP_GLOBS=(
+  ".DS_Store"
+  "*.swp"
+  "*.swo"
+  "*.tmp"
+)
+
+DOTFILES="${HOME}/.dotfiles"
+
+# -- 1. Discover new files in watched dirs ---------------------------------
+
+new_files=()
+for dir in "${WATCHED_DIRS[@]}"; do
+  [[ -d "$dir" ]] || continue
+  # -type f matches regular files only (excludes symlinks, which rcm creates).
+  while IFS= read -r -d '' f; do
+    name=$(basename "$f")
+    skip=
+    for pat in "${SKIP_GLOBS[@]}"; do
+      # shellcheck disable=SC2053
+      [[ "$name" == $pat ]] && { skip=1; break; }
+    done
+    [[ -z "$skip" ]] && new_files+=("$f")
+  done < <(find "$dir" -type f -print0)
+done
+
+if (( ${#new_files[@]} > 0 )); then
+  echo "Found ${#new_files[@]} new file(s) not yet in ~/.dotfiles:"
+  for f in "${new_files[@]}"; do
+    printf "  %s\n" "${f/#$HOME/~}"
+  done
+  read -r -p "mkrc all of them? [Y/n] " ans
+  if [[ ! "$ans" =~ ^[Nn]$ ]]; then
+    for f in "${new_files[@]}"; do
+      mkrc "$f"
+    done
+    echo "Done."
+  else
+    echo "Skipped mkrc."
+  fi
+else
+  echo "No new files in watched dirs."
+fi
+
+# -- 2. Show uncommitted changes in the repo -------------------------------
+
+cd "$DOTFILES"
+
+if [[ -z "$(git status --porcelain)" ]]; then
+  echo "Nothing to commit — ~/.dotfiles is clean."
+  exit 0
+fi
+
+echo
+echo "=== Uncommitted changes ==="
+git status --short
+echo
+git diff --stat HEAD 2>/dev/null || true
+echo
+
+read -r -p "Commit and push? [Y/n] " ans
+if [[ "$ans" =~ ^[Nn]$ ]]; then
+  echo "Skipped commit. Re-run when ready."
+  exit 0
+fi
+
+# -- 3. Commit and push ----------------------------------------------------
+
+default_msg="Sync dotfiles ($(date +%Y-%m-%d))"
+read -r -p "Commit message [${default_msg}]: " msg
+[[ -z "$msg" ]] && msg="$default_msg"
+
+git add -A
+git commit -m "$msg"
+git push
