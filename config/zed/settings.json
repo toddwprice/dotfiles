@@ -7,6 +7,13 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "edit_predictions": {
+    "ollama": {
+      "max_output_tokens": 64,
+      "api_url": "http://localhost:11434"
+    },
+    "provider": "copilot"
+  },
   "cli_default_open_behavior": "new_window",
   "project_panel": {
     "dock": "left"
@@ -48,6 +55,8 @@
     "dark": "Ayu Dark",
   },
   "agent": {
+    "play_sound_when_agent_done": "always",
+    "enable_feedback": false,
     "dock": "right",
     "enabled": true, // Master switch for all AI features
     "button": true, // Show agent panel button in status bar

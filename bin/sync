@@ -12,9 +12,10 @@ set -euo pipefail
 # Directories to scan for new files. Add a path here whenever you start
 # managing a new dotfile location.
 WATCHED_DIRS=(
-  "$HOME/.claude/commands"
-  "$HOME/.claude/agents"
-  "$HOME/.config/zed"
+    "$HOME/.claude/skills"
+    "$HOME/.claude/commands"
+    "$HOME/.claude/agents"
+    "$HOME/.config/zed"
 )
 
 # Filenames to ignore when scanning. mkrc would symlink them and the .gitignore
