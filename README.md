@@ -1,6 +1,6 @@
 # dotfiles
 
-My personal config for zsh, git, Zed, Claude Code, and a few CLI tools. Managed with [rcm](https://github.com/thoughtbot/rcm).
+My personal config for zsh, git, Claude Code, and a few CLI tools. Managed with [rcm](https://github.com/thoughtbot/rcm).
 
 ## Bootstrap a new Mac
 
@@ -17,28 +17,27 @@ env RCRC=$HOME/.dotfiles/rcrc rcup
 
 After the first `rcup`, the `rcrc` symlink is in place and you can run plain `rcup` from then on. Use `rcup -n` for a dry run, `lsrc` to see what's currently linked, and `rcdn` to unlink.
 
-## Secrets
+## Secrets and machine-specific config
 
-Nothing secret lives in this repo. Anything that needs an API key or token gets sourced from `~/.zshrc.local`, which is gitignored:
+Nothing secret lives in this repo. The tracked `zshrc` sources three out-of-repo files at the end, none of which are tracked:
 
 ```sh
-# In zshrc (tracked)
-[ -f ~/.zshrc.local ] && source ~/.zshrc.local
+# Environment variables — API keys, tokens, anything sensitive
+[[ -f ~/.env ]] && source ~/.env
 
-# In ~/.zshrc.local (NOT tracked)
-export ANTHROPIC_AUTH_TOKEN="..."
-export SOME_OTHER_TOKEN="..."
+# Personal and work-specific shell config — aliases, paths, helpers
+[[ -r ~/.config/zsh/personal.zsh ]] && source ~/.config/zsh/personal.zsh
+[[ -r ~/.config/zsh/dscout.zsh ]]   && source ~/.config/zsh/dscout.zsh
 ```
 
-Same pattern for any host-specific config: drop it in `~/.zshrc.local` and it stays out of git.
+If you fork this, mirror that pattern: drop secrets into `~/.env`, host- or context-specific shell config into `~/.config/zsh/*.zsh`, and the public `zshrc` stays portable. The `.gitignore` already covers `.env`, `*.local`, common key formats, and credential filenames as a defense in depth.
 
 ## What's in here
 
-- **Shell** &mdash; `zshrc`, `p10k.zsh` (Powerlevel10k), oh-my-zsh backup layers
+- **Shell** &mdash; `zshrc`, `p10k.zsh` (Powerlevel10k), `zshrc-omz` (oh-my-zsh backup layer)
 - **Git** &mdash; `gitconfig` with aliases (`br`, `st`, `co`, `hist`), global gitignore at `config/git/ignore`
-- **Editor** &mdash; `config/zed/` (settings, prompts, themes)
 - **CLI** &mdash; `taskrc`, `yarnrc`, `config/gh/config.yml`
-- **Claude Code** &mdash; `claude/settings.json`, custom commands at `claude/commands/`, `claude/statusline-command.sh`
+- **Claude Code** &mdash; `claude/statusline-command.sh`
 
 ## License
 
