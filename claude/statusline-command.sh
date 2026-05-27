@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code status line
-# Displays: user@host  cwd  git-branch  model  context%
+# Displays: cwd  git-branch  model  context%
 
 input=$(cat)
 
@@ -18,9 +18,9 @@ if git -C "$cwd" rev-parse --git-dir > /dev/null 2>&1; then
   branch=$(git -C "$cwd" -c core.fsmonitor=false symbolic-ref --short HEAD 2>/dev/null \
            || git -C "$cwd" -c core.fsmonitor=false rev-parse --short HEAD 2>/dev/null)
 fi
+[ "${#branch}" -gt 30 ] && branch="${branch:0:29}…"
 
 # Build pieces
-user_host="$(whoami)@$(hostname -s)"
 loc_part="$short_cwd"
 [ -n "$branch" ] && loc_part="$loc_part  $branch"
 
@@ -32,8 +32,7 @@ fi
 model_part=""
 [ -n "$model" ] && model_part=" | $model"
 
-printf '\033[2m%s  %s%s%s\033[0m' \
-  "$user_host" \
+printf '%s%s%s' \
   "$loc_part" \
   "$model_part" \
   "$ctx_part"
