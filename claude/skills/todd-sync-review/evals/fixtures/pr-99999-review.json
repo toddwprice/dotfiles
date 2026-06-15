@@ -1,0 +1,18 @@
+{
+  "body": "Widens `compile_template_guide` to accept an optional `study_context`. One real contract gap; otherwise clean.",
+  "event": "REQUEST_CHANGES",
+  "comments": [
+    {
+      "path": "apps/astro/app/domain/dscript/templates/compile.py",
+      "line": 186,
+      "side": "RIGHT",
+      "body": "The new `study_context` arg changes output but isn't part of the cache key, so two different contexts collide on a stale cached guide.\n\n<details>\n<summary>Instructions for AI Agents</summary>\n\nInclude `study_context` (or a stable hash of it) in the cache key for `compile_template_guide`.\n\n</details>\n"
+    },
+    {
+      "path": "apps/astro/app/domain/dscript/templates/compile.py",
+      "line": 190,
+      "side": "RIGHT",
+      "body": "Missing docstring on the widened signature.\n\n<details>\n<summary>Instructions for AI Agents</summary>\n\nAdd a docstring documenting the optional `study_context` parameter.\n\n</details>\n"
+    }
+  ]
+}

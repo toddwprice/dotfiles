@@ -1,6 +1,13 @@
 ---
 name: todd:catchup
-description: Check all communication channels and task systems for open items needing attention. Use when asked to catch up, check messages, or review what's pending.
+description: >
+  Use when Todd wants to get back up to speed / catch up on open items, pending work, and recent
+  activity across his calendar, email, Slack, Notion, and Linear — phrasings like "catch me up",
+  "what's pending", "what needs my attention", "check my messages", "what was I working on", "where
+  did I leave off", or "resume my session". This is a cross-channel inbox/triage sweep. Not for a
+  git/PR work-recap of a specific branch or ticket ("what's the latest on this branch", "last work
+  completed on this ticket") — that is a different task. Not for diagnosing one DYS/dscript session
+  (use todd:trace-dys) or planning/implementing a ticket (use todd:coder).
 disable-model-invocation: true
 argument-hint: "[today|week]"
 allowed-tools: Agent, Read

@@ -1,0 +1,12 @@
+{
+  "skill_name": "todd:sync-review",
+  "safety": "Side-effecting (posts a GitHub review). Eval runs use a local FIXTURE artifact and must STOP at the rebuilt JSON — do NOT call gh api .../reviews or .../comments. Subagent instructions enforce sync-only.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I edited the review html at evals/fixtures/pr-99999-review.html — sync the json to match my comments (one finding was deleted, one added) and prep them to post inline. Don't post yet, just show me the json.",
+      "expected_output": "Parses the annotation cards out of the fixture HTML, reconciles against the original fixture JSON (drops the removed finding, includes the added one), and emits a valid reviews-schema payload: body + event derived from severities + inline comments with path/line/side and the <details>Instructions for AI Agents</details> block on line-level comments only. Does not post.",
+      "files": ["evals/fixtures/pr-99999-review.html", "evals/fixtures/pr-99999-review.json"]
+    }
+  ]
+}

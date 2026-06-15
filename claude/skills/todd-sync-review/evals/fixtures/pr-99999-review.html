@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>PR #99999 — fixture review</title></head>
+<body>
+  <div class="pr-header">
+    <h1>Widen template contract <span class="pr-num">#99999</span></h1>
+    <div class="pr-meta"><strong>base</strong> main · <strong>head</strong> frg-fixture</div>
+  </div>
+
+  <div class="verdict verdict-request-changes">VERDICT: Request changes</div>
+
+  <div class="narrative">
+    Widens <code>compile_template_guide</code> to accept an optional <code>study_context</code>.
+    Mostly clean; one real contract gap and one nit. (Todd hand-edited this file: removed the
+    original "missing docstring" nit, and ADDED a new finding about the 422 parse path.)
+  </div>
+
+  <section class="file" data-path="apps/astro/app/domain/dscript/templates/compile.py">
+    <h3 class="file-header">apps/astro/app/domain/dscript/templates/compile.py</h3>
+    <pre class="diff">@@ -180,6 +180,9 @@ def compile_template_guide(...):</pre>
+    <div class="annotation sev-blocking" data-file="apps/astro/app/domain/dscript/templates/compile.py" data-line="186">
+      <span class="chip chip-blocking">blocking</span>
+      <strong>study_context not threaded into the cache key</strong>
+      <p>At <code>compile.py:186</code> the new <code>study_context</code> arg changes output but
+      isn't part of the cache key, so two different contexts collide on a stale cached guide.</p>
+    </div>
+  </section>
+
+  <section class="file" data-path="apps/axon/lib/dscript/rest_wrapper.ex">
+    <h3 class="file-header">apps/axon/lib/dscript/rest_wrapper.ex</h3>
+    <pre class="diff">@@ -40,0 +41,6 @@ defp draft_study(...) do</pre>
+    <div class="annotation sev-non-blocking" data-file="apps/axon/lib/dscript/rest_wrapper.ex" data-line="44">
+      <span class="chip chip-non-blocking">non-blocking</span>
+      <strong>REST wrapper doesn't parse response.json() on 422</strong>
+      <p>ADDED BY TODD: on a 422 from <code>POST /draft_study</code> the wrapper at
+      <code>rest_wrapper.ex:44</code> drops the body, so <code>createMissionForm</code> loses the
+      validation detail. Parse and surface it.</p>
+    </div>
+  </section>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "skill_name": "todd:astro-run-evals",
+  "safety": "Running evals is read-mostly but costs LLM/Braintrust time. Eval runs use PRINT-ONLY prompts so the graded artifact is the emitted command, not a paid run.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "what command runs the supervisor offline evals? I want to run it myself",
+      "expected_output": "Prints exactly `cd apps/astro && uv run braintrust eval app/domain/dscript/agents/supervisor_agent/offline_evals/eval_*.py` in a copyable block and STOPS (print-only, because Todd said he'll run it himself). Does not execute.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "give me the command to run all the offline evals — don't run it",
+      "expected_output": "Prints `cd apps/astro && uv run braintrust eval app/domain/**/eval_*.py` and stops. Mentions the required env (BRAINTRUST_API_KEY, OPENAI_API_KEY, MODEL_ENV).",
+      "files": []
+    }
+  ]
+}

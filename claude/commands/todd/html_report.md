@@ -1,6 +1,6 @@
 ---
-allowed-tools: Bash(mkdir:*), Bash(open:*), Bash(date:*), Write, Read, Agent
-description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in .claude/tmp/, then open it. Pass the topic/question as $ARGUMENTS. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
+allowed-tools: Bash(mkdir:*), Bash(open:*), Bash(date:*), Bash(/Applications/Google Chrome.app/Contents/MacOS/Google Chrome:*), Write, Read, Agent
+description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in .claude/tmp/, then open it. Pass the topic/question as $ARGUMENTS; append `--pdf` to also produce a Mermaid-aware PDF sibling. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
 ---
 
 You are producing a self-contained HTML report that answers a question or tells a visual story. The report opens in a browser when done.
@@ -12,6 +12,8 @@ Arguments: `$ARGUMENTS` is the question, topic, or instruction. Examples Todd ha
 - *"diagrams in HTML that tell the story of how media processing works in the platform"*
 - *"run this sql against my localhost database and format the result as HTML"*
 - *"comparison table of mission_drafts vs study_templates schemas"*
+
+If `$ARGUMENTS` contains the token `--pdf` (anywhere — start, middle, end), set `WANT_PDF=1`, strip the token from the question, and proceed with what remains. The PDF is rendered in Step 5 after the HTML is written.
 
 ## Step 1 — Classify the report shape
 
@@ -86,7 +88,7 @@ Rules for content:
 - Hyperlink Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PR numbers (`https://github.com/dscout/monorepo/pull/<num>`) when they appear.
 - Drop the Mermaid `<script>` tag if there are no diagrams — keep the file lean.
 
-## Step 4 — Open and report
+## Step 4 — Open
 
 After writing the file:
 
@@ -94,7 +96,34 @@ After writing the file:
 open <path>
 ```
 
-Then tell Todd, in one line, where it landed and what shape you picked. Example: *"Wrote `.claude/tmp/report-media-processing-2026-05-18-1432.html` — narrative + 3 Mermaid flow diagrams. Opened in browser."*
+## Step 5 — Optional PDF (only if `WANT_PDF=1`)
+
+Render the same file to a PDF sibling via headless Chrome. Use these exact flags — they earn their keep:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless \
+  --disable-gpu \
+  --no-pdf-header-footer \
+  --virtual-time-budget=10000 \
+  --run-all-compositor-stages-before-draw \
+  --print-to-pdf=<path-without-.html>.pdf \
+  "file://<absolute-path-to-html>"
+```
+
+Why these flags matter (do not strip them):
+- `--virtual-time-budget=10000` gives client-side JS up to 10s to finish before snapshot. Without it, **Mermaid diagrams print as blank `<div>`s** because Chrome captures before the CDN script renders.
+- `--run-all-compositor-stages-before-draw` pairs with the time budget to ensure layout/paint finish before capture.
+- `--no-pdf-header-footer` strips the page-edge URL/date chrome for cleaner shareable output.
+
+Then `open <pdf-path>` so the PDF lands in Preview alongside the browser tab.
+
+## Step 6 — Report
+
+Tell Todd, in one line, where things landed and what shape you picked. Mention the PDF only if you produced one.
+
+- HTML only: *"Wrote `.claude/tmp/report-media-processing-2026-05-18-1432.html` — narrative + 3 Mermaid flow diagrams. Opened in browser."*
+- HTML + PDF: *"Wrote `.claude/tmp/report-media-processing-2026-05-18-1432.html` + `.pdf` — narrative + 3 Mermaid flow diagrams. Both opened."*
 
 ## Voice for narrative sections
 

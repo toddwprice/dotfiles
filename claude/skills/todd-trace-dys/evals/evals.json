@@ -1,0 +1,18 @@
+{
+  "skill_name": "todd:trace-dys",
+  "safety": "Read-only. Decodes state + reads Braintrust traces. No writes. NOTE: needs a CURRENT (non-stale) chat/room id from Todd to test the live-trace path; otherwise only the state-decode + staleness-warning paths are exercised.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "can you look at this braintrust chat: http://localhost:5000/dscript/chat/<ROOM_ID>?state=<STATE_BLOB> — it let me pick two templates but then asked me for objectives instead of nudging the picker",
+      "expected_output": "Extracts the room id, decodes the ?state= base64 blob and surfaces the supervisor-relevant fields (workflow_step, is_governed, template slots, pending placeholders), pulls the BT trace for the room, runs the staleness check, then diagnoses the supervisor-select decision (root cause + evidence span + where the fix lives).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "diagnose room id <ROOM_ID> in braintrust — I selected a screener and a mission but the canvas opened before I filled the placeholders",
+      "expected_output": "Handles a bare room id (no URL/state), resolves the dscript BT project, finds the spans, checks staleness, and explains the canvas-gating decision against expected governed/placeholder behavior.",
+      "files": []
+    }
+  ]
+}

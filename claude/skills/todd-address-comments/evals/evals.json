@@ -1,0 +1,18 @@
+{
+  "skill_name": "todd:address-comments",
+  "safety": "Propose-first. Eval runs must STOP at the triage table — never implement, commit, or push. Subagent instructions enforce this.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "can you pull the comments for PR <PR_NUMBER> and propose how to address them?",
+      "expected_output": "Fetches review threads via gh api (without being pasted them), groups into threads, skips resolved/already-answered, fact-checks each against the code, and presents a triage table + draft replies + fix plan. Stops there.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "look at the baz comments on PR <PR_NUMBER> and resolve them for me",
+      "expected_output": "Recognizes baz as the AI reviewer, pulls its comments, fact-checks (including declining low-severity nits with rationale), and STILL shows the triage table before any action. Does not push.",
+      "files": []
+    }
+  ]
+}

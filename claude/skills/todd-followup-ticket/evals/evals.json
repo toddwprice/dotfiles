@@ -1,0 +1,18 @@
+{
+  "skill_name": "todd:followup-ticket",
+  "safety": "Side-effecting (creates a Linear ticket). Eval runs must STOP at the drafted ticket — do NOT call linctl issue create / save_issue. Subagent instructions enforce draft-only.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "let's create a follow-up ticket for the out-of-scope error-handling cleanup baz flagged on PR <PR_NUMBER> — put it in the FRG templates project and include the PR link and the file refs",
+      "expected_output": "Resolves team FRG + the Templates-in-DYS project, drafts a ticket (Context/Problem/Evidence/Suggested approach/Source) with the PR link and code refs, absolute dates, and STOPS to show the draft for approval. Does not create it.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "this baz comment says 'filed for later' but doesn't say where — is there actually a follow-up ticket for it? if not, draft one",
+      "expected_output": "First searches Linear / the PR thread for an existing ticket and reports whether one exists; only if none, drafts a new follow-up ticket and shows it for approval. Avoids duplicates.",
+      "files": []
+    }
+  ]
+}

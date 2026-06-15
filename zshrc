@@ -74,6 +74,8 @@ alias python="python3"
 alias awslocal="aws --endpoint-url=http://localhost:4566"
 alias rebaseFromMain="git fetch && git pull && git rebase origin/main && git push --force-with-lease"
 alias gp="git push --force-with-lease"
+alias gbcp="git branch --show-current | tee >(tr -d '\n' | pbcopy)"
+alias ddu="dscout-down && dscout-up"
 
 # Docker compose shorthand
 alias dc="docker compose"

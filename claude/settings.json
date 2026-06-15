@@ -28,18 +28,29 @@
     "skill-creator@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "slack@claude-plugins-official": true,
-    "warp@claude-code-warp": true,
     "org-pulse@dscout-claude-plugins": true,
     "astro@dscout-claude-plugins": true,
     "dscout-data-mcp@dscout-claude-plugins": true,
     "imessage@claude-plugins-official": true,
-    "pydantic-ai@claude-plugins-official": true
+    "pydantic-ai@claude-plugins-official": true,
+    "axon@dscout-claude-plugins": true,
+    "dev-flow@dscout-claude-plugins": true,
+    "bug-intel@dscout-claude-plugins": true,
+    "dscout-quality@dscout-claude-plugins": true,
+    "warp@claude-code-warp": true,
+    "understand-anything@understand-anything": true
   },
   "extraKnownMarketplaces": {
     "claude-code-warp": {
       "source": {
         "source": "github",
         "repo": "warpdotdev/claude-code-warp"
+      }
+    },
+    "understand-anything": {
+      "source": {
+        "source": "github",
+        "repo": "Egonex-AI/Understand-Anything"
       }
     }
   },
