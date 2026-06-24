@@ -16,7 +16,7 @@ Both reach staging through an **SSM tunnel or remote eval** — there is no dire
 ## Critical safety rules
 
 - **State-changing commands hit shared, multi-user environments.** Confirm the exact target env (`staging-N`) and the exact action with Todd before running anything that writes (creating users, resetting passwords, mutating account `idp_type`, importing rows). Never guess the env number.
-- **Never hardcode or commit secrets.** Connection strings, passwords, and the `application` DB password are session-scoped — Todd pastes them per run; do not store them in files, memory, or commits.
+- **Never hardcode or commit secrets.** Fetch connection strings/credentials at run time from AWS Secrets Manager via `bin/env_config` (see Job B); never store them in files, memory, or commits.
 - **AWS SSO first.** `bin/ssm` / `bin/env_config` require an active SSO session (`bin/aws-login`); default profile is `dev` for staging, `prod` for prod.
 - Prefer `--account-id` scoped to a sandbox/personal account over the shared internal account `2` when copying, so you don't pollute everyone's library.
 
@@ -50,16 +50,35 @@ bin/ssm staging-N axon_eval 'Axon.Auth.sign_in({"todd.price@dscout.com", "the-pa
 
 The staff-bypass changeset path (no current-password, no reset token, bcrypt-hashed for you) is `Axon.Accounts.Users.update_user_by_staff/3` → `User.staff_update_changeset` → `staff_change_password_changeset`. Verified in `apps/axon/lib/axon/accounts/users.ex:690` and `apps/axon/lib/axon/accounts/user.ex:509`.
 
-<!-- TODO: confirm with Todd the exact `update_user_by_staff/3` arg shape + acting-staff user he wants to run live (args map keys, opts). The function exists and is the right path; the precise one-liner he prefers (changeset vs direct Repo.update_all of encrypted_password) was discussed but not finalized in transcript. -->
+The acting `staff` arg must be a user with `staff: true` — use `staff@dscout.com` or `dev@dscout.com`. A `%{password: ...}` arg triggers the `:password_reset_by_staff` action (`users.ex:490`) and bcrypt-hashes the value for you. Use this proper path — **not** a direct `Repo.update_all` of `encrypted_password`.
+
+```bash
+bin/ssm staging-N axon_eval '
+  alias Axon.Accounts.{Users, User}
+  alias Axon.Repo
+  target = Repo.get_by!(User, email: "todd.price@dscout.com")
+  staff  = Repo.get_by!(User, email: "staff@dscout.com")   # must be staff: true
+  {:ok, _} = Users.update_user_by_staff(target, %{password: "<new-password>"}, staff)
+  IO.puts("password reset ok")
+'
+```
 
 ### A3. Enable email/password login when the account is SSO/Google-only
 
-If the restored staging DB has `dscout.com`'s account set to `google_oauth2` (or you're staff and account `2` is google-only), email+password sign-in is blocked by `check_required_sso`. Options, in order of least blast radius:
+If email+password sign-in is blocked by `check_required_sso` (account set to `google_oauth2`), set the **dscout-internal account (id 2)** `idp_type` to `google_or_dscout`, which permits BOTH Google OAuth and email/password. Staff users (`staff: true`) resolve their idp from account 2, so this one change unblocks password login without touching per-account settings.
 
-1. **Become staff + rely on account 2** — staff idp resolves from account `2`; set account 2's `idp_type` to a value that permits password login (`google_or_dscout` allows both). Confirm scope with Todd first (account 2 is shared internal).
-2. **Use Google OAuth as-is** — if `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are wired for that staging env (`apps/axon/config/runtime.exs`) and the env's OAuth callback is registered, just sign in with Google; no DB change needed. Whether each staging env has working Google OAuth is env-specific.
+```bash
+bin/ssm staging-N axon_eval '
+  alias Axon.Accounts.Account
+  alias Axon.Repo
+  Repo.get!(Account, 2)
+  |> Ecto.Changeset.change(idp_type: "google_or_dscout")
+  |> Repo.update!()
+  IO.puts("account 2 idp_type -> google_or_dscout")
+'
+```
 
-<!-- TODO: confirm with Todd the exact mutation he wants for the SSO case (which account id, target idp_type value), and whether staging Google OAuth callbacks are registered per-env — these were explored but the env-by-env answer wasn't pinned down. -->
+Account 2 is shared internal — confirm the env with Todd before running. (Alternatively, if that env's Google OAuth callback is registered, just sign in with Google; no DB change.)
 
 ### A4. Create a brand-new account + user (fresh sandbox)
 
@@ -69,7 +88,7 @@ If the restored staging DB has `dscout.com`'s account set to `google_oauth2` (or
 bin/ssm staging-N axon_eval 'Axon.E2E.setup_account(%{account_name: "Todd Sandbox", owner_email: "todd.price@dscout.com", password: "<choose>"}) |> inspect() |> IO.puts()'
 ```
 
-<!-- TODO: confirm with Todd the full accepted param map for setup_account/1 (read apps/axon/lib/axon/e2e.ex:628-655 for the get_param keys) and his preferred password — the key names beyond owner_email weren't all enumerated. -->
+The example above covers the common keys (`account_name`, `owner_email`, `password`). For the full accepted param map, read `apps/axon/lib/axon/e2e.ex:628-655`.
 
 ### A5. After login works — record the IDs you'll need for Job B
 
@@ -91,6 +110,8 @@ bin/ssm staging-N tunnel
 Verified (`bin/ssm`): this port-forwards the cluster DB to **`localhost:1NNNN`** where `NNNN` is the zero-padded cluster number — staging-19 → `10019`, staging-11 → `10011` — and **prints the full `postgres://<user>:<pass>@localhost:1NNNN/dscout_staging` URI** on connect. The DB user is `application`. Leave the tunnel running in its own terminal; it can drop mid-run (just re-run). Alternatively `bin/ssm staging-N psql` runs psql on the box directly (no local tunnel) for quick reads.
 
 Local target DSN (standard dev seed): `postgresql://dscout:dscout@localhost:5432/dscout_development`.
+
+**Sourcing the staging credentials (preferred over copy-pasting):** the cluster Postgres/Redis connection strings live in the `heroku-data-connections` secret. Dump them with `bin/env_config -i heroku-data-connections staging-N config` (reads AWS Secrets Manager; needs SSO) and read the Postgres URL from the JSON. That URL targets the real DB host, so for local access combine its `application:<pass>` credentials with the tunnel host `localhost:1NNNN` from `bin/ssm staging-N tunnel`.
 
 ### B2a. Copy a full TEMPLATE subgraph (the common case)
 
@@ -129,7 +150,7 @@ psql "$STAGING_DSN" -At -F$'\t' \
 
 Wrap multi-table loads in a single `BEGIN; … COMMIT;` with `ON_ERROR_STOP=1` so a FK/PK failure rolls back cleanly. If you find yourself copying the same non-template table repeatedly, propose promoting it into a reusable script alongside `copy-templates-cross-env`.
 
-<!-- TODO: confirm with Todd whether he wants a generic per-table copy helper built (mirroring copy-templates-cross-env's fill-defaults / common-column approach) — so far only the template subgraph has a dedicated tool. -->
+For repeated arbitrary-table copies, use the generic helper **`copy-table-cross-env`** (sibling of `copy-templates-cross-env` under `dscout-knowledge/scripts/tools/`) — same common-column / FK-reparent / atomic-transaction approach for any single table. Run its `--help` for flags. The inline `psql | psql` pipe above remains the escape hatch for true one-offs.
 
 ### B3. Verify
 
@@ -158,6 +179,8 @@ Default seed user from `bin/dscout_db restore` (LOCAL ONLY — never reuse anywh
 | Get user/account ids | `bin/ssm staging-N psql` → `SELECT id, primary_account_id FROM users WHERE email=...` |
 | Open staging DB tunnel | `bin/ssm staging-N tunnel` → `localhost:1NNNN` |
 | Copy template subgraph | `cd /Users/toddprice/dscout-knowledge/scripts/tools/copy-templates-cross-env && ./run.sh --source <DSN>` |
+| Copy a single table | `copy-table-cross-env/run.sh --source <DSN> --table <name>` (generic helper; see its `--help`) |
+| Fetch staging DSN | `bin/env_config -i heroku-data-connections staging-N config` |
 | Per-staging Astro Eppo key | `bin/env_config -a astro staging-N set_key EPPO_SDK_KEY <val>` |
 
 ## Common mistakes
@@ -168,9 +191,11 @@ Default seed user from `bin/dscout_db restore` (LOCAL ONLY — never reuse anywh
 - **"new password isn't working"** → diagnose with `Axon.Auth.sign_in` first (A1); it may be `:sso_required`, locked, or 2FA — not the password.
 - **Tunnel dropped mid-copy** → the copy script sets `statement_timeout` so it fails fast instead of hanging; re-open the tunnel and re-run.
 
-## Open questions to confirm with Todd (see inline TODOs)
+## Decisions (resolved with Todd)
 
-1. Exact live one-liner for A2 password reset (`update_user_by_staff/3` arg map + acting staff user, vs direct `Repo.update_all` of `encrypted_password`).
-2. SSO case (A3): which account id + target `idp_type`, and whether each staging env has working Google OAuth callbacks.
-3. Full accepted param map for `Axon.E2E.setup_account/1` (read `apps/axon/lib/axon/e2e.ex:628-655`).
-4. Whether to build a generic per-table copy helper (B2b) beyond the template subgraph tool.
+1. **A2 password reset** — proper staff path `update_user_by_staff/3` with `staff@dscout.com`/`dev@dscout.com` as the acting staff user; not `Repo.update_all`.
+2. **A3 SSO** — set account `2` `idp_type` to `google_or_dscout` (permits Google + password).
+3. **Connection strings** — fetch via `bin/env_config` (`heroku-data-connections`), don't session-paste.
+4. **Generic per-table copy** — yes; `copy-table-cross-env` helper (sibling of `copy-templates-cross-env`).
+
+Remaining minor open item: the full accepted param map for `Axon.E2E.setup_account/1` (A4) — read `apps/axon/lib/axon/e2e.ex:628-655` for all keys if you need more than `account_name`/`owner_email`/`password`.

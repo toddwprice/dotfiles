@@ -21,13 +21,13 @@ Symptoms / keywords: html→pdf, html→png, 2x resolution, markdown→pdf, pand
 |---|---|
 | HTML → PDF (Mermaid-aware) | Chrome headless `--print-to-pdf` (see example) |
 | HTML → PNG @2x | Chrome headless `--screenshot --force-device-scale-factor=2 --window-size=W,H` |
-| Markdown → PDF (preferred) | `pandoc in.md -o out.pdf` — **pandoc is NOT installed**; `brew install pandoc basictex` first, or fall back: write MD→HTML, then use the HTML→PDF recipe |
+| Markdown → PDF | **Works today:** `pandoc in.md -o mid.html` → then the HTML→PDF recipe below. **One-shot** `pandoc in.md -o out.pdf --pdf-engine=xelatex` is preferred but needs a LaTeX engine (not yet installed — see Common mistakes) |
 | Combine PDFs | `pdfunite a.pdf b.pdf out.pdf` |
 | Extract text (to grep) | `pdftotext in.pdf - \| grep ...` (or `pdftotext in.pdf out.txt`) |
 | Parse a field | `pdftotext -layout in.pdf -` then read/grep the text |
 | Verify Mermaid rendered | render to PDF, then `pdftotext out.pdf -` — node labels present = it rendered |
 
-Verified available: `pdftotext`, `pdfunite`, Google Chrome. NOT installed: `pandoc`, `qpdf`, `mmdc`.
+Verified available: `pandoc` 3.10, `pdftotext`, `pdfunite`, Google Chrome. NOT installed: any pandoc PDF engine (`pdflatex`/`xelatex`/`tectonic`/`weasyprint`), `qpdf`, `mmdc`.
 
 ## Worked example: HTML → PDF with Mermaid
 
@@ -49,7 +49,7 @@ This is the same recipe as the `todd:html_report --pdf` path. For PNG@2x, swap `
 
 - **Mermaid prints as blank divs** — converter didn't run JS. You MUST keep `--virtual-time-budget=10000` and `--run-all-compositor-stages-before-draw`; they give the CDN Mermaid script time to render before Chrome snapshots. Never strip them.
 - **Broken Mermaid block** — Mermaid fails silently on bad arrows/syntax. Open the HTML in Chrome, read the diagram, fix the syntax in the source, re-render.
-- **Reaching for pandoc and erroring** — it isn't installed. Offer the install, or use the MD→HTML→Chrome fallback so the job ships now.
+- **`pandoc in.md -o out.pdf` errors with "pdflatex not found"** — pandoc is installed but has no PDF engine. Fix: `brew install --cask basictex` (needs an interactive `sudo` password — run in a real terminal, then `eval "$(/usr/libexec/path_helper)"`), after which prefer `pandoc in.md -o out.pdf --pdf-engine=xelatex`. Until then use `pandoc in.md -o mid.html` → Chrome HTML→PDF, which ships today.
 - **`file://` needs an absolute path** — `~` and relative paths won't load.
 
 ## When NOT to use / refuse (org policy)

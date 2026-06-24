@@ -1,6 +1,6 @@
 ---
-allowed-tools: Bash(mkdir:*), Bash(open:*), Bash(date:*), Bash(/Applications/Google Chrome.app/Contents/MacOS/Google Chrome:*), Write, Read, Agent
-description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in .claude/tmp/, then open it. Pass the topic/question as $ARGUMENTS; append `--pdf` to also produce a Mermaid-aware PDF sibling. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
+allowed-tools: Bash(mkdir:*), Bash(open:*), Bash(date:*), Bash(ls:*), Bash(cp:*), Bash(mv:*), Bash(/usr/bin/python3:*), Bash(/Applications/Google Chrome.app/Contents/MacOS/Google Chrome:*), Write, Read, Agent
+description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in the shared `artifacts/` catalog, auto-refreshing an `index.html` table of every report, then open it. Pass the topic/question as $ARGUMENTS; append `--pdf` for a Mermaid-aware PDF sibling, or `--ingest <paths…>` to fold previously-created HTML reports into the catalog. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
 ---
 
 You are producing a self-contained HTML report that answers a question or tells a visual story. The report opens in a browser when done.
@@ -13,7 +13,22 @@ Arguments: `$ARGUMENTS` is the question, topic, or instruction. Examples Todd ha
 - *"run this sql against my localhost database and format the result as HTML"*
 - *"comparison table of mission_drafts vs study_templates schemas"*
 
-If `$ARGUMENTS` contains the token `--pdf` (anywhere — start, middle, end), set `WANT_PDF=1`, strip the token from the question, and proceed with what remains. The PDF is rendered in Step 5 after the HTML is written.
+## Where output goes — the `artifacts/` catalog
+
+**All HTML reports land in `/Users/toddprice/dscout-knowledge/artifacts/`** (the shared knowledge-base repo, a.k.a. `~/dscout-knowledge/artifacts/`). That directory holds:
+
+- `report-<slug>-YYYY-MM-DD-HHMM.html` — the reports themselves (+ optional `.pdf` siblings).
+- `index.html` — a generated catalog: a table of **date · name (link) · description** for every report. It is **regenerated** by `build_index.py`; never hand-edit it.
+- `build_index.py` — the catalog builder. It scans the directory and reconstructs the index from each report's `<meta>` tags (with sensible fallbacks to `<title>`, the date in the filename, and file mtime). Run it any time with `/usr/bin/python3 ~/dscout-knowledge/artifacts/build_index.py`.
+- `index.overrides.json` *(optional)* — per-file `{title, description, date}` overrides to curate any entry (handy for older files that lack meta tags) without editing the HTML.
+
+Because the index is rebuilt by scanning, deleting a report and rebuilding simply drops its row — there is no manifest to keep in sync.
+
+## Flags (scan `$ARGUMENTS` for these tokens, strip them, keep the rest as the question)
+
+- `--pdf` — set `WANT_PDF=1`. Render a PDF sibling in Step 6 after the HTML is written.
+- `--ingest` — switch to **Ingest mode** (see the section at the bottom): fold already-created HTML report(s) into the catalog instead of generating a new one. Skip Steps 1–3.
+- `--move` — only meaningful with `--ingest`; move sources into `artifacts/` instead of copying.
 
 ## Step 1 — Classify the report shape
 
@@ -40,9 +55,9 @@ If the report needs 2+ independent gathers, dispatch sub-agents (Agent tool, in 
 
 ## Step 3 — Render
 
-Write the report to `.claude/tmp/report-<slug>-YYYY-MM-DD-HHMM.html`. The slug is a kebab-case summary of `$ARGUMENTS` (≤40 chars). Create the directory if missing.
+Write the report to `/Users/toddprice/dscout-knowledge/artifacts/report-<slug>-YYYY-MM-DD-HHMM.html`. The slug is a kebab-case summary of `$ARGUMENTS` (≤40 chars). The directory already exists; `mkdir -p` it if not.
 
-Use this base shell — same visual language as the standup so the look is consistent:
+Use this base shell — same visual language as the standup so the look is consistent. **The three `report-*` meta tags are required** — they populate the `index.html` catalog. Keep the description to one tight line (≤140 chars) that says what the report answers, distinct from the title.
 
 ```html
 <!doctype html>
@@ -50,6 +65,10 @@ Use this base shell — same visual language as the standup so the look is consi
 <head>
   <meta charset="utf-8">
   <title><report title></title>
+  <!-- Required: these three tags feed the artifacts/index.html catalog. -->
+  <meta name="report-title" content="<report title>">
+  <meta name="report-description" content="<one tight line — what this report answers, ≤140 chars, distinct from the title>">
+  <meta name="report-date" content="<YYYY-MM-DD>">
   <style>
     :root { color-scheme: light; }
     body { font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -88,15 +107,25 @@ Rules for content:
 - Hyperlink Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PR numbers (`https://github.com/dscout/monorepo/pull/<num>`) when they appear.
 - Drop the Mermaid `<script>` tag if there are no diagrams — keep the file lean.
 
-## Step 4 — Open
+## Step 4 — Refresh the catalog index
 
-After writing the file:
+Rebuild `index.html` so the new report appears in the catalog:
 
+```bash
+/usr/bin/python3 ~/dscout-knowledge/artifacts/build_index.py
 ```
-open <path>
+
+This rescans `artifacts/` and rewrites `index.html` from each report's meta tags — idempotent and fast. If the builder is somehow missing (e.g. a fresh clone that hasn't pulled), note it but don't fail; the report itself is already written.
+
+## Step 5 — Open
+
+Open the report you just wrote:
+
+```bash
+open /Users/toddprice/dscout-knowledge/artifacts/<report-file>.html
 ```
 
-## Step 5 — Optional PDF (only if `WANT_PDF=1`)
+## Step 6 — Optional PDF (only if `WANT_PDF=1`)
 
 Render the same file to a PDF sibling via headless Chrome. Use these exact flags — they earn their keep:
 
@@ -118,12 +147,28 @@ Why these flags matter (do not strip them):
 
 Then `open <pdf-path>` so the PDF lands in Preview alongside the browser tab.
 
-## Step 6 — Report
+## Step 7 — Report
 
-Tell Todd, in one line, where things landed and what shape you picked. Mention the PDF only if you produced one.
+Tell Todd, in one line, where things landed and what shape you picked. Mention the PDF only if you produced one, and note the catalog was refreshed.
 
-- HTML only: *"Wrote `.claude/tmp/report-media-processing-2026-05-18-1432.html` — narrative + 3 Mermaid flow diagrams. Opened in browser."*
-- HTML + PDF: *"Wrote `.claude/tmp/report-media-processing-2026-05-18-1432.html` + `.pdf` — narrative + 3 Mermaid flow diagrams. Both opened."*
+- HTML only: *"Wrote `artifacts/report-media-processing-2026-05-18-1432.html` — narrative + 3 Mermaid flow diagrams. Opened in browser; `index.html` catalog refreshed."*
+- HTML + PDF: *"Wrote `artifacts/report-media-processing-2026-05-18-1432.html` + `.pdf` — narrative + 3 Mermaid flow diagrams. Both opened; catalog refreshed."*
+
+## Ingest mode (`--ingest`)
+
+Triggered when `$ARGUMENTS` contains `--ingest`. Instead of generating a new report, fold already-created HTML report(s) into the catalog. The remaining (non-flag) tokens in `$ARGUMENTS` are the source(s).
+
+1. **Resolve sources:**
+   - If one or more paths/globs are given, use those (e.g. `~/Downloads/foo.html`, `.claude/tmp/report-*.html`).
+   - If no path is given, sweep the legacy temp location: `~/dscout-knowledge/.claude/tmp/report-*.html`.
+2. **Bring them in:** `cp` each source into `/Users/toddprice/dscout-knowledge/artifacts/`, preserving its filename, plus any same-stem `.pdf` sibling. With `--move`, use `mv` instead.
+   - Skip `index.html` and `build_index.py` if a glob catches them.
+   - If a destination filename already exists, **don't clobber** — report the collision and skip it.
+3. **Rebuild:** `/usr/bin/python3 ~/dscout-knowledge/artifacts/build_index.py`.
+4. **Open the catalog:** `open /Users/toddprice/dscout-knowledge/artifacts/index.html`.
+5. **Report** which files were ingested and how many reports the catalog now holds.
+
+Ingested files keep their original markup — they don't need the `report-*` meta tags. The builder falls back to `<title>`, then the date in the filename, then file mtime. To give a legacy file a nicer title/description/date in the catalog, add an entry to `index.overrides.json` rather than editing the file.
 
 ## Voice for narrative sections
 
