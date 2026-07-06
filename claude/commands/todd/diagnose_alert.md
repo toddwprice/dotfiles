@@ -15,40 +15,43 @@ Arguments: `$ARGUMENTS` — a URL plus optional flags. Recognized flags:
 
 Classify the URL:
 
-- `app.datadoghq.com/monitors/...` or `/event/...` → **Datadog**. Use the `datadog-mcp` server (run `mcp__datadog-mcp__authenticate` if not yet connected).
+- `app.datadoghq.com/monitors/...` or `/event/...` → **Datadog**. Datadog's MCP tool name varies by project scope (sometimes a local `datadog-mcp` server, sometimes a `claude_ai_Datadog`-style connector). Don't guess a hardcoded tool name — run one `ToolSearch` with query `"datadog logs spans monitor"` and batch-load every Datadog tool you'll need for Steps 1–2 in that single call.
 - `dscout.slack.com/...` → **Slack**. Use the Slack MCP (`mcp__plugin_slack_slack__slack_read_thread`) to read the thread. Extract any monitor URL, service name, error message, or timestamp from the thread, then fall through to Datadog with that context.
 - Anything else: read it with WebFetch and continue best-effort.
 
 Capture: monitor name, impacted service/host, alert timestamp (the fire event, not now), error signature.
 
-## Step 2 — Pivot to logs + traces
+## Step 2 — Gather evidence (two independent tracks — run both in the same turn)
 
-For the impacted service in the window `[alert_time - window, alert_time + 5min]`:
+Everything below depends only on what Step 1 captured, not on each other. Fire it all off as one batch of parallel tool calls rather than working through it serially.
 
-- Pull error-level logs. Look for the first new signature — the alert often fires on a *new* error, not the most common one.
-- Pull related traces/spans if APM is wired up. Focus on the slowest span or the one where the error originates.
+**Logs + traces**, for the impacted service in the window `[alert_time - window, alert_time + 5min]`:
+
+- Pull error-level logs and pull related traces/spans (if APM is wired up) as parallel calls — they don't depend on each other. Look for the first new signature — the alert often fires on a *new* error, not the most common one. For traces, focus on the slowest span or the one where the error originates.
 - Note the host, container, and (if available) git commit SHA from the log tags.
 
-## Step 3 — Correlate with recent deploys
+**Recent deploys** — run both of these as parallel Bash calls:
 
-Run these in parallel:
+- `gh search prs --repo dscout/dscout --merged --merged-at ">$(date -v-2d +%Y-%m-%d)"` — PRs merged in the last 48h
+- `git log --all --since="2 days ago" --oneline` (run from `/Users/toddprice/dscout-wt`, the bare-repo root — that sees commits across every worktree/branch, not just whichever one you're in)
 
-- `gh search prs --repo dscout/monorepo --merged --search "merged:>$(date -v-2d +%Y-%m-%d)"` — PRs landed in the last 48h
-- `git log --all --since="2 days ago" --oneline` (in `/Users/toddprice/dscout-wt`)
+## Step 3 — Correlate and read suspect code
 
 Match by: file path mentioned in the error stack, service name, or PR title keywords. List the 1–3 most plausible suspects.
 
-## Step 4 — Read the suspect code
+For each candidate, batch the lookups instead of looping one at a time: fire `gh pr view <num> --json files,title,body` for every candidate in parallel, then Read the touched files at the lines the error stack references — also in parallel. Look for: new error paths, removed null checks, changed contracts between services, expanded scope.
 
-For each candidate PR or commit, `gh pr view <num> --json files,title,body` and read the touched files at the lines the error stack references. Look for: new error paths, removed null checks, changed contracts between services, expanded scope.
+If the alert is for a service you don't recognize, read `~/dscout-knowledge` for the terraform/topology context — fold that into the same parallel batch, it doesn't depend on the PR lookups either.
 
-If the alert is for a service you don't recognize, consult `~/dscout-knowledge` for the terraform/topology context.
+## Step 4 — Parallel deep dives (when needed)
 
-## Step 5 — Parallel deep dives (when needed)
+If Steps 2–3 leave 2+ plausible causes, dispatch sub-agents to confirm or rule out each hypothesis against code + logs evidence — issue all of them in a single message (multiple Agent tool calls together) so they actually run concurrently instead of one after another.
 
-If steps 2–4 leave 2+ plausible causes, dispatch sub-agents (Agent tool, in parallel) — one per hypothesis — each instructed to either confirm or rule out their candidate using code + logs evidence. Aggregate before writing the verdict.
+- Use `subagent_type: general-purpose`, `model: sonnet`, `run_in_background: false` — Step 5 needs their verdicts before it can write anything, and confirming/ruling out one hypothesis against evidence already gathered is a bounded, mechanical check, not open-ended synthesis. Sonnet 5 is fast and plenty accurate for that; save your own higher-effort reasoning for the top-level write-up.
+- Don't reach for sub-agents in Steps 1–3 — the MCP/gh/git calls there are cheap enough that direct parallel tool calls beat the spin-up and message-passing overhead of an agent. Sub-agents earn their cost here because each hypothesis needs its own multi-step investigation.
+- Aggregate their findings before writing the verdict.
 
-## Step 6 — Write the verdict
+## Step 5 — Write the verdict
 
 Produce a markdown writeup with these sections (terse, prose, not bullet soup):
 
@@ -75,7 +78,7 @@ Produce a markdown writeup with these sections (terse, prose, not bullet soup):
 2. ...
 ```
 
-## Step 7 — Optional HTML render
+## Step 6 — Optional HTML render
 
 If `$ARGUMENTS` contains `--html`, also write the same content to `.claude/tmp/alert-<slug>-YYYY-MM-DD-HHMM.html` using the standup HTML shell (system font, max-width 700px, monospace for log signatures and code paths). Wrap code refs in `<code>` and link Linear IDs / PR numbers. After writing, `mkdir -p .claude/tmp` if needed and `open <path>`.
 
