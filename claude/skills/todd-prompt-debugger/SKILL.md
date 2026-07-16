@@ -17,21 +17,32 @@ script that proves the fix works.
 
 ## Workflow
 
-### Step 1: Fetch the Linear Issue
+### Step 1: Establish the failure — from a Linear issue OR a trace/room-id
 
-Given an issue ID (e.g., `CNVS-421`), retrieve the full issue details:
+There are two front doors. A ticket is **not** required.
+
+**1a — Starting from a trace/room-id (the common case).** Todd's loop usually begins at one bad
+dscript session, triaged with `todd:trace-dys` — often before any ticket exists. If you were handed a
+room-id + span id(s) + a one-line diagnosis (that's exactly what `trace-dys`'s handoff passes
+forward), **skip the `linctl` fetch entirely**: you already have the failing span(s) and the failure
+description. Carry forward from the handoff:
+- **Failing span id(s)** and the Braintrust **project id** → these seed Step 2 directly (you may not
+  need to search at all — you already have spans).
+- **The one-line diagnosis** (which prompt section / gate / tool-availability drove the wrong
+  behavior) → this is your failure description.
+- **A known-good contrast session**, if `trace-dys` identified one → carry it into Step 4 as the
+  calibration control.
+Then go straight to Step 2 to widen the span set (find 5–15 similar failures), or to Step 3 if the
+handoff already gave you enough. File a ticket later if the fix warrants tracking; don't block on one.
+
+**1b — Starting from a Linear issue.** Given an issue ID (e.g., `CNVS-421`), retrieve full details:
 
 ```bash
 linctl issue get <ISSUE_ID> --json
+linctl comment list <ISSUE_ID> --json   # comments for extra context
 ```
 
-Also fetch comments for additional context:
-
-```bash
-linctl comment list <ISSUE_ID> --json
-```
-
-Extract from the issue:
+Extract from the issue (or from the trace handoff, in 1a):
 - **Failure description**: What is going wrong with the prompt/LLM behavior
 - **Reproduction context**: Any specific inputs, user scenarios, or steps mentioned
 - **Time window**: Issue creation date as an upper bound for log search
@@ -86,6 +97,9 @@ The script should:
 - Use `braintrust.init_dataset()` to create a named dataset (`<issue-id>-repro`)
 - Insert each span's input and expected output into the dataset
 - Include `metadata.source_span_id` and `metadata.issue` for traceability
+- **Add ≥1 known-good control span** — a session that behaved *correctly* on this same axis, tagged
+  `metadata.control = "good"`. This is what makes the scorer-calibration gate in Step 6 possible.
+  Without a good example in the set, you can't tell a real repro from a scorer that flags everything.
 
 The user runs this script with: `python <path/to/create_dataset.py>`
 
@@ -108,6 +122,11 @@ Create a scoring script following the project's `create_eval()` pattern:
 4. **`BraintrustPrompt` references**: Include the prompt(s) under investigation so they
    appear as editable parameters in the Braintrust UI.
 
+5. **`max_concurrency=1`** in the `Eval()`/`create_eval()` call whenever the task uses
+   `asyncio.run()` — **dscript/DYS graph evals do**, and running them concurrently deadlocks the
+   event loop (you'll see hangs, not errors). This is the single most common eval-setup gotcha here;
+   default to `max_concurrency=1` for any dscript supervisor/drafter eval.
+
 The user runs this with: `uv run braintrust eval <path/to/scoring_script.py>`
 
 ### Step 6: Run Baseline
@@ -121,14 +140,31 @@ cd apps/astro && uv run braintrust eval <path/to/scoring_script.py>
 Verify that `IssueRepro` scores are 0.0 for the failing spans. If the issue does not reproduce,
 revisit the task function or scorer logic.
 
+**Calibration gate — before you trust the baseline, prove the scorer isn't just flagging
+everything.** The known-good control span(s) from Step 4 MUST score **1.0**. If a correct session
+also scores 0.0, the scorer is miscalibrated — **fix the scorer, not the prompt.** This is a
+recurring, expensive failure family here: FRG-845 was a *miscalibrated online judge* that false-flagged
+correct studies, and FRG-993's scorer was *negation-blind* (spawning FRG-1005). A scorer that can't
+separate the good control from the bad spans will "prove" any prompt change works and send you
+chasing a fix for a bug that isn't there. Only proceed to Step 7 once: failing spans = 0.0 **and**
+good control(s) = 1.0.
+
 ### Step 7: Diagnose and Fix
 
 Based on the failing spans and results, recommend changes to either:
 
-**Prompt changes** (in Braintrust):
-- Identify the prompt slug with `bt prompts list --project <project>`
-- Recommend specific prompt modifications
-- Update the version hash in the `BraintrustPrompt()` reference after changes
+**Prompt changes** (in Braintrust) — **surface-and-wait; NEVER write the prompt yourself:**
+- Identify the prompt slug with `bt prompts list --project <project>`.
+- Recommend the specific modification concretely — show the exact before → after prompt text.
+- **STOP and hand off the state-writing step to Todd.** Do **not** run `bt-prompt create`/`bt-prompt
+  edit`, and do **not** edit the prompt via the Braintrust UI or API — Todd runs the version-writing
+  step himself. Print the exact command for him to run, e.g.:
+  ```
+  bt-prompt edit <slug> --project <project>     # or `bt-prompt create` for a brand-new prompt
+  ```
+  Then **wait** for Todd to run it and paste back the new version hex.
+- Only after Todd pastes the new hex: update the version hash in the `BraintrustPrompt()` reference
+  to match, then proceed to Step 8 to verify.
 
 **Code changes** (in the codebase):
 - Trace the code path from prompt invocation through the relevant files

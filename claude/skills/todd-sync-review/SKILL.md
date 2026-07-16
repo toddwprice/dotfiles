@@ -49,7 +49,11 @@ finding is gone; if it added one, include it.
 
 ## Step 3 — Build the review payload (publish schema)
 
-Map findings to the GitHub reviews schema. Keep the same conventions `git-publish-review` uses:
+> **Canonical spec:** `~/.claude/skills/_shared/review-payload.md` — the schema, anchoring rules, the
+> Answer-only rule, and the posting commands live there and are shared with `todd:pr_review` and
+> `todd:address-comments`. Follow it; the summary below must stay in sync with it.
+
+Map findings to the GitHub reviews schema:
 
 ```json
 {
@@ -73,9 +77,11 @@ Rules that keep GitHub happy and the review clean:
   the `body`, not inline.
 - **Event:** derive from the artifact's verdict banner if present — blocking findings → usually
   `REQUEST_CHANGES`; otherwise `COMMENT`; clean approval → `APPROVE`. If ambiguous, ask Todd.
-- **AI-agent block:** only line-level `comments` get the collapsible
-  `<details>Instructions for AI Agents</details>` block. The overall `body` and any thread replies
-  must NOT include it. Keep a blank line before `<details>` and after `</details>` so it renders.
+- **Answer-only (default):** Todd's review comments are clean human prose — **no**
+  `<details>Instructions for AI Agents</details>` block and no "How I checked" evidence appendix, on
+  line comments *or* thread replies. That block is the AI-reviewer (baz) convention, not Todd's;
+  only include it if Todd explicitly asks. (See the Answer-only rule in the canonical reference —
+  this matches what he actually posts, e.g. #26728.)
 - **`side`:** `RIGHT` for added/changed lines (the common case), `LEFT` for deleted lines.
 - **Thread replies:** if the artifact marks any item as a reply to an existing thread (a `[REPLY]`
   tag + comment id), separate those out — they post to the comments endpoint, not the reviews

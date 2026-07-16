@@ -9,13 +9,18 @@ You need to execute the following bash commands to clean up stale local branches
 
 ## Commands to Execute
 
-1. **First, list branches to identify any with [gone] status**
-   Execute this command:
+1. **Prune stale remote-tracking refs FIRST, then list branches with `[gone]` status.**
+   This step is essential: a branch only shows `[gone]` *after* its deleted `origin/...` ref is
+   pruned. Skip the prune and a not-recently-fetched repo shows nothing, so the skill silently
+   no-ops even when gone branches exist.
    ```bash
-   git branch -v
+   git fetch --prune
+   git branch -vv | grep ': gone]'
    ```
-   
-   Note: Branches with a '+' prefix have associated worktrees and must have their worktrees removed before deletion.
+   Use `git branch -vv` (double-v) and match the tracking field `': gone]'` — this anchors on the
+   upstream relationship, so it won't false-match a branch whose commit *subject* contains the text
+   "[gone]". Branches with a `+` prefix have associated worktrees and must have their worktrees
+   removed before deletion.
 
 2. **Next, identify worktrees that need to be removed for [gone] branches**
    Execute this command:
@@ -26,8 +31,8 @@ You need to execute the following bash commands to clean up stale local branches
 3. **Finally, remove worktrees and delete [gone] branches (handles both regular and worktree branches)**
    Execute this command:
    ```bash
-   # Process all [gone] branches, removing '+' prefix if present
-   git branch -v | grep '\[gone\]' | sed 's/^[+* ]//' | awk '{print $1}' | while read branch; do
+   # Process all [gone] branches (git fetch --prune already run in step 1), removing '+'/'*' prefix if present
+   git branch -vv | grep ': gone]' | sed 's/^[+* ]*//' | awk '{print $1}' | while read branch; do
      echo "Processing branch: $branch"
      # Find and remove worktree if it exists
      worktree=$(git worktree list | grep "\\[$branch\\]" | awk '{print $1}')

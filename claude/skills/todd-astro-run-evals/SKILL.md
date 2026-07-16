@@ -3,7 +3,7 @@ name: todd:astro-run-evals
 description: >
   Run the Astro offline Braintrust evals (or a scoped subset) and summarize the results. Use this
   WHENEVER Todd wants to run dscript/supervisor or other Astro evals — phrasings like "run all
-  offline evals", "re-run the eval", "run the supervisor evals", "run eval_frg_802", "let's re-run
+  offline evals", "re-run the eval", "run the supervisor evals", "run eval_cnvs_421", "let's re-run
   the eval for this", "kick off the offline evals", or "what command runs the evals — I want to run
   it myself". It resolves the right `braintrust eval` glob, preflights the required env vars, ALWAYS
   prints the exact command before running, and can stop at print-only when Todd wants to run it
@@ -24,12 +24,31 @@ The canonical runner (per `apps/astro/AGENTS.md`) is `uv run braintrust eval <gl
 
 | Todd says | Glob |
 |-----------|------|
-| (nothing) / "all" / "all offline evals" | `app/domain/**/eval_*.py` |
-| "supervisor" / "dscript" / "supervisor-select" | `app/domain/dscript/agents/supervisor_agent/offline_evals/eval_*.py` |
+| (nothing) / "all" / "all offline evals" | `app/domain/**/offline_evals/eval_*.py` |
+| "dscript" / "all dscript evals" | `app/domain/dscript/**/offline_evals/eval_*.py` |
+| "supervisor" / "supervisor-select" | `app/domain/dscript/agents/supervisor_agent/offline_evals/eval_*.py` |
+| "study drafter" / "drafter" | `app/domain/dscript/agents/study_drafter/offline_evals/eval_*.py` |
+| "screener drafter" | `app/domain/dscript/agents/screener_drafter/offline_evals/eval_*.py` |
+| "target attribute(s)" | `app/domain/dscript/agents/target_attribute/offline_evals/eval_*.py` |
+| "templates" (dscript) | `app/domain/dscript/templates/offline_evals/eval_*.py` |
 | a module name (e.g. "pii detector") | `app/domain/<module>/offline_evals/eval_*.py` |
-| a specific file (e.g. "eval_frg_802" / "eval_governed_template_nudge_forced") | the matching `…/offline_evals/eval_*.py` path (use `find apps/astro -name 'eval_*<hint>*.py'` to locate it) |
+| a specific file (e.g. "eval_cnvs_421" / "eval_governed_template_nudge_forced") | the matching `…/offline_evals/eval_*.py` path (use `find apps/astro -name 'eval_*<hint>*.py'` to locate it) |
+
+**"dscript" means all 5 dscript eval dirs, not just the supervisor.** dscript evals live under
+`supervisor_agent/` (the bulk), `study_drafter/` (voice/drafting — e.g. FRG-916), `screener_drafter/`,
+`target_attribute/`, and `templates/`. The old glob only hit `supervisor_agent/`, so "run the dscript
+evals" silently skipped drafter regressions — always use the `dscript/**/` glob for the whole surface.
+
+**Exclude hosted evals from "all".** The `**/offline_evals/` glob deliberately skips
+`app/domain/insights/remote_evals/` — those are hosted-scorer EYD evals with a different runner and
+dataset requirements; don't sweep them into a local `braintrust eval` run.
 
 If the hint is ambiguous (matches several files), list the candidates and ask which.
+
+**Gotcha — `max_concurrency=1` for dscript/DYS graph evals.** These tasks use `asyncio.run()` and
+**deadlock** when run concurrently (you'll see a hang with no output, not an error). Each dscript
+eval script should set `max_concurrency=1` in its `Eval()`/`create_eval()` call. If a dscript eval
+hangs, that's almost always the cause — check the script sets it before assuming the harness is broken.
 
 ## Step 2 — Preflight
 

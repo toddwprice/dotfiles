@@ -1,6 +1,15 @@
 ---
 allowed-tools: Bash(gh:*), Bash(git log:*), Bash(open:*), Bash(mkdir:*), WebFetch, Agent, Write, Read
-description: Diagnose a Datadog or Slack alert end-to-end — pivots from the alert URL through logs/spans, recent deploys, and repo code, then writes a root-cause summary. Pass the monitor or Slack thread URL as $ARGUMENTS; append `--html` to also emit a browser-ready report.
+description: >
+  Diagnose a Datadog or Slack alert/monitor/incident end-to-end — pivots from the URL through
+  logs/spans, recent deploys, and repo code, then writes a root-cause summary. Use WHENEVER Todd
+  points at a Datadog monitor or Slack alert thread and wants to know what's wrong — phrasings like
+  "look at this issue in datadog and diagnose possible causes" with a monitor URL, "investigate this
+  monitor", "look into this alert/incident", "why is this monitor firing", "diagnose this Datadog
+  alert", or "review this alert and recommend next steps". Trigger even when Todd says
+  "issue"/"look into"/"diagnose" rather than the literal word "alert", as long as there's a Datadog
+  monitor or Slack alert URL in the request. Pass the monitor or Slack thread URL as $ARGUMENTS;
+  append `--html` to also emit a browser-ready report.
 ---
 
 You are diagnosing a production alert in the dscout monorepo. Your job is to take a single URL (Datadog monitor or Slack alert thread) and produce a clear root-cause writeup in Todd's voice — clear, terse, kind, honest about uncertainty.
@@ -28,6 +37,7 @@ Everything below depends only on what Step 1 captured, not on each other. Fire i
 **Logs + traces**, for the impacted service in the window `[alert_time - window, alert_time + 5min]`:
 
 - Pull error-level logs and pull related traces/spans (if APM is wired up) as parallel calls — they don't depend on each other. Look for the first new signature — the alert often fires on a *new* error, not the most common one. For traces, focus on the slowest span or the one where the error originates.
+- For logs specifically, the **`pup` CLI** is often faster/cleaner than the DD MCP for a scoped query (it's what the `datadog-error-hunter` agent uses) — reach for it when the MCP is slow or you want a quick `service:<svc> status:error` window pull. Either path is fine; don't block on the MCP if `pup` gets you the signature faster.
 - Note the host, container, and (if available) git commit SHA from the log tags.
 
 **Recent deploys** — run both of these as parallel Bash calls:
@@ -80,7 +90,7 @@ Produce a markdown writeup with these sections (terse, prose, not bullet soup):
 
 ## Step 6 — Optional HTML render
 
-If `$ARGUMENTS` contains `--html`, also write the same content to `.claude/tmp/alert-<slug>-YYYY-MM-DD-HHMM.html` using the standup HTML shell (system font, max-width 700px, monospace for log signatures and code paths). Wrap code refs in `<code>` and link Linear IDs / PR numbers. After writing, `mkdir -p .claude/tmp` if needed and `open <path>`.
+If `$ARGUMENTS` contains `--html`, also write the same content to `.claude/tmp/alert-<slug>-YYYY-MM-DD-HHMM.html` using the shared base shell at `~/.claude/skills/_shared/report-shell.html` (the single source of truth for the common look — system font, GitHub-ish palette, monospace `code`/`pre`); a narrower `max-width` is fine for an alert writeup. Wrap code refs and log signatures in `<code>` and link Linear IDs / PR numbers. After writing, `mkdir -p .claude/tmp` if needed and `open <path>`.
 
 ## Voice
 

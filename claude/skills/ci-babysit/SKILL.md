@@ -1,178 +1,176 @@
 ---
 name: ci-babysit
-description: Monitor a PR's CircleCI pipeline until all jobs pass. Polls for status, diagnoses failures, applies fixes, pushes, and re-monitors. Does not stop until the entire pipeline is green or you intervene.
+description: Monitor a PR's RWX run until all tasks pass. Polls run status (or streams via `rwx run --loop`), diagnoses failures, applies fixes, pushes, and re-monitors. Does not stop until the whole run is green or you intervene.
 disable-model-invocation: true
+allowed-tools: Bash(rwx *), Bash(git:*), Bash(gh:*)
 ---
 
 # CI Babysit
 
-Monitor a PR's CircleCI pipeline from start to finish. When something fails, diagnose it, fix it, push the fix, and keep watching. Do not stop until every job in the pipeline is green.
+Monitor a PR's **RWX** run from start to finish. When a task fails, diagnose it, fix it, push the
+fix, and keep watching. Do not stop until every task in the run is green.
+
+> dscout runs CI on **RWX** (https://cloud.rwx.com/mint/dscout/runs), not CircleCI. RWX runs are a
+> DAG of **tasks** (not "jobs"/"workflows"). Config lives in `.rwx/*.yml`. If the `rwx` CLI is
+> deferred/absent, install it (`brew install rwx-cloud/tap/rwx`) and confirm sign-in with
+> `rwx whoami`. When unsure of a subcommand's flags, check `rwx <cmd> -h` or
+> `rwx docs pull /migrating/rwx-reference`.
 
 ## Getting Started
 
 Determine what to monitor:
-- If `$ARGUMENTS` contains a PR number or URL → monitor that PR's pipeline
-- If `$ARGUMENTS` contains a CircleCI pipeline/workflow URL → monitor that directly
-- If `$ARGUMENTS` is empty → detect from the current branch:
+- `$ARGUMENTS` has a PR number/URL → resolve its branch, monitor that branch's run.
+- `$ARGUMENTS` has an RWX run URL (`cloud.rwx.com/mint/dscout/runs/...`) → monitor that run.
+- `$ARGUMENTS` empty → detect from the current branch:
 
 ```bash
 git branch --show-current
 git remote get-url origin
 ```
 
-Then use `gh pr view` to find the PR for the current branch. If no PR exists, ask whether to monitor the branch pipeline directly.
+Use `gh pr view` to find the PR for the current branch. If no PR exists, monitor the branch run directly.
 
-## Step 1 — Identify the Pipeline
+## Step 1 — Identify the Run
 
-Establish the CircleCI project and branch context:
+```bash
+rwx results            # current status of runs for this repo/branch (see `rwx results -h`)
+rwx whoami             # confirm signed in first if results errors on auth
+```
 
-1. Get the git remote URL and current branch name
-2. Use `mcp__circleci-mcp-server__get_latest_pipeline_status` with project detection (workspaceRoot + gitRemoteURL + branch) to get the current pipeline state
-3. Record the pipeline number, workflow IDs, and initial job statuses
+Record the run id/URL, the task DAG, and initial task statuses. If no run exists yet (e.g. just
+pushed), wait and re-check — RWX may take a moment to create it.
 
-If no pipeline is running yet (e.g. just pushed), wait and re-check. The pipeline may take a moment to be created.
+**Fast path — the native babysit primitive:** `rwx run --loop` streams task logs live *and*
+re-triggers a run on every push. For an interactive session where you'll be pushing fixes, prefer:
+
+```bash
+rwx run --loop
+```
+
+Fall back to the polling loop below when running headless or when `--loop` isn't appropriate.
 
 ## Step 2 — The Monitor Loop
 
 ```
-LOOP (until all jobs pass or user interrupts):
-  1. CHECK   — Get current pipeline/workflow status
-  2. ASSESS  — Categorize each job: running, queued, success, failed, on_hold
-  3. DECIDE  — Based on assessment:
-     - All jobs passed     → EXIT with success summary
-     - Jobs still running  → WAIT and re-check
-     - Job failed          → DIAGNOSE and FIX
-     - Job on hold         → NOTIFY user (manual approval gates)
+LOOP (until all tasks pass or user interrupts):
+  1. CHECK   — `rwx results` (or read the `--loop` stream) for current task statuses
+  2. ASSESS  — Categorize each task: running, queued, success, failed, cancelled
+  3. DECIDE  —
+     - All tasks passed  → EXIT with success summary
+     - Tasks running     → WAIT and re-check
+     - Task failed       → DIAGNOSE and FIX
   4. REPORT  — Brief status update
 ```
 
-### Check Status
-
-Use `mcp__circleci-mcp-server__get_latest_pipeline_status` to get the current state. Track:
-- Pipeline status (running, success, failed)
-- Each workflow's status
-- Each job within each workflow (name, status, duration)
-
 ### Wait Strategy
 
-When jobs are still running:
-- Wait 90 seconds between checks — never exceed 2 minutes between checks
-- Give a brief status update every 2 checks (~3 minutes): which jobs are running, how long they've been going
-- If a job has been running for an unusually long time (>30 minutes without progress), flag it but keep waiting
-
-### Approval Gates
-
-If a job is `on_hold` (manual approval required):
-- Notify immediately: "Job `[name]` is waiting for manual approval in workflow `[workflow]`"
-- Do NOT attempt to approve — this requires human action
-- Continue monitoring other jobs while waiting
-- Re-check the held job on each loop iteration
+- Poll every ~90 seconds — never exceed 2 minutes between checks (`--loop` streams, so no polling needed there).
+- Brief status update every ~2 checks (~3 min): which tasks are running and for how long.
+- A task running unusually long (>30 min without progress) → flag it, keep waiting.
 
 ## Step 3 — Diagnose Failures
 
-When a job fails:
+When a task fails, pull its logs (and artifacts, which matter a lot for E2E):
 
-### Gather Failure Context
-
-Run in parallel:
-1. `mcp__circleci-mcp-server__get_build_failure_logs` — get the failure logs for the branch
-2. `mcp__circleci-mcp-server__get_job_test_results` with `filterByTestsResult: 'failure'` — get failed test details
+```bash
+rwx logs <run-or-task ref>          # failure logs for the task (see `rwx logs -h`)
+rwx artifacts <run-or-task ref>     # e.g. Playwright trace/video/screenshots on E2E failures
+```
 
 ### Classify the Failure
 
 | Category | Signals | Action |
 |----------|---------|--------|
-| **Test failure** | Failed test names, assertion errors, test output | Fix the failing test or the code it tests |
-| **Compilation/build error** | Syntax errors, type errors, missing imports, module not found | Fix the build error |
-| **Lint/format failure** | Linter output, formatter diff, style violations | Run the linter/formatter locally and fix |
+| **Test failure** | Failed test names, assertion errors | Fix the failing test or the code it tests |
+| **Compile/build error** | Syntax/type errors, missing imports, module not found | Fix the build error |
+| **Lint/format failure** | Linter output, formatter diff | Run the linter/formatter locally and fix |
 | **Dependency issue** | Missing package, version conflict, lockfile mismatch | Fix dependency resolution |
-| **Infrastructure/flaky** | Timeout, network error, Docker pull failure, OOM, no matching node | Rerun the workflow — not a code issue |
-| **Migration failure** | Database errors, migration conflicts | Fix the migration |
+| **Infra/flaky** | Timeout, network error, image pull failure, OOM, agent lost | Rerun the task — not a code issue |
+| **Migration failure** | DB errors, migration conflicts | Fix the migration |
 | **Unknown** | Unclear logs, no obvious pattern | Present the logs to the user and ask for guidance |
 
 ### Flaky Test Detection
 
-Before fixing a test failure, check if it's a known flaky test:
-- Use `mcp__circleci-mcp-server__find_flaky_tests` to check the project's flaky test list
-- If the failing test is on the flaky list, rerun the workflow instead of investigating the test
-- Note the flaky test in the status update so it can be addressed separately
+RWX has no flaky-test API. Detect heuristically: a task that fails on a timeout/race/network signal
+with no relevant diff is likely flaky. For the **Playwright/RWX E2E suite specifically**, defer to
+the `flaky-e2e` skill (timeout-widen / artifact-retention / fixture-scoping remedies); for the Elixir
+suite, `axon-flaky-test`. On a suspected flake, rerun once before investigating (see Step 4), and
+note it in the status update so it can be addressed separately.
 
 ## Step 4 — Fix and Push
 
 ### For Code Fixes
 
-1. **Read the failing code and tests** — understand what's broken before changing anything
-2. **Make the minimal fix** — fix only what's failing, nothing else
-3. **Run the check locally first if possible** — try to reproduce and verify the fix before pushing:
-   - Tests: run the specific failing test locally
-   - Lint: run the linter locally
-   - Build: compile locally
-4. **Commit the fix** using a clear message:
-   ```
-   Fix CI: [brief description of what was fixed]
-   ```
-5. **Push the fix**:
-   ```bash
-   git push
-   ```
-6. **Return to Step 2** — the push will trigger a new pipeline, resume monitoring. Note: pushing triggers a full new pipeline, which is unavoidable for code fixes. For non-code retries (flaky, infra), always rerun from failure instead.
+1. **Read the failing code and tests** — understand what's broken before changing anything.
+2. **Make the minimal fix** — fix only what's failing.
+3. **Reproduce locally first if possible** — run the specific failing test / linter / build locally
+   (see CLAUDE.md pre-push checklist per app). RWX can also run a step in a sandbox:
+   `rwx sandbox exec -- <command>`.
+4. **Commit** with a clear message: `Fix CI: <what was fixed>`.
+5. **Push** (`git push`). If you started `rwx run --loop`, the push auto-triggers a fresh run and the
+   stream resumes; otherwise return to Step 2.
 
-### For Infrastructure/Flaky Failures
+### For Infra/Flaky Failures
 
-1. Use `mcp__circleci-mcp-server__rerun_workflow` with `fromFailed: true` to rerun from the failed job — always prefer rerunning from failure rather than from the start to avoid re-running jobs that already passed
-2. **Return to Step 2** — resume monitoring the rerun
+Rerun **from the failed task** rather than the whole run when possible:
+- Re-run from the RWX run page (top-right **Re-run**, or the per-task kebab → re-run just that task).
+- Or re-invoke locally: `rwx run .rwx/<file>.yml --wait` (RWX patches the clone with local contents,
+  so no push is needed to retry).
+
+Then resume monitoring.
 
 ### Fix Limits
 
-- **Max 3 fix attempts per job** — if the same job fails 3 times after fixes, stop and escalate to the user: "Job `[name]` has failed 3 times. Here's what I've tried and what the current failure looks like."
-- **Max 2 flaky reruns per job** — if a job fails after 2 reruns with no code changes, it's probably not flaky. Investigate properly.
-- **Never force-push** — always create new commits for fixes
-- **Never modify CI config** — if the pipeline config itself seems wrong, flag it for the user
+- **Max 3 fix attempts per task** — if the same task fails 3× after fixes, stop and escalate with
+  what you tried and the current failure.
+- **Max 2 flaky reruns per task** — if it still fails after 2 no-diff reruns, it's not flaky; investigate.
+- **Never force-push** — always add new commits.
+- **Never modify the RWX config** (`.rwx/*.yml`) to make a failure pass. If the config itself is
+  wrong, `rwx lint .rwx/<file>.yml` to confirm and flag it for the user.
 
 ## Step 5 — Status Reporting
 
 ### During Monitoring
-Brief updates at natural points:
 ```
-[HH:MM] Pipeline #N — 5/8 jobs passed, 2 running (test_unit: 4m, test_integration: 7m), 1 queued
+[HH:MM] Run <id> — 5/8 tasks passed, 2 running (axon-exunit: 4m, e2e: 7m), 1 queued
 ```
 
 ### On Failure Detection
 ```
-[HH:MM] FAILED: job `test_unit` in workflow `build_and_test`
+[HH:MM] FAILED: task `axon-exunit`
 Failure: 2 tests failed in test/accounts/user_test.exs
 - test_create_user_with_invalid_email (line 42): expected {:error, changeset}, got {:ok, user}
-- test_update_user_permissions (line 87): ** (MatchError) no match of right hand side value
 Diagnosing...
 ```
 
 ### On Fix Applied
 ```
 [HH:MM] Fix pushed (abc1234): Fix email validation in User changeset
-New pipeline triggered — resuming monitoring...
+New run triggered — resuming monitoring...
 ```
 
 ### On Completion
 ```
 ## CI Complete — All Green
 
-Pipeline #N — all 8 jobs passed
-Duration: 23 minutes (wall clock), 47 minutes (total compute)
+Run <id> — all 8 tasks passed
 Fixes applied: 2 commits
 - abc1234: Fix email validation in User changeset
 - def5678: Fix missing preload in permissions test
-
-Flaky reruns: 1 (test_integration — known flaky: test_webhook_delivery)
-Approval gates: 1 (deploy_staging — approved by @sam at 14:32)
+Flaky reruns: 1 (e2e — timeout, retried clean)
 ```
 
 ## Constraints
 
-- **Always rerun from failure, not from start** — when rerunning a workflow (flaky tests, infra failures), always use `fromFailed: true`. Rerunning from start wastes time re-running jobs that already passed. Only rerun from start if explicitly asked or if the failure suggests earlier jobs produced bad artifacts.
-- **Never stop monitoring until every job is green** — the whole point is that you babysit it to completion. Running jobs mean keep waiting. Failed jobs mean fix and retry. The only exits are: all green, user interrupts, or fix limit reached.
-- **Never modify CI configuration** — `.circleci/config.yml` and pipeline config are off-limits. If the config is the problem, tell the user.
-- **Never approve gates** — approval jobs require human judgment. Notify and wait.
+- **Rerun from the failed task, not the whole run** — avoid re-running tasks that already passed
+  unless a failure suggests earlier tasks produced bad artifacts.
+- **Never stop monitoring until every task is green** — running tasks mean keep waiting; failed tasks
+  mean fix and retry. The only exits are: all green, user interrupts, or fix limit reached.
+- **Never modify RWX configuration** — `.rwx/*.yml` is off-limits as a way to force green. If the
+  config is the problem, `rwx lint` it and tell the user.
 - **Never force-push** — always add new commits on top.
 - **Never skip hooks** — if a pre-commit hook fails on your fix, fix the hook issue too.
-- **Minimal fixes only** — fix exactly what's failing. Don't refactor, don't improve, don't clean up. The goal is green CI, not better code.
-- **Ask when stuck** — if you can't determine why something failed or how to fix it, present the failure to the user rather than guessing.
+- **Minimal fixes only** — fix exactly what's failing; no refactors or cleanup.
+- **Ask when stuck** — if you can't determine why something failed or how to fix it, present the
+  failure to the user rather than guessing.
+```

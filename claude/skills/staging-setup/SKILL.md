@@ -115,6 +115,14 @@ Local target DSN (standard dev seed): `postgresql://dscout:dscout@localhost:5432
 
 ### B2a. Copy a full TEMPLATE subgraph (the common case)
 
+> **Pulling REAL data out of PROD?** For copying a prod project, single mission, or the guided
+> template library into staging/local, prefer the newer **`copy-account`** skill (the ENA
+> `copy-account-from-prod` ETL) — it's the superset: reads prod read-only via the snowflake-eng MCP,
+> enforces the `account_id=2` safety gate, does PII synthesis, and handles the mandatory
+> `memberships` / `study_template_consumers` seeds. The `copy-templates-cross-env` tool below remains
+> the right, lighter choice for a **cross-env template copy from an existing `--source` Postgres**
+> (e.g. staging → local) where you don't need prod reads or the gate.
+
 A "template" is a subgraph (study_templates → screeners → questions/ordinals/stims/question_stims, selected_target_attributes, template_ai_restrictions, study_template_consumers), not one row. Use the purpose-built, schema-drift-aware tool — **verified to exist** at:
 
 ```

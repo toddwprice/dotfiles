@@ -64,13 +64,13 @@ Bootstraps a complete Linear project structure — project, milestones, issues, 
 
 Before creating anything, verify the team exists:
 
-1. Use `mcp__plugin_linear_linear__list_teams` to get available teams.
+1. Use `mcp__claude_ai_Linear__list_teams` to get available teams.
 2. Match the team name (case-insensitive, partial match OK).
 3. If no match, show available teams and ask the user to pick one.
 
 ### Step 3: Create Project
 
-Use `mcp__plugin_linear_linear__save_project` with:
+Use `mcp__claude_ai_Linear__save_project` with:
 - `name`: resolved project name
 - `description`: from plan or user input
 - `addTeams`: [resolved team ID or name]
@@ -82,7 +82,7 @@ Report the created project name and URL.
 
 For each milestone in order:
 
-1. Use `mcp__plugin_linear_linear__save_milestone` with:
+1. Use `mcp__claude_ai_Linear__save_milestone` with:
    - `project`: project name
    - `name`: milestone name
    - `targetDate`: if provided (ISO format)
@@ -96,7 +96,7 @@ Report created milestones with their order.
 
 For each issue, grouped by milestone:
 
-1. Use `mcp__plugin_linear_linear__save_issue` with:
+1. Use `mcp__claude_ai_Linear__save_issue` with:
    - `title`: issue title
    - `team`: resolved team
    - `project`: project name
@@ -114,7 +114,7 @@ Report issues created per milestone.
 
 For each dependency pair identified from the plan or user input:
 
-1. Use `mcp__plugin_linear_linear__save_issue` with:
+1. Use `mcp__claude_ai_Linear__save_issue` with:
    - `id`: the blocked issue identifier
    - `blockedBy`: [array of blocking issue identifiers]
 

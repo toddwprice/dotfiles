@@ -184,8 +184,11 @@ When modifying prompts stored in Braintrust:
 
 1. **Identify the prompt**: `bt prompts list --project dscript`
 2. **View current version**: Use `bt view` or Braintrust UI.
-3. **Make changes**: Edit the prompt in Braintrust (via UI or API).
-4. **Update the version hash** in the `BraintrustPrompt()` reference.
+3. **Recommend the change, then STOP** — do NOT write it. The agent must never run `bt-prompt
+   create`/`bt-prompt edit` or edit the prompt via the Braintrust UI/API. Print the exact
+   `bt-prompt edit <slug> --project dscript` (or `bt-prompt create`) command and **wait** for Todd
+   to run it and paste back the new version hex.
+4. **Update the version hash** in the `BraintrustPrompt()` reference — only after Todd pastes the new hex.
 5. **Re-run the eval** with a new experiment name (e.g., `<ISSUE_ID> Fix v1`).
 6. **Compare**: Use Braintrust experiment comparison to see improvement.
 

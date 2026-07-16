@@ -16,7 +16,7 @@ The skill runs in four phases:
 3. **Stack assembly** — `git rebase` walks the success list and produces a linear chain.
 4. **PR creation** — bottom-up, push branches and open PRs with stacked bases.
 
-The original design rationale (written for jj) lives at `docs/plans/2026-04-19-todd-phase-stacked-prs-design.md` in the Glazing repo. This skill implements the same stacked-PR workflow using plain git.
+This skill implements a stacked-PR workflow using plain git worktrees (no jj required).
 
 ## Workflow Note
 
@@ -30,7 +30,7 @@ Two distinct names per ticket — keep them straight:
 
 - **`{TICKET_ID}`** — the Linear ticket identifier exactly as shown in the UI (uppercase, e.g., `CNVS-583`, `DEV-77`). Used for the **worktree directory**: `.worktrees/{TICKET_ID}/`. Short, predictable, matches what the user sees in Linear.
 
-- **`{BRANCH_NAME}`** — the value Linear exposes as **"copy git branch name"** in its UI. Fetch this from Linear's API (the `gitBranchName` GraphQL field; surfaced by `linctl issue get <ID> --json` as the `.branchName` key, and by `mcp__plugin_linear_linear__get_issue` under its equivalent field). Used as the actual git branch pushed to origin and referenced in PRs. Example for CNVS-583: `cnvs-583-add-rule_manifest-column-typed-schema-to-study_templates`. Do **not** slugify locally — Linear is the source of truth for this exact string (underscores, hyphens, and all).
+- **`{BRANCH_NAME}`** — the value Linear exposes as **"copy git branch name"** in its UI. Fetch this from Linear's API (the `gitBranchName` GraphQL field; surfaced by `linctl issue get <ID> --json` as the `.branchName` key, and by `mcp__claude_ai_Linear__get_issue` under its equivalent field). Used as the actual git branch pushed to origin and referenced in PRs. Example for CNVS-583: `cnvs-583-add-rule_manifest-column-typed-schema-to-study_templates`. Do **not** slugify locally — Linear is the source of truth for this exact string (underscores, hyphens, and all).
 
 If `branchName` is missing/empty for a ticket, halt with a clear error rather than inventing a name. (The user can add one in Linear and re-run.)
 
@@ -105,9 +105,9 @@ If dirty, halt with: `Error: dirty working tree — commit or stash changes befo
 
 ### Step 1: Find Earliest Phase With Open Tickets
 
-1. **Get project milestones**: Use `mcp__plugin_linear_linear__list_milestones` with `project` set to `PROJECT_NAME`. Sort by `sortOrder` ascending.
+1. **Get project milestones**: Use `mcp__claude_ai_Linear__list_milestones` with `project` set to `PROJECT_NAME`. Sort by `sortOrder` ascending.
 
-2. **Get all project issues**: Use `mcp__plugin_linear_linear__list_issues` with `project` set to `PROJECT_NAME`, including `includeRelations=true`.
+2. **Get all project issues**: Use `mcp__claude_ai_Linear__list_issues` with `project` set to `PROJECT_NAME`, including `includeRelations=true`.
 
 3. **Determine open tickets per phase**: For each milestone, count issues where `projectMilestone.name` matches AND status is NOT "Done", "Canceled", or "Archived".
 
@@ -211,7 +211,7 @@ For each branch in the assembled stack, **bottom-up**:
    ```
    Capture the returned PR number as `PREV_PR_NUMBER`.
 
-   Upper layers (i ≥ 1): draft by default, ready if `--skip-reviews`. Labelled with `stacked-on:<PREV_PR_NUMBER>` so `promote-next-stacked-pr` can flip them to ready when the prior PR merges.
+   Upper layers (i ≥ 1): draft by default, ready if `--skip-reviews`. Labelled with `stacked-on:<PREV_PR_NUMBER>` to record the stack order (and to key any future draft→ready promotion Action); today promotion is manual — `gh pr ready` as each prior PR merges (see "Draft→ready promotion").
    ```bash
    # Idempotently ensure the label exists in the repo.
    gh label create "stacked-on:$PREV_PR_NUMBER" --force \
@@ -227,7 +227,7 @@ For each branch in the assembled stack, **bottom-up**:
    ```
    Capture the newly-created PR's number as the next iteration's `PREV_PR_NUMBER`.
 
-4. **Resume check**: before pushing, check if a PR already exists for the branch (`gh pr view {BRANCH_NAME} --json number,isDraft,labels`). If yes, skip push + create, but **do** capture its number as `PREV_PR_NUMBER` for the next iteration. If the existing upper-layer PR is missing its `stacked-on:<prev-PR-number>` label (e.g., created by an older version of this skill), add it now via `gh pr edit --add-label` — the promote-next-stacked-pr v2 action depends on it.
+4. **Resume check**: before pushing, check if a PR already exists for the branch (`gh pr view {BRANCH_NAME} --json number,isDraft,labels`). If yes, skip push + create, but **do** capture its number as `PREV_PR_NUMBER` for the next iteration. If the existing upper-layer PR is missing its `stacked-on:<prev-PR-number>` label (e.g., created by an older version of this skill), add it now via `gh pr edit --add-label` so the stack order stays recorded.
 
 5. **Capture URLs** for the final summary.
 
@@ -270,7 +270,7 @@ feat: {ticket_title} ({TICKET_ID})
 
 {implementation_summary_from_todd_coder}
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 ```
 
 ## PR Body Template
@@ -292,8 +292,8 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 This PR is part of a stack created by `/todd:phase` for phase {PHASE_NAME}.
 Merge bottom-up. When this PR merges, GitHub's built-in auto-base-change
-retargets the next PR's base to `main`, and the `promote-next-stacked-pr`
-action flips it from draft to ready (matched by its `stacked-on:{N}` label).
+retargets the next PR's base to `main`; then mark that PR ready for review
+(`gh pr ready <number>` — see "Draft→ready promotion").
 
 Resolves {TICKET_ID}
 ```
@@ -314,13 +314,19 @@ Re-running `/todd:phase` after an interruption is safe and idempotent. State liv
 
 Final summary distinguishes four ticket states: `merged-ready` (in stack with PR), `not-stackable` (implemented but conflicted on rebase), `failed` (implementation broke), `skipped` (already done from prior run).
 
-## Companion Skill
+## Draft→ready promotion
 
-If the repo doesn't have the `promote-next-stacked-pr` GitHub Action installed, the skill prints a one-liner at the end of the summary:
+Upper PRs in the stack are opened as drafts blocked on the one below. dscout has **no
+`promote-next-stacked-pr` automation**, so promote manually: as each PR merges, GitHub retargets the
+next PR's base to `main` (built-in auto-base-change) — then mark that next PR ready for review
+(`gh pr ready <number>`). The skill prints this reminder at the end of the summary:
 
 ```
-ℹ️  For automatic draft→ready promotion when PRs merge, run /todd:actions install promote-next-stacked-pr
+ℹ️  As each PR merges, run `gh pr ready <next-PR-number>` to un-draft the next PR in the stack.
 ```
+
+(If a repo you run this in later adds a promotion Action keyed on the `stacked-on:{N}` labels this
+skill applies, that step becomes automatic.)
 
 ## Configuration
 

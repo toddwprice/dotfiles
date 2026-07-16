@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh api:*), Bash(mkdir:*), Bash(open:*), Bash(date:*), Write, Read, Agent
+allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr checkout:*), Bash(gh api:*), Bash(git:*), Bash(mkdir:*), Bash(open:*), Bash(date:*), Write, Read, Agent
 description: Autonomously review a PR using dscout team conventions — analyzes findings, self-answers each open question via parallel sub-agent research in Todd's voice (clear, terse, kind), renders a VERDICT, and emits two artifacts: a JSON review payload (with inline file:line comments, posted via `gh api .../reviews`) and an HTML visualization (composed via `/todd:describe_pr`) with verdict banner, key-numbers row, narrative summary, full diff, severity-coded annotation cards beneath each file, a self-answered Q&A section, and an embedded submit panel showing the exact `gh api` command to post the review. Forked from review_pr_steven; trained on 500 real dscout reviews.
 ---
 
@@ -134,7 +134,7 @@ For each question from Step 4, dispatch a sub-agent. **Send all sub-agent calls 
   - Intentional duplication is fine near releases, behind feature flags, or for code slated for removal.
   - Respect scope — don't expand findings into adjacent unrelated code.
 
-  Research the dscout monorepo (apps/axon, apps/dendra, apps/astro, apps/soma, apps/e2e) to verify your answer. Read the actual code; don't guess. Cite file:line for any factual claim.
+  Research the dscout monorepo (apps/axon, apps/dendra, apps/astro, apps/contour, apps/ai_mod, apps/e2e) to verify your answer. Read the actual code; don't guess. Cite file:line for any factual claim.
 
   Output contract — respond with EXACTLY this format and nothing else:
 
@@ -261,10 +261,6 @@ Emit the Phase 1 Kickoff, then the Phase 2 self-answered questions, then the Pha
 - [ ] Braintrust datasets and prompts live externally — don't flag missing repo files
 - [ ] Concurrent index creation for migrations
 - [ ] Co-located tests for new utilities
-
-**Ruby/Rails (Soma)**
-- [ ] Page object patterns for integration tests
-- [ ] Extract shared test helpers when duplication is clear
 
 **Ops/Infrastructure**
 - [ ] Input validation at system boundaries (EC2 IDs, UUIDs, time ranges)
@@ -455,7 +451,10 @@ Save at:
 $HOME/Downloads/pr-<N>-review.json
 ```
 
-The shape matches the GitHub PR review API (`POST /repos/{owner}/{repo}/pulls/{N}/reviews`):
+The shape matches the GitHub PR review API (`POST /repos/{owner}/{repo}/pulls/{N}/reviews`). The
+schema, anchoring rules, the Answer-only rule, and the posting commands are the shared canonical spec
+at `~/.claude/skills/_shared/review-payload.md` (also used by `todd:sync-review` and
+`todd:address-comments`) — keep this section in sync with it.
 
 ```json
 {
@@ -569,7 +568,7 @@ _<signature line from end of Phase 3>_
 
 ### 7b. HTML visualization (for local review)
 
-Compose with `/todd:describe_pr` to render an HTML page that pins every finding to the diff line it concerns. The HTML also **embeds the `gh api` submit command at the bottom**, so Todd can review the file end-to-end and copy the command out when satisfied.
+Compose with `/todd:describe_pr` to render an HTML page that pins every finding to the diff line it concerns. The HTML also **embeds the `gh api` submit command at the bottom**, so Todd can review the file end-to-end and copy the command out when satisfied. (`describe_pr` builds on the shared base shell at `~/.claude/skills/_shared/report-shell.html` — the single source of truth for the common typography/palette — so this artifact stays visually consistent with the rest without restating the shell.)
 
 **Run this entire step in a sub-agent on Sonnet 5 — do NOT render the HTML inline.** Rendering is mechanical (parse the diff, fill a template, escape, write a Python helper) and is the largest token sink in the whole review, yet it has zero bearing on the verdict — so it belongs on a faster, cheaper model and off the orchestrator's Opus context. The orchestrator must have already written the JSON payload (Step 7a) and finalized the verdict before dispatching. Dispatch one sub-agent and wait for it to return:
 

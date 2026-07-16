@@ -119,5 +119,23 @@ Report tightly:
    `chat.py`, a gate in `study_setup.py`) — without over-prescribing.
 4. **Staleness verdict** — fresh, or stale + re-repro suggested.
 
-If Todd wants it rendered, offer `todd:html_report` for a shareable writeup. If the diagnosis points
-at a prompt that needs a real fix + eval, that's the handoff to `todd:prompt-debugger`.
+If Todd wants it rendered, offer `todd:html_report` for a shareable writeup.
+
+## Step 6 — Handoff to `todd:prompt-debugger` (start-from-trace, no ticket needed)
+
+If the diagnosis points at a prompt that needs a real fix + eval, hand off to
+`todd:prompt-debugger` — and hand it enough that it can start **from this trace**, without waiting on
+a Linear ticket (its Step 1 has a start-from-trace door built for exactly this). Pass forward:
+
+- **Room/chat id** and the **Braintrust project id** you resolved in Step 3.
+- The **failing span id(s)** — at minimum the `supervisor-select` span — so it can seed the repro
+  dataset directly instead of re-searching.
+- The **one-line diagnosis** (which prompt section / gate / tool-availability / state field drove the
+  wrong behavior) — that becomes its failure description.
+- **A known-good contrast session**, if you can point at one (a session that behaved correctly on the
+  same axis). This is gold: `prompt-debugger` uses it as the scorer-calibration control, which is how
+  it avoids the miscalibrated-judge trap (FRG-845, FRG-993→FRG-1005). Even a rough "session X did this
+  right" pointer helps.
+
+File a ticket afterward if the fix warrants tracking — but don't make the ticket a prerequisite for
+starting the eval.

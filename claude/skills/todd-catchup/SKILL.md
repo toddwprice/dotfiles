@@ -15,7 +15,10 @@ allowed-tools: Agent, Read
 
 # Catchup — Unified Communications & Tasks Check
 
-Check Google Calendar, Gmail, Slack, Notion, and Linear for open communications and tasks. Present results grouped by action type.
+Check Gmail, Slack, Notion, Linear, and GitHub for open communications and tasks. Present results grouped by action type.
+
+> **Calendar is not swept** — there's no Google Calendar MCP in this environment; `calendar-agent.md`
+> is disabled until one exists. GitHub (review queue + own open PRs) is swept in its place.
 
 ## Step 1: Compute Time Boundaries
 
@@ -35,19 +38,20 @@ Use the user's timezone: America/Chicago.
 ## Step 2: Read Agent Prompts
 
 Read all five agent prompt files from this skill directory:
-- [calendar-agent.md](calendar-agent.md)
 - [gmail-agent.md](gmail-agent.md)
 - [slack-agent.md](slack-agent.md)
 - [notion-agent.md](notion-agent.md)
 - [linear-agent.md](linear-agent.md)
+- [github-agent.md](github-agent.md)
+
+(`calendar-agent.md` is disabled — see the note at the top — so it is not read or dispatched.)
 
 ## Step 3: Dispatch Parallel Subagents
 
-Launch **all 5 agents simultaneously** using the Agent tool with `subagent_type: "general-purpose"`. For each agent, take the content from its `*-agent.md` file and append the computed time boundaries as concrete values replacing the placeholder variables.
+Launch **all 5 agents simultaneously** (gmail, slack, notion, linear, github) using the Agent tool with `subagent_type: "general-purpose"`. For each agent, take the content from its `*-agent.md` file and append the computed time boundaries as concrete values replacing the placeholder variables.
 
-Example for calendar agent prompt: take the calendar-agent.md content and replace the Inputs section with actual computed values:
+Example for the gmail agent prompt: take the gmail-agent.md content and replace the Inputs section with actual computed values:
 - TIME_WINDOW_START = 2026-03-10T00:00:00
-- TIME_WINDOW_END = 2026-03-11T23:59:59
 - NOW = 2026-03-11T14:30:00
 
 Do this for all five agents and dispatch them all in a single message (parallel tool calls).

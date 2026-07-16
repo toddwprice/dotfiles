@@ -61,7 +61,7 @@ Each finding has:
 
 ## Step 3 — Render
 
-Write to `.claude/tmp/pr-<N>-<slug>-YYYY-MM-DD-HHMM.html` where `<slug>` is a kebab-case of the PR title (≤40 chars). Create the directory if missing.
+Write to `.claude/tmp/pr-<N>-<slug>-YYYY-MM-DD-HHMM.html` where `<slug>` is a kebab-case of the PR title (≤40 chars). Create the directory if missing. (A composing skill may override this output dir — `todd:pr_review` writes review artifacts to `~/Downloads/`; `todd:sync-review` looks in both `~/Downloads` and `.claude/tmp`. When composed, honor the caller's chosen dir.)
 
 ### Section menu
 
@@ -76,13 +76,13 @@ The page is a single self-contained HTML file with these sections (in order). **
 7. **Per-file sections** — for each changed file: file header → diff body → annotations beneath. (Required, at least one file.)
 8. **Prompt diff panel** *(optional)* — side-by-side before/after when the PR changes a prompt. Use when a Braintrust prompt version, system prompt string, or tool docstring is the main thing changing.
 9. **Comparison table** *(optional)* — when the PR creates an obvious comparison worth showing as a table (e.g. term-list asymmetry between two prompts, before/after config values, schema-vs-API field mismatch).
-10. **Self-answered questions (Q&A)** *(optional)* — for `pr_review` composition. Each entry is a card with question + Answer + Rationale.
+10. **Self-answered questions (Q&A)** *(optional)* — for `pr_review` composition. Each entry is a card with question + Answer + "How I checked" (the evidence/rationale layer — kept in the HTML artifact, not the posted comment).
 11. **Positive callouts** *(optional)* — for `pr_review` composition or when there's genuinely standout work worth a separate section beyond the per-file `positive` annotations.
 12. **Footer** — generation timestamp + one-line provenance.
 
 ### Template
 
-Use this HTML shell. The CSS is the **deliverable look** — don't deviate without reason. Drop sections you're not using; keep the ones you are.
+Use this HTML shell. The CSS is the **deliverable look** — don't deviate without reason. Drop sections you're not using; keep the ones you are. Its base typography + palette match the shared shell at `~/.claude/skills/_shared/report-shell.html` (the single source of truth for the common look across Todd's artifacts); the diff-render / annotation-card / verdict-banner CSS below is describe_pr-specific and layers on top — keep the shared tokens aligned with that file rather than diverging the palette.
 
 ```html
 <!doctype html>
@@ -399,7 +399,7 @@ Use this HTML shell. The CSS is the **deliverable look** — don't deviate witho
   </div>
   <div class="qa-body">
     <p><span class="label">Answer</span><sub-agent answer verbatim></p>
-    <p><span class="label">Rationale</span><sub-agent rationale verbatim></p>
+    <p><span class="label">How I checked</span><sub-agent rationale/evidence verbatim></p>
   </div>
 </div>
 

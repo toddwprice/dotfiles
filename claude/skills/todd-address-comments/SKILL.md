@@ -11,7 +11,7 @@ description: >
   This skill fetches the threads itself (you do NOT need them pasted in), fact-checks each claim
   against the actual code, and by default PROPOSES a plan + draft replies and waits for approval
   before changing code or pushing.
-allowed-tools: Bash(gh:*), Bash(git:*), Bash(./bin/ci:*), Bash(cat:*), Bash(mktemp:*), Read, Grep, Glob, Agent
+allowed-tools: Bash(gh:*), Bash(git:*), Bash(mix:*), Bash(yarn:*), Bash(uv:*), Bash(cat:*), Bash(mktemp:*), Read, Grep, Glob, Agent
 ---
 
 # Address PR Review Comments
@@ -134,15 +134,30 @@ Use the `speak-as-todd` skill conventions for reply wording.
 
 ## Step 5 — Implement (after approval)
 
+**Work in the PR's checkout, not wherever you happen to be.** Todd works in git worktrees, so the
+CWD is often a *different* branch's tree. Before editing: confirm you're on the PR's branch
+(`git branch --show-current` == `<headRef>`); if not, switch to that branch's worktree
+(`git worktree list` to find it) or check it out. Never edit/commit against the wrong tree.
+
 - Make the agreed code changes. If the change has behavioral surface, follow the repo's TDD norm
   (write/extend the failing test first). Keep edits scoped to what the comments asked for.
 - Commit with a clear message. End commit messages with the repo trailer:
   `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
-- **CI is mandatory.** Run `./bin/ci` and make it green before pushing — this is a hard rule for
-  Todd's branches. If `./bin/ci` isn't present, fall back to the affected app's checks
-  (`mix lint && mix test`, `uv run ruff check . && uv run pytest`, `yarn lint && yarn test`).
+- **Checks are mandatory before pushing** — this is a hard rule for Todd's branches. There is **no
+  runnable `./bin/ci`** (`bin/ci/` is a *directory* of per-task CI scripts, not an aggregate
+  command). Run the CLAUDE.md pre-push checklist for **each app the diff touches**:
+  - **Axon** (`apps/axon`): `mix format --check-formatted && mix compile --warnings-as-errors` (and
+    `mix test` if behavior changed; `mix lint` for the fuller pass).
+  - **Dendra** (`apps/dendra`): `yarn lint && yarn test`.
+  - **Astro** (`apps/astro`): `uv run ruff check . && uv run pytest`.
+  - **Axon SPAs** (`apps/axon/assets`): `npm run lint && npm run test`.
+  Make them green before pushing. To mirror a specific CI task locally, the individual scripts live
+  in `bin/ci/*.sh` (e.g. `bin/ci/axon-exunit.sh`).
 
 ## Step 6 — Reply to each thread, then push
+
+> Posting mechanics + the Answer-only rule (no `<details>Instructions for AI Agents</details>` block
+> on Todd's replies) are the shared canonical spec at `~/.claude/skills/_shared/review-payload.md`.
 
 Reply on the **comments** endpoint (thread replies are NOT the reviews endpoint):
 

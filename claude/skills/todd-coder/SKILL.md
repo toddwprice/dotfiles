@@ -35,7 +35,7 @@ Before starting work, check if running in a git worktree:
 
 1. **Detect worktree environment** (see above)
 
-2. **Read ticket**: Call `mcp__plugin_linear_linear__get_issue` with the TICKET_ID. If not found, report error and stop.
+2. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
 3. **Explore codebase**: Based on the ticket description, explore relevant code areas to understand:
    - What files/modules are involved
@@ -52,7 +52,7 @@ Before starting work, check if running in a git worktree:
    - **Questions/blockers**: Anything that MUST be answered before implementation (flag clearly)
    - **Estimated scope**: Small / Medium / Large
 
-5. **Post plan to Linear**: Use `mcp__plugin_linear_linear__save_comment` with `issueId` set to TICKET_ID. Format the plan as markdown. Prefix the comment with `## 📋 Implementation Plan`.
+5. **Post plan to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format the plan as markdown. Prefix the comment with `## 📋 Implementation Plan`.
 
 6. **Report to user**: Show the plan and highlight any questions/blockers.
 
@@ -64,9 +64,9 @@ Before starting work, check if running in a git worktree:
 
 2. **Check git state**: Ensure worktree is clean (no uncommitted changes) OR report what will be staged. If in a worktree with uncommitted changes from previous work, ask user if they want to continue or stash.
 
-3. **Read ticket**: Call `mcp__plugin_linear_linear__get_issue` with the TICKET_ID. If not found, report error and stop.
+3. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
-4. **Find plan**: Call `mcp__plugin_linear_linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`.
+4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`.
 
 5. **Assess readiness**:
    - If plan found: proceed to implementation using the plan as guide.
@@ -87,7 +87,7 @@ Before starting work, check if running in a git worktree:
    - **Test plan**: List of test cases written, what they cover, how to run them
    - **Remaining work**: Anything deferred or out of scope
 
-8. **Post summary to Linear**: Use `mcp__plugin_linear_linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
+8. **Post summary to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
 
 9. **Report to user**: Show the summary and test plan.
 

@@ -1,11 +1,13 @@
 ---
 allowed-tools: Bash(mkdir:*), Bash(open:*), Bash(date:*), Bash(ls:*), Bash(cp:*), Bash(mv:*), Bash(/usr/bin/python3:*), Bash(/Applications/Google Chrome.app/Contents/MacOS/Google Chrome:*), Write, Read, Agent
-description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in the shared `artifacts/` catalog, auto-refreshing an `index.html` table of every report, then open it. Pass the topic/question as $ARGUMENTS; append `--pdf` for a Mermaid-aware PDF sibling, or `--ingest <paths…>` to fold previously-created HTML reports into the catalog. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
+description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in the shared `artifacts/` catalog, auto-refreshing an `index.html` table of every report, then open it. Use when Todd wants a shareable visual artifact out of an answer, analysis, diagram, or query result — phrasings like "create an HTML doc for this so I can share it with colleagues", "make a shareable HTML page of this", "turn this into HTML I can send", "render this as HTML", or "update/refresh the existing HTML report/diagram". Pass the topic/question as $ARGUMENTS; append `--pdf` for a Mermaid-aware PDF sibling, or `--ingest <paths…>` to fold previously-created HTML reports into the catalog. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
 ---
 
 You are producing a self-contained HTML report that answers a question or tells a visual story. The report opens in a browser when done.
 
 **This command is autonomous. Do NOT ask clarifying questions** — pick a reasonable shape and ship it; Todd will redirect if the shape is wrong.
+
+**Work in parallel wherever steps don't depend on each other** — gather (Step 2) via concurrent subagents, and overlap the optional PDF render (Step 4) with the catalog refresh and opening the HTML. Keep synthesis, narrative voice, and Mermaid correctness with you, the primary model — only delegate bounded, mechanical retrieval to faster models or specialist agents. Parallelism should never change what ends up in the report, only how fast it lands.
 
 Arguments: `$ARGUMENTS` is the question, topic, or instruction. Examples Todd has used in the past:
 - *"high level network diagram of our infrastructure"*
@@ -26,7 +28,7 @@ Because the index is rebuilt by scanning, deleting a report and rebuilding simpl
 
 ## Flags (scan `$ARGUMENTS` for these tokens, strip them, keep the rest as the question)
 
-- `--pdf` — set `WANT_PDF=1`. Render a PDF sibling in Step 6 after the HTML is written.
+- `--pdf` — set `WANT_PDF=1`. Render a PDF sibling in Step 4, overlapped with the catalog refresh rather than after it.
 - `--ingest` — switch to **Ingest mode** (see the section at the bottom): fold already-created HTML report(s) into the catalog instead of generating a new one. Skip Steps 1–3.
 - `--move` — only meaningful with `--ingest`; move sources into `artifacts/` instead of copying.
 
@@ -51,55 +53,34 @@ Pull only from the sources the prompt implies:
 - **Codebase intel** → use Read/Glob/Grep against `/Users/toddprice/dscout-wt`.
 - **External docs** → WebFetch when explicitly named.
 
-If the report needs 2+ independent gathers, dispatch sub-agents (Agent tool, in parallel) — one per source — and merge.
+**One bounded source** (a named file, a supplied SQL query, a specific known path) → just gather it yourself inline. A subagent's spin-up cost isn't worth paying for a single direct lookup.
+
+**Two or more independent sources** → dispatch one subagent per source, all in a **single message** (multiple Agent tool calls together — this is what makes them run concurrently instead of one after another). Match each subagent's agent type and model to how mechanical the task is:
+
+- Bounded, mechanical retrieval (read a known file, run a given query verbatim, grep for a specific symbol, "where does X live") → a narrow specialist where one fits (`dev-flow:codebase-locator` for locating things, `dev-flow:codebase-analyzer` for tracing how something works, `dev-flow:docs-researcher` for external docs) or `general-purpose` otherwise, with `model: "haiku"`. This is extraction, not judgment — the fastest model is sufficient and costs nothing in quality.
+- Open-ended or judgment-heavy gathers (interpreting ambiguous docs, exploring an unfamiliar subsystem, reconciling conflicting sources) → leave `model` unset so it inherits the parent's full-strength model.
+
+Merge and synthesize the results yourself once every subagent returns — that judgment call, and the narrative voice built on top of it, stays with you.
 
 ## Step 3 — Render
 
 Write the report to `/Users/toddprice/dscout-knowledge/artifacts/report-<slug>-YYYY-MM-DD-HHMM.html`. The slug is a kebab-case summary of `$ARGUMENTS` (≤40 chars). The directory already exists; `mkdir -p` it if not.
 
-Use this base shell — same visual language as the standup so the look is consistent. **The three `report-*` meta tags are required** — they populate the `index.html` catalog. Keep the description to one tight line (≤140 chars) that says what the report answers, distinct from the title.
+**Use the shared base shell — copy it verbatim, then add report-specific CSS in the marked slot:**
 
-```html
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title><report title></title>
-  <!-- Required: these three tags feed the artifacts/index.html catalog. -->
-  <meta name="report-title" content="<report title>">
-  <meta name="report-description" content="<one tight line — what this report answers, ≤140 chars, distinct from the title>">
-  <meta name="report-date" content="<YYYY-MM-DD>">
-  <style>
-    :root { color-scheme: light; }
-    body { font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-           max-width: 980px; margin: 2.5rem auto; padding: 0 1.25rem; color: #1f2328; }
-    h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
-    .meta { color: #57606a; font-size: 0.85rem; margin-bottom: 2rem; }
-    h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.05em;
-         color: #57606a; margin: 2rem 0 0.5rem; }
-    p  { margin: 0 0 1rem; }
-    a  { color: #0969da; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
-           background: #f6f8fa; padding: 1px 4px; border-radius: 3px; }
-    pre { background: #f6f8fa; padding: 1rem; border-radius: 6px; overflow-x: auto; }
-    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #d0d7de; }
-    th { background: #f6f8fa; position: sticky; top: 0; font-weight: 600; }
-    .mermaid { margin: 1.5rem 0; }
-    .caption { color: #57606a; font-size: 0.85rem; margin-top: -0.5rem; margin-bottom: 1.5rem; }
-  </style>
-  <!-- Only include Mermaid if the report uses diagrams -->
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-  <script>mermaid.initialize({ startOnLoad: true, theme: "default" });</script>
-</head>
-<body>
-  <h1><report title></h1>
-  <div class="meta">Generated <date> · <one-line context></div>
-  <!-- content -->
-</body>
-</html>
 ```
+~/.claude/skills/_shared/report-shell.html
+```
+
+It carries the canonical typography + palette (the "same visual language" shared with the standup and
+the other artifact skills, so a restyle lands in one place) and the doctype/head/body skeleton. On
+top of the copied shell:
+
+- Fill the `<title>` and **the three required `report-*` meta tags** — they populate the
+  `index.html` catalog. Keep `report-description` to one tight line (≤140 chars, distinct from the title).
+- Add any report-specific CSS (KPI tiles, cards, bar rows) below the `/* skill-specific */` marker.
+- Drop the Mermaid `<script>` if the report has no diagrams.
+- Body opens with `<h1>` + a `<div class="meta">Generated <date> · <one-line context></div>`.
 
 Rules for content:
 - Mermaid blocks go in `<div class="mermaid">...</div>`. Test mentally for syntax — Mermaid silently fails on bad arrows.
@@ -107,47 +88,40 @@ Rules for content:
 - Hyperlink Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PR numbers (`https://github.com/dscout/monorepo/pull/<num>`) when they appear.
 - Drop the Mermaid `<script>` tag if there are no diagrams — keep the file lean.
 
-## Step 4 — Refresh the catalog index
+## Step 4 — Refresh the catalog, open, and render PDF (concurrently)
 
-Rebuild `index.html` so the new report appears in the catalog:
+None of these three depend on each other, so don't run them one after another. The PDF render is the slow part — Chrome needs its `--virtual-time-budget` just to let Mermaid finish drawing — so it should be rendering in the background while the rest wraps up, not blocking it.
 
-```bash
-/usr/bin/python3 ~/dscout-knowledge/artifacts/build_index.py
-```
+1. **If `WANT_PDF=1`, start the PDF render first, as a background Bash call** (`run_in_background: true`), so it's already running while you do the catalog refresh and open below:
 
-This rescans `artifacts/` and rewrites `index.html` from each report's meta tags — idempotent and fast. If the builder is somehow missing (e.g. a fresh clone that hasn't pulled), note it but don't fail; the report itself is already written.
+    ```bash
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+      --headless \
+      --disable-gpu \
+      --no-pdf-header-footer \
+      --virtual-time-budget=10000 \
+      --run-all-compositor-stages-before-draw \
+      --print-to-pdf=<path-without-.html>.pdf \
+      "file://<absolute-path-to-html>"
+    ```
 
-## Step 5 — Open
+    Why these flags matter (do not strip them):
+    - `--virtual-time-budget=10000` gives client-side JS up to 10s to finish before snapshot. Without it, **Mermaid diagrams print as blank `<div>`s** because Chrome captures before the CDN script renders.
+    - `--run-all-compositor-stages-before-draw` pairs with the time budget to ensure layout/paint finish before capture.
+    - `--no-pdf-header-footer` strips the page-edge URL/date chrome for cleaner shareable output.
 
-Open the report you just wrote:
+2. **Without waiting on the PDF job**, rebuild the catalog and open the HTML:
 
-```bash
-open /Users/toddprice/dscout-knowledge/artifacts/<report-file>.html
-```
+    ```bash
+    /usr/bin/python3 ~/dscout-knowledge/artifacts/build_index.py
+    open /Users/toddprice/dscout-knowledge/artifacts/<report-file>.html
+    ```
 
-## Step 6 — Optional PDF (only if `WANT_PDF=1`)
+    This rescans `artifacts/` and rewrites `index.html` from each report's meta tags — idempotent and fast. If the builder is somehow missing (e.g. a fresh clone that hasn't pulled), note it but don't fail; the report itself is already written.
 
-Render the same file to a PDF sibling via headless Chrome. Use these exact flags — they earn their keep:
+3. **If you started a PDF job**, wait for it to finish, then `open <pdf-path>` so it lands in Preview alongside the browser tab.
 
-```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --headless \
-  --disable-gpu \
-  --no-pdf-header-footer \
-  --virtual-time-budget=10000 \
-  --run-all-compositor-stages-before-draw \
-  --print-to-pdf=<path-without-.html>.pdf \
-  "file://<absolute-path-to-html>"
-```
-
-Why these flags matter (do not strip them):
-- `--virtual-time-budget=10000` gives client-side JS up to 10s to finish before snapshot. Without it, **Mermaid diagrams print as blank `<div>`s** because Chrome captures before the CDN script renders.
-- `--run-all-compositor-stages-before-draw` pairs with the time budget to ensure layout/paint finish before capture.
-- `--no-pdf-header-footer` strips the page-edge URL/date chrome for cleaner shareable output.
-
-Then `open <pdf-path>` so the PDF lands in Preview alongside the browser tab.
-
-## Step 7 — Report
+## Step 5 — Report
 
 Tell Todd, in one line, where things landed and what shape you picked. Mention the PDF only if you produced one, and note the catalog was refreshed.
 
