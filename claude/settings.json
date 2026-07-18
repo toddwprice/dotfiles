@@ -2,6 +2,10 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "model": "opus[1m]",
+  "worktree": {
+    "baseRef": "fresh"
+  },
   "statusLine": {
     "type": "command",
     "command": "bash ~/.claude/statusline-command.sh"
@@ -54,9 +58,13 @@
     }
   },
   "effortLevel": "xhigh",
+  "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
-  "theme": "dark-daltonized",
-  "remoteControlAtStartup": false,
+  "theme": "light-daltonized",
+  "editorMode": "normal",
+  "preferredNotifChannel": "auto",
+  "autoScrollEnabled": false,
+  "agentPushNotifEnabled": false,
   "skipAutoPermissionPrompt": true
 }

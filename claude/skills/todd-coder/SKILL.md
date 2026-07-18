@@ -10,15 +10,17 @@ Bridges Linear tickets with disciplined TDD implementation. Reads a ticket, crea
 
 ## Usage
 ```
-/todd:coder plan DEV-5    # Create implementation plan from ticket
-/todd:coder impl DEV-5    # Implement ticket using TDD
+/todd:coder plan DEV-5                 # Create implementation plan from ticket
+/todd:coder impl DEV-5                 # Implement ticket using TDD
+/todd:coder impl DEV-5 --orchestrated  # Non-interactive mode, dispatched by /todd:phase
 ```
 
 ## Argument Parsing
 
 Parse the args string to extract:
-- **command**: First word, must be `plan` or `impl`. If missing or invalid, show usage and stop.
+- **command**: First word, must be `plan` or `impl`. If it's anything else — including a free-form request like "diagnose this trace" or "start on the subtickets and work in parallel" — this is the wrong tool. Don't force-fit it: say plainly that `/todd:coder` only does `plan`/`impl` on a single ticket, name what the user actually seems to want, and stop. (Real runs have mis-fed this a Braintrust-trace prompt and a "work in parallel" instruction; a clean bounce beats improvising an orchestration this skill isn't built for.)
 - **TICKET_ID**: Second word (e.g., `DEV-5`). If missing, show usage and stop.
+- **`--orchestrated`** (optional flag, anywhere in the args): run non-interactively for an orchestrator like `/todd:phase`. See "Orchestrated Mode" below — the short version is: never block on a prompt, still post to Linear, auto-commit on success, and end with the structured status block.
 
 ## Worktree Detection
 
@@ -37,7 +39,7 @@ Before starting work, check if running in a git worktree:
 
 2. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
-3. **Explore codebase**: Based on the ticket description, explore relevant code areas to understand:
+3. **Explore codebase — delegate the search, keep only the findings**: Broad exploration is a fan-out that bloats context fast, and when this skill runs as a subagent under `/todd:phase` its context budget directly feeds implementation quality. So dispatch read-only search agents rather than grepping and reading files inline: `dev-flow:codebase-locator` to find the relevant files, `dev-flow:codebase-analyzer` to trace how they work, `dev-flow:codebase-pattern-finder` for conventions and examples to model. Run independent lookups in parallel (multiple Agent calls in one message), and fold their **returned findings** — not their raw file dumps — into the plan. You're trying to understand:
    - What files/modules are involved
    - Existing patterns, utilities, and functions to reuse
    - Test structure and conventions
@@ -62,7 +64,7 @@ Before starting work, check if running in a git worktree:
 
 1. **Detect worktree environment** (see above)
 
-2. **Check git state**: Ensure worktree is clean (no uncommitted changes) OR report what will be staged. If in a worktree with uncommitted changes from previous work, ask user if they want to continue or stash.
+2. **Check git state**: Ensure worktree is clean (no uncommitted changes) OR report what will be staged. If in a worktree with uncommitted changes from previous work, ask the user whether to continue or stash — **unless `--orchestrated`**, where you can't wait on a prompt: if the changes look like a resumed prior attempt on *this* ticket, continue on top of them; otherwise stop with a `fatal` status. (An unexpected dirty tree in an unattended run is a real problem, not something to silently stash.)
 
 3. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
@@ -89,9 +91,18 @@ Before starting work, check if running in a git worktree:
 
 8. **Post summary to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
 
-9. **Report to user**: Show the summary and test plan.
+9. **Report to user**: Show the summary and test plan. **In `--orchestrated` mode, skip the chatty report** — the orchestrator reads the structured status block instead (see "Structured Return").
 
-10. **In worktree only**: Offer to commit changes if implementation succeeded.
+10. **In worktree only**: Commit changes if implementation succeeded. Interactive mode: offer first. `--orchestrated`: commit automatically (the orchestrator squashes/rebases and pushes later), then put the commit SHA in the structured return. Never push — that's the orchestrator's job.
+
+## Orchestrated Mode (`--orchestrated`)
+
+When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, there's no human on the other end of the chat, and the orchestrator only needs a compact result — not the full narrated report. In this mode:
+
+- **Never block on a question.** Every interactive prompt gets a safe default (see the impl steps). If you genuinely can't proceed, stop with a `fatal` status rather than waiting on input that will never come.
+- **Still post to Linear.** The plan and summary comments are the durable record the orchestrator (and Todd) rely on — keep posting them exactly as in normal mode. This is why the orchestrator dispatches *this skill* rather than running raw TDD: the Linear paper trail comes for free.
+- **Commit automatically** on success; never push.
+- **End with the structured status block** (below) as your final message — that's what the orchestrator parses.
 
 ## Comment Format Templates
 
@@ -169,10 +180,24 @@ Before starting work, check if running in a git worktree:
 ✅ Worktree is clean — proceeding with implementation
 ```
 
-## Exit Codes
+## Structured Return (for orchestrators)
 
-For use by `/todd:phase` or other orchestrators:
-- **0**: Success (plan created or implementation complete)
-- **1**: Recoverable error (user can retry)
-- **2**: Fatal error (ticket not found, invalid args)
-- **3**: Plan required for complex ticket (run plan mode first)
+This skill runs in-context, not as a subprocess, so there's no real exit code — an orchestrator reads your **final message**. In `--orchestrated` mode, make that final message a compact, parseable status block and put nothing after it:
+
+```
+STATUS: success | recoverable | fatal | plan-required
+TICKET: {TICKET_ID}
+COMMIT: {sha, or "none"}
+FILES: {count} changed
+TESTS: {e.g. "42 passed" or "3 failed: <names>"}
+BLOCKERS: {one line, or "none"}
+PR_TITLE: {suggested PR title}
+PR_BODY: |
+  {summary / changes / test-plan the orchestrator can drop straight into the PR}
+```
+
+Status meanings (these replace the old exit codes 0–3):
+- **success** — plan created, or implementation complete and committed.
+- **recoverable** — transient failure; a re-run can retry this ticket.
+- **fatal** — can't proceed (ticket not found, invalid args, unexpected dirty tree).
+- **plan-required** — complex ticket with no usable plan; the orchestrator should run `plan` first, then re-dispatch `impl`.

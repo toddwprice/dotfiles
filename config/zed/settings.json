@@ -7,6 +7,8 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "minimum_split_diff_width": 100.0,
+  "diff_view_style": "split",
   "agent_servers": {
     "claude-acp": {
       "default_config_options": {
