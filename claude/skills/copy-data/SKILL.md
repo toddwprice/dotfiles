@@ -1,14 +1,16 @@
 ---
-name: copy-account
+name: copy-data
 description: >
-  Copy a dscout-owned (account_id=2) project, single mission, or the guided template library out of
-  PROD into a local or staging Postgres for test data — read-only prod access via the snowflake-eng
-  MCP, no direct prod DB connection. Use WHENEVER Todd wants realistic test data in
-  staging/local — phrasings like "copy this account/project into staging", "seed staging with a real
-  project", "pull mission X into my local db", "copy the template library to staging", "get better
-  test data in staging", "run copy-account-from-prod", or points at a prod project/mission URL to
-  clone. Wraps the `.claude/commands/copy-account-from-prod/` ETL tool (resolve → gate → manifest →
-  extract → transform → load → seed → smoke) and enforces its non-negotiable safety gate + seeds.
+  Copy a dscout-owned (account_id=2) project (optionally authoring-only, dropping
+  submissions/responses), single mission, or the guided template library out of PROD into a local
+  or staging Postgres for test data — read-only prod access via the snowflake-eng MCP, no direct
+  prod DB connection. Use WHENEVER Todd wants realistic test data in staging/local — phrasings like
+  "copy this account/project into staging", "seed staging with a real project", "pull mission X into
+  my local db", "copy the template library to staging", "get better test data in staging", "run
+  copy-data", or points at a prod project/mission URL to clone. Run with no scope flag to start an
+  interactive wizard (from/to/scope/id/grant prompts). Wraps the `.claude/commands/copy-data/` ETL
+  tool (resolve → target-first existence check → gate → manifest → extract → transform → load → seed
+  → smoke) and enforces its non-negotiable safety gate + seeds.
 allowed-tools: Bash(python3:*), Bash(psql:*), Bash(bash:*), Bash(mktemp:*), Bash(cat:*), Read, Grep, Glob
 ---
 
@@ -19,12 +21,18 @@ This wraps the ENA ETL tool that builds realistic test data by copying **dscout-
 MCP** (`dscout-raw-sql`) — never a direct prod DB connection — transforms/synthesizes, and loads into
 a target Postgres.
 
+Run `/copy-data` with **no scope flag** and it starts an **interactive wizard** (from/to/scope/id/grant
+prompts) that assembles the equivalent invocation and confirms before doing anything. Before touching
+prod it does a **target-first existence check**: if the requested project/mission/templates scope is
+already present in the target, it skips the copy entirely and just grants access. Project mode has an
+authoring-only option, `--no-submissions`, that drops participant submissions/responses from the copy.
+
 > **Where the tool lives.** The scripts are in the monorepo at
-> `.claude/commands/copy-account-from-prod/` (`resolve.py`, `manifest.py`, `extract.py`,
+> `.claude/commands/copy-data/` (`resolve.py`, `manifest.py`, `extract.py`,
 > `transform.py`, `load.sh`, `seed_membership.sh`, `seed_template_consumers.sh`, `tests/`). As of
 > 2026-07 they're on branch **`ena-292-create-better-test-data-in-staging`** (worktree
 > `/Users/toddprice/dscout-wt/ena-292`), not yet on `main` — so run from that branch/worktree until
-> it merges. There's also a repo slash-command wrapper `.claude/commands/copy-account-from-prod.md`;
+> it merges. There's also a repo slash-command wrapper `.claude/commands/copy-data.md`;
 > this skill is the portable, always-discoverable front door to the same workflow.
 
 ## Prerequisites (check first, fail loud)
@@ -49,7 +57,7 @@ is what keeps a real customer account from ever being copied. It is skipped **on
 
 | Mode | Flag | Scopes |
 |------|------|--------|
-| **Project** | `--project <id\|url>` | full subgraph: mission_groups → missions → screeners → parts → questions → stims → submissions → responses |
+| **Project** | `--project <id\|url>` [`--no-submissions`] | full subgraph: mission_groups → missions → screeners → parts → questions → stims → submissions → responses; add `--no-submissions` for authoring-only (drops submissions/responses) |
 | **Mission** | `--mission <id\|url>` | one mission's authoring subgraph only (mission_groups seed-if-absent → missions → parts → questions → stims; no screeners/submissions/responses); parent project resolved from the mission for the gate |
 | **Templates** | `--templates` | 7-table guided-template library (study_templates → screeners → questions/stims/question_stims/selected_target_attributes/template_ai_restrictions); `study_template_consumers` is **seeded, not copied** |
 
@@ -61,7 +69,7 @@ is what keeps a real customer account from ever being copied. It is skipped **on
 
 ## Run it (end-to-end)
 
-Let `TOOL=.claude/commands/copy-account-from-prod` and `WORK=$(mktemp -d)`.
+Let `TOOL=.claude/commands/copy-data` and `WORK=$(mktemp -d)`.
 
 1. **Resolve** the request into a plan:
    ```bash
