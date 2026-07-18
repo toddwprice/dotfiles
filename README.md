@@ -4,21 +4,23 @@ My personal config for zsh, git, Zed, Claude Code, and a few CLI tools. Managed 
 
 ## Bootstrap a new Mac
 
+One command from a clean machine:
+
 ```sh
-# 1. Install Homebrew, then rcm
-brew install rcm
-
-# 2. Clone this repo
-git clone https://github.com/<your-user>/dotfiles ~/.dotfiles
-
-# 3. Symlink everything into $HOME
-env RCRC=$HOME/.dotfiles/rcrc rcup
-
-# 4. Install the rest of the toolchain
-brew bundle --file=~/.dotfiles/Brewfile
+git clone https://github.com/toddwprice/dotfiles.git ~/.dotfiles
+~/.dotfiles/bootstrap.sh
 ```
 
-After the first `rcup`, the `rcrc` symlink is in place and you can run plain `rcup` from then on. Use `rcup -n` for a dry run, `lsrc` to see what's currently linked, and `rcdn` to unlink.
+`bootstrap.sh` is idempotent and safe to re-run. It:
+
+1. Installs Homebrew (if missing) and `rcm`
+2. Symlinks everything into `$HOME` with `rcup`. The tracked `rcrc` is passed via `RCRC` on the first run so `EXCLUDES` is honored before `~/.rcrc` exists; that same run links `rcrc` → `~/.rcrc`, so plain `rcup` works from then on
+3. Installs the rest of the toolchain from the `Brewfile`
+4. Installs oh-my-zsh and the custom plugins the shell config expects (`zsh-autosuggestions`, `zsh-shift-select`) — neither is a brew formula, so a fresh machine needs them or zsh errors on startup
+
+It deliberately does **not** copy secrets — see the next section.
+
+Prefer to do it by hand? The four steps map to `brew install rcm`, `env RCRC=$HOME/.dotfiles/rcrc rcup`, `brew bundle --file=~/.dotfiles/Brewfile`, then the oh-my-zsh installer + plugin clones. Use `lsrc` to preview what will be linked before running `rcup`, and `rcdn` to unlink.
 
 ## Secrets and machine-specific config
 
