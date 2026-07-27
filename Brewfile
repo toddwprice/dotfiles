@@ -2,42 +2,98 @@ tap "4ier/tap"
 tap "chrismo/grdy"
 tap "datadog-labs/pack"
 tap "dorkitude/linctl"
+tap "hashicorp/tap"
+tap "rwx-cloud/tap"
+# Extendable version manager with support for Ruby, Node.js, Erlang & more
 brew "asdf"
+# Automatic configure script builder
 brew "autoconf"
+# Tool for generating GNU Standards-compliant Makefiles
 brew "automake"
+# Official Amazon AWS command-line interface
 brew "awscli"
+# Language Server for Bash
+brew "bash-language-server"
+# Bash Automated Testing System
+brew "bats-core"
+# Enables you to reproduce the CircleCI environment locally
 brew "circleci"
+# Cross-platform make
 brew "cmake"
+# Load/unload environment variables based on $PWD
 brew "direnv"
-brew "elixir", link: false
+# Functional metaprogramming aware language built on Erlang VM
+brew "elixir"
+# Play, record, convert, and stream audio and video
 brew "ffmpeg@6"
+# Command-line fuzzy finder written in Go
 brew "fzf"
-brew "gemini-cli"
+# GitHub command-line tool
 brew "gh"
+# Git extension for versioning large files
 brew "git-lfs"
+# Smarter Dockerfile linter to validate best practices
 brew "hadolint"
+# Tools and libraries to manipulate images in select formats
 brew "imagemagick"
+# Git-compatible distributed version control system
 brew "jj"
+# Lightweight and flexible command-line JSON processor
 brew "jq"
+# Like sed, awk, cut, join & sort for name-indexed data such as CSV
 brew "miller"
+# OpenBSD freely-licensed SSH connectivity tools
 brew "openssh"
+# Swiss-army knife of markup format conversion
+brew "pandoc"
+# Object-relational database system
 brew "postgresql@17"
+# Theme for zsh
 brew "powerlevel10k"
+# RC file (dotfile) management
 brew "rcm"
+# Search tool like grep and The Silver Searcher
+brew "ripgrep"
+# Static analysis and lint tool, for (ba)sh scripts
+brew "shellcheck"
+# Feature-rich console based todo list manager
 brew "task"
+# CLI to print the summary of the terraform plan
+brew "tf-summarize"
+# Code-search similar to ack
 brew "the_silver_searcher"
+# Image processing library
 brew "vips"
+# Internet file retriever
+brew "wget"
+# Cross-platform C++ GUI toolkit
 brew "wxwidgets"
+# JavaScript package manager
 brew "yarn"
+# Feature-rich command-line audio/video downloader
 brew "yt-dlp"
-brew "4ier/tap/notion-cli"
-brew "datadog-labs/pack/pup"
-brew "dorkitude/linctl/linctl"
+# CLI tool to render JSON data as tables
+brew "chrismo/grdy/grdy", trusted: true
+# Terraform
+brew "hashicorp/tap/terraform", trusted: true
+# RWX is the CI platform with the best developer experience, powering the fastest builds
+brew "rwx-cloud/tap/rwx", trusted: true
+# Compact TeX distribution as alternative to the full TeX Live / MacTeX
+cask "basictex"
+# Automated testing of webapps for Google Chrome
 cask "chromedriver"
+# OpenAI's coding agent that runs in your terminal
+cask "codex"
+# App to build and share containerised applications and microservices
 cask "docker-desktop"
+# Per-application volume mixer, equalizer, and audio router
+cask "finetune"
 cask "font-hack-nerd-font"
+# Terminal emulator that uses platform-native UI and GPU acceleration
 cask "ghostty"
+# Rust-based terminal
 cask "warp"
+# Multiplayer code editor
 cask "zed"
 vscode "aaron-bond.better-comments"
 vscode "abumalick.vscode-nvm"
@@ -122,8 +178,8 @@ vscode "yoavbls.pretty-ts-errors"
 vscode "yzhang.markdown-all-in-one"
 vscode "zeshuaro.vscode-python-poetry"
 vscode "zhuangtongfa.material-theme"
-go "github.com/brimdata/super/cmd/super"
 npm "@baz-scm/cli"
+npm "@google/gemini-cli"
 npm "cc-audit"
 npm "corepack"
 npm "mdp"
