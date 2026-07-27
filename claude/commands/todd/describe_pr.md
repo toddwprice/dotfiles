@@ -199,16 +199,16 @@ Use this HTML shell. The CSS is the **deliverable look** — don't deviate witho
   /* Annotation card (full-width, lives between diff blocks) */
   .annot { border-left: 4px solid; background: #fff;
            margin: 0.5rem 0 0.5rem 50px;
-           padding: 0.7rem 1rem;
-           font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           padding: 0.85rem 1.15rem;
+           font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
            border-radius: 0 6px 6px 0; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
   .annot.blocking { background: #fff5f5; border-color: #cf222e; }
   .annot.nonblock { background: #fffbe6; border-color: #d4a72c; }
   .annot.positive { background: #ebfff0; border-color: #1a7f37; }
   .annot.context  { background: #f0f8ff; border-color: #0969da; }
   .annot-header { display: flex; align-items: center; gap: 0.5rem; font-weight: 600;
-                  margin-bottom: 0.35rem; font-size: 0.85rem; }
-  .annot-tag { padding: 1px 7px; border-radius: 3px; font-size: 0.72rem;
+                  margin-bottom: 0.4rem; font-size: 1.02rem; }
+  .annot-tag { padding: 2px 8px; border-radius: 3px; font-size: 0.78rem;
                font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: #fff; }
   .annot.blocking .annot-tag { background: #cf222e; }
   .annot.nonblock .annot-tag { background: #d4a72c; }
@@ -216,8 +216,10 @@ Use this HTML shell. The CSS is the **deliverable look** — don't deviate witho
   .annot.context  .annot-tag { background: #0969da; }
   .annot p { margin: 0 0 0.5rem; }
   .annot p:last-child { margin-bottom: 0; }
-  .annot code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  .annot code { font: 13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
                 background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; }
+  .annot .label { color: #57606a; font-weight: 600; font-size: 0.82rem;
+                  text-transform: uppercase; letter-spacing: 0.04em; margin-right: 0.4rem; }
 
   /* Prompt diff (side-by-side) */
   .prompt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
@@ -267,7 +269,7 @@ Use this HTML shell. The CSS is the **deliverable look** — don't deviate witho
   .qa-body { padding: 0.9rem 1.1rem; }
   .qa-body p { margin: 0 0 0.6rem; }
   .qa-body p:last-child { margin-bottom: 0; }
-  .qa-body .label { color: #57606a; font-weight: 600; font-size: 0.78rem;
+  .qa-body .label { color: #57606a; font-weight: 600; font-size: 0.82rem;
                     text-transform: uppercase; letter-spacing: 0.04em; margin-right: 0.4rem; }
 
   /* Footer */

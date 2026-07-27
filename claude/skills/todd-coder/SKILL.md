@@ -76,12 +76,31 @@ Before starting work, check if running in a git worktree:
      - **Straightforward** (single file, clear scope, low risk): proceed directly. Tell the user you're skipping the plan phase and why.
      - **Complex** (multi-file, ambiguous requirements, high risk): stop and suggest running `/todd:coder plan TICKET_ID` first.
 
-6. **TDD implementation**: **REQUIRED: Use superpowers:test-driven-development**. Follow strict red-green-refactor:
+6. **Implement incrementally with TDD**: **REQUIRED: Use superpowers:test-driven-development** as the inner loop. How much structure wraps it depends on scope (from step 5) — slicing engages only when the work warrants it:
+
+   **Straightforward fast path** (single-file / single-function, low-risk — the same shape as step 5's skip-the-plan case): just do strict red-green-refactor, then one commit. No slice ceremony.
    - Write a failing test first (RED)
    - Write minimal code to pass (GREEN)
    - Refactor while keeping tests green (REFACTOR)
    - Repeat for each piece of functionality
    - Follow all project testing conventions from CLAUDE.md
+
+   **Multi-file / Medium-or-Large scope**: build in thin vertical slices. Each slice leaves the tree working and committed before the next begins:
+   ```
+   For each slice:
+     RED → GREEN → REFACTOR   (TDD inner loop, per above)
+     VERIFY  → run only the dscout checks this slice touched
+     COMMIT  → descriptive message, this slice only
+     → next slice; carry forward, don't restart
+   ```
+   - **Slice by**: a vertical path through the stack (preferred); contract-first when backend and frontend move in parallel (define types/API first, then build each side against it); risk-first when one piece is uncertain (prove it before building on it).
+   - **Rules**: simplest thing that works first — no abstraction before its third use; touch only what the task needs (note out-of-scope issues, don't fix them); one logical change per increment; keep the tree green between slices; keep incomplete work behind a feature flag with safe (off) defaults; keep each increment independently revertable.
+   - **Verify per slice** with the dscout checks for the app you touched, and only those — after a green run, don't re-run an unchanged check:
+     - axon: `mix format --check-formatted && mix compile --warnings-as-errors && mix test`
+     - dendra: `yarn lint && yarn test`
+     - astro: `uv run ruff check . && uv run pytest`
+   - **Red flags** — stop and slice smaller: more than ~100 lines before a test, unrelated changes mixed into one slice, "let me just quickly add this too," a broken build between slices.
+   - **Definition of done** (final gate, after the last slice): the full per-app Pre-Push Checklist in CLAUDE.md passes, the feature works end-to-end, and no uncommitted changes remain.
 
 7. **Summarize work**: After implementation is complete, compile:
    - **What was done**: Files created/modified, features implemented
@@ -93,7 +112,10 @@ Before starting work, check if running in a git worktree:
 
 9. **Report to user**: Show the summary and test plan. **In `--orchestrated` mode, skip the chatty report** — the orchestrator reads the structured status block instead (see "Structured Return").
 
-10. **In worktree only**: Commit changes if implementation succeeded. Interactive mode: offer first. `--orchestrated`: commit automatically (the orchestrator squashes/rebases and pushes later), then put the commit SHA in the structured return. Never push — that's the orchestrator's job.
+10. **Commits (worktree only; never push — that's the orchestrator's job)**:
+    - **Incremental path**: each verified slice is committed inside step 6, in both interactive and `--orchestrated` mode — no "offer to commit" prompt. The orchestrator squashes/rebases and pushes later.
+    - **Straightforward fast path**: one commit after the implementation succeeds.
+    - Put the branch-tip SHA in the structured return's `COMMIT` field.
 
 ## Orchestrated Mode (`--orchestrated`)
 
@@ -101,7 +123,7 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 
 - **Never block on a question.** Every interactive prompt gets a safe default (see the impl steps). If you genuinely can't proceed, stop with a `fatal` status rather than waiting on input that will never come.
 - **Still post to Linear.** The plan and summary comments are the durable record the orchestrator (and Todd) rely on — keep posting them exactly as in normal mode. This is why the orchestrator dispatches *this skill* rather than running raw TDD: the Linear paper trail comes for free.
-- **Commit automatically** on success; never push.
+- **Commit automatically** — per slice on the incremental path, once on the fast path (see step 10); never push.
 - **End with the structured status block** (below) as your final message — that's what the orchestrator parses.
 
 ## Comment Format Templates
@@ -169,7 +191,7 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 **When running in a worktree:**
 - Detect and report the worktree path and branch
 - Check for uncommitted changes before starting
-- Offer to commit changes after successful implementation (in impl mode)
+- Commit each verified slice during impl (incremental path) or once at the end (fast path) — no "offer to commit" prompt
 - Never push to origin — leave that to the orchestrator (`/todd:phase`)
 - Use `git status` to report changes when done
 
@@ -187,7 +209,7 @@ This skill runs in-context, not as a subprocess, so there's no real exit code �
 ```
 STATUS: success | recoverable | fatal | plan-required
 TICKET: {TICKET_ID}
-COMMIT: {sha, or "none"}
+COMMIT: {branch-tip sha, or "none"}
 FILES: {count} changed
 TESTS: {e.g. "42 passed" or "3 failed: <names>"}
 BLOCKERS: {one line, or "none"}

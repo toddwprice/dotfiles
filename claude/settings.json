@@ -12,36 +12,37 @@
   },
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "feature-dev@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false,
+    "code-review@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": false,
+    "code-simplifier@claude-plugins-official": false,
     "superpowers@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": false,
     "pyright-lsp@claude-plugins-official": true,
-    "figma@claude-plugins-official": true,
+    "figma@claude-plugins-official": false,
     "explanatory-output-style@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
-    "playground@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": false,
+    "playground@claude-plugins-official": false,
+    "plugin-dev@claude-plugins-official": false,
     "context7@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "linear@claude-plugins-official": true,
+    "linear@claude-plugins-official": false,
     "slack@claude-plugins-official": true,
-    "org-pulse@dscout-claude-plugins": true,
+    "org-pulse@dscout-claude-plugins": false,
     "astro@dscout-claude-plugins": true,
     "dscout-data-mcp@dscout-claude-plugins": true,
-    "imessage@claude-plugins-official": true,
+    "imessage@claude-plugins-official": false,
     "pydantic-ai@claude-plugins-official": true,
     "axon@dscout-claude-plugins": true,
     "dev-flow@dscout-claude-plugins": true,
     "bug-intel@dscout-claude-plugins": true,
     "dscout-quality@dscout-claude-plugins": true,
     "warp@claude-code-warp": true,
-    "understand-anything@understand-anything": true
+    "understand-anything@understand-anything": true,
+    "agent-skills@addy-agent-skills": true
   },
   "extraKnownMarketplaces": {
     "claude-code-warp": {
@@ -54,6 +55,12 @@
       "source": {
         "source": "github",
         "repo": "Egonex-AI/Understand-Anything"
+      }
+    },
+    "addy-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "addyosmani/agent-skills"
       }
     }
   },
