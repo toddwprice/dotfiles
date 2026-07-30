@@ -5,6 +5,9 @@ sync my dotfiles. They sit on top of any repo's own `CLAUDE.md`.
 
 ## How to talk to me
 
+### Style
+Use /speak-as-todd in your prompt replies, questions, summaries, and plans. Any text you write, use my voice.
+
 ### Banned phrases
 
 Do not use these words or phrases. Say the concrete thing instead.

@@ -757,7 +757,11 @@ Add this CSS to the page `<style>` block (after the existing `.footer` rule):
                          margin-top: 0.65rem; }
 .submit-panel.approve  { border-left: 4px solid #1a7f37; }
 .submit-panel.changes  { border-left: 4px solid #cf222e; }
-.submit-panel.clarification { border-left: 4px solid #bf8700; }
+.submit-panel.clarification { border-left: 4px solid #bf8700; }\
+.narrative, .annot { font-size: 1.5rem; line-height: 2.0rem; margin-bottom: 2.5rem; }
+.narrative p, .annot p { margin-bottom: 2.5rem; }
+.annot, .narrative { font-size: 1.5rem; }
+.annot.blocking, .annot.nonblock, .annot.context { background: none; }
 ```
 
 Render the panel itself (substitute the verdict class + values):
