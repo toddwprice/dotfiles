@@ -47,7 +47,8 @@ PR #26728): open with the observation or question; no bold title/`Bug:`/`Nit:` p
 - **Non-blocking status**, when stated, is a trailing plain caveat — `NON-BLOCKING.` on its own line
   with a soft close — not a bolded prefix tag.
 
-Use `speak-as-todd` for any wording generated.
+Use `_shared/voice-brief.md` for any wording generated — the review-scoped voice reference,
+not the full `speak-as-todd` Slack guide.
 
 ## Posting
 
@@ -59,5 +60,23 @@ gh api repos/{owner}/{repo}/pulls/<N>/reviews --input /path/to/review.json
 gh api repos/{owner}/{repo}/pulls/<N>/comments -f body="<reply>" -F in_reply_to=<root_comment_id>
 ```
 
-Posting a review is outbound and public — **show the full payload and wait for Todd's confirmation**
-first. Post replies individually; if one fails, report it and continue.
+### Who is allowed to post without asking
+
+Posting a review is outbound and public, so the default across these skills is: **show the full
+payload and wait for Todd's confirmation** first. Post replies individually; if one fails, report it
+and continue.
+
+**One standing exception: `todd:pr_review` in its default (Post) mode.** Todd asked for that command
+to publish the review itself rather than hand him a command to copy — so it runs the `POST` without
+confirming, under the preflight gates in its Step 7c. That exception is scoped to that command's
+default mode and nothing else: `todd:pr_review --html`, `todd:sync-review`, and
+`todd:address-comments` all still show the payload and wait.
+
+### Event constraints GitHub enforces (all consumers)
+
+- **You cannot `APPROVE` or `REQUEST_CHANGES` your own PR** — GitHub returns `422`. When the PR
+  author is the authenticated user (`gh api user -q .login`), the only valid event is `COMMENT`.
+- **A merged or closed PR** should only ever get `COMMENT`. A blocking verdict on merged code is
+  noise; an approval is inaccurate.
+- The payload posts atomically — one bad inline anchor rejects the whole request, so you never land
+  a half-posted review. Demote rejected anchors into the `body` rather than dropping the findings.

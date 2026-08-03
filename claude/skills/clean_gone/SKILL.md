@@ -28,31 +28,59 @@ You need to execute the following bash commands to clean up stale local branches
    git worktree list
    ```
 
-3. **Finally, remove worktrees and delete [gone] branches (handles both regular and worktree branches)**
-   Execute this command:
+3. **Then clean up one branch at a time — never in a loop.**
+
+   ⚠️ **Do not write a `while read` loop here.** The permission classifier denies blind
+   delete loops and denies `git worktree remove --force` outright. A loop that works when
+   you paste it by hand will be refused in auto mode, and the skill stalls halfway through.
+   Verified 2026-07-31. Budget ~12 Bash calls for a 5-branch cleanup — that's the cost of
+   this working at all.
+
+   For **each** branch from step 1, in this order:
+
+   **a. Confirm the PR actually merged.** Ancestry checks are useless here: dscout
+   squash-merges, so the branch's commits never appear in `main` by SHA, and the `.bare`
+   store is shallow which breaks reachability independently. `git branch --merged` will
+   under-report and tempt you to keep a branch that's long dead. Ask GitHub instead:
    ```bash
-   # Process all [gone] branches (git fetch --prune already run in step 1), removing '+'/'*' prefix if present
-   git branch -vv | grep ': gone]' | sed 's/^[+* ]*//' | awk '{print $1}' | while read branch; do
-     echo "Processing branch: $branch"
-     # Find and remove worktree if it exists
-     worktree=$(git worktree list | grep "\\[$branch\\]" | awk '{print $1}')
-     if [ ! -z "$worktree" ] && [ "$worktree" != "$(git rev-parse --show-toplevel)" ]; then
-       echo "  Removing worktree: $worktree"
-       git worktree remove --force "$worktree"
-     fi
-     # Delete the branch
-     echo "  Deleting branch: $branch"
-     git branch -D "$branch"
-   done
+   gh pr list --head <branch> --state all --json number,state,mergedAt
    ```
+   Merged → safe to remove. Open → leave it alone. No PR at all → stop and ask Todd.
+
+   **b. Check the worktree for real work before touching it.**
+   ```bash
+   git -C <worktree-path> status --porcelain
+   ```
+   Any output means uncommitted or untracked files. Show them to Todd and stop — do not
+   discard someone's work to finish a cleanup.
+
+   **c. Clear the tree, then remove the worktree without `--force`.** If `status` showed
+   only junk Todd agrees to drop, delete those specific paths (`rm <path>` /
+   `git -C <worktree-path> restore <file>`) rather than reaching for `--force`. Explicit
+   per-file discards are both allowed by the classifier and safer, because each one is
+   visible. Then, **from outside the target worktree** (cd to `main` first — `git worktree
+   remove` refuses to run from inside the tree it's removing):
+   ```bash
+   git worktree remove <worktree-path>
+   ```
+
+   **d. Delete the branch — one branch per Bash call.**
+   ```bash
+   git branch -D <branch>
+   ```
+
+   If a call comes back with `temporarily unavailable` or a "Stage 2 classifier error",
+   that's a transient flake, not a denial. Retry the identical command and it goes through.
 
 ## Expected Behavior
 
 After executing these commands, you will:
 
 - See a list of all local branches with their status
-- Identify and remove any worktrees associated with [gone] branches
-- Delete all branches marked as [gone]
-- Provide feedback on which worktrees and branches were removed
+- Confirm via `gh` that each branch's PR actually merged before removing anything
+- Remove the associated worktrees (non-force, from outside each tree)
+- Delete the merged, gone branches one at a time
+- Report which worktrees and branches were removed, and name anything you skipped and why
 
-If no branches are marked as [gone], report that no cleanup was needed.
+If no branches are marked as `[gone]`, report that no cleanup was needed — after confirming
+step 1's `git fetch --prune` actually ran, since without it the list is empty by construction.

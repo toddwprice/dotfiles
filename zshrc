@@ -22,6 +22,7 @@ export PATH="/usr/local/sbin:$PATH"
 export PATH="/usr/sbin:$PATH"
 export PATH="/opt/homebrew/bin:$PATH"
 export PATH="$HOME/.asdf/shims:$PATH"
+export PATH="$HOME/.claude/scripts:$PATH"
 
 # omz
 export ZSH="$HOME/.oh-my-zsh"

@@ -1,6 +1,7 @@
 ---
 name: doc-convert
 description: Use when converting documents between formats on macOS — HTML to PDF or PNG, Markdown to PDF, combining/merging PDFs, extracting or parsing text/fields from a PDF, or rendering/verifying Mermaid diagrams in an HTML file. Triggers on "print this html to pdf", "render to pdf and open it", "convert X.html to png at 2x", "markdown to pdf (prefer pandoc)", "combine these pdfs", "extract the text from this pdf so I can grep it", "parse the effective date from this contract pdf", "did the mermaid diagrams render".
+disable-model-invocation: true
 ---
 
 # doc-convert

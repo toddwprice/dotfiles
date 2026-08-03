@@ -1,6 +1,6 @@
 ---
 allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr checkout:*), Bash(gh api:*), Bash(git:*), Bash(mkdir:*), Bash(open:*), Bash(date:*), Write, Read, Agent
-description: Autonomously review a PR using dscout team conventions — analyzes findings, self-answers each open question via parallel sub-agent research in Todd's voice (clear, terse, kind), renders a VERDICT, and emits two artifacts: a JSON review payload (with inline file:line comments, posted via `gh api .../reviews`) and an HTML visualization (composed via `/todd:describe_pr`) with verdict banner, key-numbers row, narrative summary, full diff, severity-coded annotation cards beneath each file, a self-answered Q&A section, and an embedded submit panel showing the exact `gh api` command to post the review. Forked from review_pr_steven; trained on 500 real dscout reviews.
+description: Autonomously review a PR using dscout team conventions — analyzes findings, self-answers each open question via parallel sub-agent research in Todd's voice (clear, terse, kind), renders a VERDICT, builds a JSON review payload with inline file:line comments, and **posts it to GitHub itself** via `gh api .../reviews`. That is the default: no HTML, no copy-paste step, review published. Pass `--html` when you want to eyeball it first — that renders the full HTML visualization (verdict banner, key-numbers row, narrative, full diff, severity-coded annotation cards, self-answered Q&A, embedded submit command) and posts **nothing**. Pass `--json-only` for the machine path — payload only, no HTML, no post (used by `/todd:loop`). Forked from review_pr_steven; trained on 500 real dscout reviews.
 ---
 
 You are performing a code review on a PR in the dscout monorepo. Your review should reflect the values and conventions of this team, derived from hundreds of real code reviews. Your evaluation spans five axes — correctness, readability & simplicity, architecture, security, and performance — folding the generic `code-review-and-quality` five-axis framework into dscout's own conventions and Todd's review voice. Where the generic framework and this command's voice conflict (most sharply on severity-prefix labeling), this command wins; the reconciliation is recorded where it bites (Step 7).
@@ -11,8 +11,35 @@ You are performing a code review on a PR in the dscout monorepo. Your review sho
 2. Distill findings into an internal list of questions where author intent or codebase context matters.
 3. For each question, **dispatch a sub-agent (in parallel)** to research the codebase and return an opinion + rationale **in Todd's voice: clear, terse, kind.**
 4. Aggregate the sub-agent answers and render a final **VERDICT** (Approve / Request Changes / Request Clarification).
+5. Build the JSON review payload and — in the default mode — **post it to GitHub yourself** (Step 7c). Autonomous means autonomous: don't render a command for Todd to run, don't ask permission, run it.
 
-The user sees: a PR summary, the self-answered questions with rationales, then the VERDICT. They never get prompted.
+The user sees: a PR summary, the self-answered questions with rationales, the VERDICT, and the URL of the posted review. They never get prompted.
+
+## Arguments
+
+`$ARGUMENTS` is a PR number plus optional flags, in either order (`27615 --html` and `--html 27615` are both valid — callers that prefix a command string produce the latter). Strip the flags before using the number — the `#$ARGUMENTS` in this file's last line means the PR number, not the raw argument string.
+
+- **`<N>`** — the PR to review. Required.
+- **`--html`** — render the HTML visualization and post nothing.
+- **`--json-only`** — payload only: no HTML, no post, terse machine-readable output.
+
+### Output mode (resolve this once, before Step 7)
+
+Three modes. Each row is the complete list of what that run produces — nothing else.
+
+| Mode | Trigger | JSON payload (7a) | HTML (7b) | Posts to GitHub (7c) |
+|------|---------|-------------------|-----------|----------------------|
+| **Post** (default) | no `--html`, no `--json-only` | yes | **no** | **yes — you run `gh api`** |
+| **HTML** | `--html` present, or Todd asks for HTML in prose | yes | yes | no |
+| **JSON** | `--json-only` present | yes | no | no |
+
+- **`--json-only` wins** if both flags somehow appear. It's the machine contract; a program is parsing the output.
+- **"Todd asks for HTML in prose"** means the invocation text asks for an HTML page, a report, a visualization, an artifact to read, or to see it before it goes out — e.g. "review 27615 and give me the HTML", "let me look it over first", "render the report for 27615". Treat that exactly like `--html`: render, post nothing.
+- Everything upstream of Step 7 is identical in all three modes: same analysis, same parallel question answering, same verdict. The mode only decides what happens to the finished review.
+
+**Post mode is the default because the copy-the-command-out-of-the-HTML step was pure friction.** The HTML render is also the most expensive step in this command (a big PR can take ~25 minutes on its own), so a run nobody is going to open shouldn't pay for it.
+
+**The two batch surfaces stay in HTML mode on purpose.** `/todd:open-prs` and the `pr-review-queue` script both fan out reviews across *other people's* PRs, so they pass `--html` explicitly and Todd decides per PR what to submit. If you're editing either one, don't "simplify" the flag away.
 
 ## Model & Performance Strategy
 
@@ -21,7 +48,7 @@ This command splits work across models by reasoning load — keep the judgment o
 - **Orchestrator (this agent): Opus.** Step 3 analysis (finding real bugs and cross-service contract mismatches) and the final verdict are the highest-value reasoning here — never downgrade them. Run the command in **`/fast`** when you want it quicker: fast mode keeps full Opus reasoning but emits faster, so you lose no review quality.
 - **Sonnet 5 sub-agents** for the mechanical / lower-judgment work: the HTML render (Step 7b) and the non-blocking-tier question answers (Step 5). See those steps for exact routing.
 - **Opus sub-agents** stay on blocking-tier question answers (suspected bug / security / cross-service contract) — those verdicts gate Approve vs Request Changes.
-- **`speak-as-todd`** is still loaded once per Step 5 sub-agent (voice fidelity beats the token savings of consolidating it) — and it's cheaper now that the lower-severity answerers run on Sonnet.
+- **`_shared/voice-brief.md`** is read once per Step 5 sub-agent — ~830 tokens, not the ~4,900 of the full `speak-as-todd` skill. That skill is the Slack/standup guide and its own description routes PR-review content here instead; loading it per sub-agent was costing ~1.8M tokens per three weeks of review volume for material (emoji palette, standup shape, DM register) that never reaches a review answer. The brief carries what actually governs the output: the four rules, the praise/plain-vocabulary register, and the AI-tic anti-patterns. Voice fidelity on a two-paragraph answer comes from those, not from the Slack examples.
 
 ## Reviewer Persona
 
@@ -51,7 +78,7 @@ Sub-agents answering questions on Todd's behalf must write **as Todd**. The voic
   - **Answer** — plain language, written for a human skimming quickly. Short declarative sentences. No inline file:line citations, no parenthetical evidence dumps, no stacked qualifiers. If the finding has multiple parts (what's blocked / what isn't / why it matters / what to decide), give each part its own short sentence rather than cramming them into one compound sentence.
   - **How I checked** — the evidence layer, written for someone (or something) verifying the claim afterward. This is where file:line citations, mechanism tracing, docstring quotes, and cross-references pile up densely — that's fine here, because a reader who only wanted the finding already got it from the Answer and can stop reading.
   - Never invert this: an Answer thick with citations is unreadable, and a "How I checked" section that just restates the plain-language finding wastes the reader's time re-deriving the mechanism.
-  - **Ground truth (PR #26728):** Todd took exactly this shape and, when he actually posted to GitHub, kept the Answer verbatim and **deleted the entire "How I checked" layer** — no bold header, no citation dump, often reframed as a direct question ("Should we also block X, Y, Z?" instead of "Real gap, worth a beat before merge."). Treat "How I checked" as fuel for the internal HTML review artifact and Todd's own pre-submission verification, not as content that automatically goes to GitHub. The JSON payload posted to the PR (Step 7a) defaults to **Answer only** — see "Inline comment body structure" in Step 7a for the exact rule and real examples.
+  - **Ground truth (PR #26728):** Todd took exactly this shape and, when he actually posted to GitHub, kept the Answer verbatim and **deleted the entire "How I checked" layer** — no bold header, no citation dump, often reframed as a direct question ("Should we also block X, Y, Z?" instead of "Real gap, worth a beat before merge."). Treat "How I checked" as fuel for the Phase 2 chat output (and the HTML artifact when one is rendered) plus your own pre-post verification — never as content that goes to GitHub. The JSON payload posted to the PR (Step 7a) defaults to **Answer only** — see "Inline comment body structure" in Step 7a for the exact rule and real examples.
 
 ## Review Workflow
 
@@ -60,9 +87,16 @@ Sub-agents answering questions on Todd's behalf must write **as Todd**. The voic
 Fetch the PR metadata, diff, and existing review comments:
 
 ```
-gh pr view $ARGUMENTS --json title,body,author,baseRefName,headRefName,files,labels,additions,deletions
+gh pr view $ARGUMENTS --json title,body,author,baseRefName,headRefName,files,labels,additions,deletions,state,mergedAt,isDraft
 gh pr diff $ARGUMENTS
 ```
+
+`state`, `mergedAt`, and `author` are not decoration — in Post mode they decide what you're allowed to send:
+
+- **`state != "OPEN"`** — the PR is already merged or closed. Say so in the first line of your output and force `event: "COMMENT"`. A `REQUEST_CHANGES` on merged code is noise, and an `APPROVE` is a lie. The run becomes a post-merge note.
+- **`author.login` is the authenticated user** (`gh api user -q .login`) — this is Todd's own PR. Force `event: "COMMENT"`; GitHub 422s any attempt to approve or request changes on your own PR.
+
+Both checks are re-stated as preflight gates in Step 7c, because that's where they bite.
 
 Also fetch all existing review comments to identify active discussion threads:
 
@@ -129,7 +163,7 @@ For each question from Step 4, dispatch a sub-agent. **Send all sub-agent calls 
   ```
   You are answering a single open question from Todd's PR review of dscout PR #<N>. Todd is a senior dscout engineer; you are answering ON HIS BEHALF.
 
-  **Before drafting your Answer/How I checked, invoke the `speak-as-todd` skill via the Skill tool.** That skill is the source of truth for Todd's voice — read it and internalize it before you write a word. The voice rules below are a reminder, not a substitute.
+  **Before drafting your Answer/How I checked, read `~/.claude/skills/_shared/voice-brief.md`.** That is the review-scoped source of truth for Todd's voice — read it and internalize it before you write a word. The voice rules below are a reminder, not a substitute. Do **not** load the full `speak-as-todd` skill: it's the Slack/standup guide (standup formats, emoji palette, DM register), none of which applies to a review answer, and it costs ~6x the tokens.
 
   PR summary: <one paragraph>
 
@@ -481,7 +515,15 @@ _Review generated with `/todd:pr_review` — a Claude Code command forked from `
 
 ## Step 7 — Emit artifacts
 
-Produce **two** artifacts from this review: a JSON review payload (for posting to GitHub with inline file:line comments) and an HTML visualization (for Todd to review locally before posting). The HTML embeds the `gh api` submit command at the bottom — so the workflow is: open HTML → review → copy the embedded command → run when ready.
+Every mode builds the JSON review payload (7a) — it's the review itself, and it doubles as the local record `/todd:address-comments` can read back. What happens next is the only thing the mode changes:
+
+| Mode | Run these sub-steps |
+|------|---------------------|
+| **Post** (default) | 7a → **7c (post it)** → 7d. Skip 7b. |
+| **HTML** (`--html`) | 7a → **7b (render)** → 7d. Skip 7c — post nothing. |
+| **JSON** (`--json-only`) | 7a → 7d (`--json-only` variant). Skip 7b and 7c. |
+
+Don't render the HTML "just in case" outside HTML mode. That render is the single most expensive step in this command, and in the other two modes nobody opens it.
 
 ### 7a. JSON review payload (for GitHub, with inline comments)
 
@@ -543,7 +585,7 @@ When a single finding has both a specific anchor *and* PR-wide relevance, inline
 
 #### Line anchoring rules (critical — wrong anchors fail the whole API call)
 
-- **Use head-commit line numbers** — i.e. the `+` side of the diff. Verify by `gh pr view <N> --json headRefOid -q .headRefOid` then `gh api repos/{owner}/{repo}/contents/{path}?ref={sha}` if needed, or simply re-grep the file in a fresh PR checkout (`gh pr checkout <N> --detach` in the repo, then `grep -n` for the anchor pattern).
+- **Use head-commit line numbers** — i.e. the `+` side of the diff. Anchors get machine-validated in Step 7c ("Anchor pre-validation") against `.../pulls/<N>/files`, which is authoritative; these rules are what you follow while *writing* them so that validation passes clean. To sanity-check one by hand: `gh pr view <N> --json headRefOid -q .headRefOid` then `gh api repos/{owner}/{repo}/contents/{path}?ref={sha}`, or re-grep in a fresh checkout (`gh pr checkout <N> --detach`, then `grep -n`).
 - **The line must be in the PR's diff** — added, modified, or within a 3-line context window of a hunk. Lines unchanged and outside any hunk's context will be rejected.
 - **`side: "RIGHT"`** for added/modified lines (default). Only use `"LEFT"` to comment on a removed line by its old-file line number, and only if the removed line is still surfaceable on the diff.
 - **Multi-line concerns** — pick a single representative line (the API supports `start_line` + `line` for ranges, but single-line + a body that references the range is simpler and equally readable).
@@ -572,11 +614,11 @@ Ground truth, not theory: on PR #26728, one of this command's own findings went 
 Take-aways for every `comments[].body` this command generates:
 
 - **No bold title/header before the comment.** Open directly with the observation or question. No `**Short topic**` lead-in, no `Bug:` / `Nit:` / `Question:` prefix tag.
-- **Default to Answer-only — drop "How I checked" from the posted body.** The evidence layer (file:line citations, mechanism tracing) belongs in the HTML review artifact (Step 7b) for Todd's own verification before he decides what to post, not in the comment the PR author reads. Cite a symbol or file name inline only when it's load-bearing for the point itself (naming the three tools, proposing `{{context_start}}`) — never as a "here's my proof" appendix.
+- **Default to Answer-only — drop "How I checked" from the posted body.** The evidence layer (file:line citations, mechanism tracing) belongs in the Phase 2 chat output — and in the HTML artifact when Step 7b runs — where it serves verification. It does not belong in the comment the PR author reads. This holds in every mode: Post mode has no HTML to hide the evidence in, and that is not license to append it to the posted comment. Cite a symbol or file name inline only when it's load-bearing for the point itself (naming the three tools, proposing `{{context_start}}`) — never as a "here's my proof" appendix.
 - **When intent is genuinely ambiguous, phrase it as a literal question** — "Should we also block X?", "Why not just...", "I don't understand the purpose of..." — rather than a declarative verdict ("Real gap, worth a beat before merge").
 - **Non-blocking status, when stated at all, goes at the end as a short plain caveat** — `NON-BLOCKING.` on its own line, followed by a soft close ("Just wanted to surface for feedback... keep this as is for now" / "maybe we create a ticket"). It's a trailing aside, not a bolded prefix tag before the finding.
 - **Propose a concrete alternative inline when you have one** ("a single variable in the template called `{{context_start}}`") — don't just name the gap.
-- **Keep it short.** None of Todd's real comments on this PR exceed ~120 words. If a draft runs longer, it's probably smuggling evidence that belongs in the HTML artifact instead.
+- **Keep it short.** None of Todd's real comments on this PR exceed ~120 words. If a draft runs longer, it's probably smuggling in evidence that belongs in the "How I checked" layer instead.
 
 This applies to every inline comment this command generates — Phase 2 self-answered questions, Phase 3 non-blocking notes, and context annotations alike.
 
@@ -608,7 +650,9 @@ This applies to every inline comment this command generates — Phase 2 self-ans
 _<signature line from end of Phase 3>_
 ```
 
-### 7b. HTML visualization (for local review)
+### 7b. HTML visualization (HTML mode only)
+
+> **HTML mode only** — `--html`, or Todd asked for HTML in prose. Post mode skips this and goes to 7c; `--json-only` skips it and goes to 7d. In HTML mode this artifact *is* the deliverable: Todd reads it and submits from the embedded command himself, so nothing gets posted by this run.
 
 Compose with `/todd:describe_pr` to render an HTML page that pins every finding to the diff line it concerns. The HTML also **embeds the `gh api` submit command at the bottom**, so Todd can review the file end-to-end and copy the command out when satisfied. (`describe_pr` builds on the shared base shell at `~/.claude/skills/_shared/report-shell.html` — the single source of truth for the common typography/palette — so this artifact stays visually consistent with the rest without restating the shell.)
 
@@ -730,9 +774,9 @@ Render a 3–5 card stat row surfacing the most important numbers *for this PR s
 
 Use the Phase 1 PR Summary as raw material but rewrite tighter in Todd's voice. 1–3 paragraphs. Preserve domain terms verbatim — methodology names, function names, file paths.
 
-#### Embedded submit panel (always — this is the new bottom-of-HTML section)
+#### Embedded submit panel (always present in HTML mode — bottom of the page)
 
-Insert this block **immediately before** `<div class="footer">` at the end of the HTML body. It surfaces the exact command Todd needs to post the review, alongside a compact accounting of what'll be sent.
+Insert this block **immediately before** `<div class="footer">` at the end of the HTML body. It surfaces the exact command Todd needs to post the review, alongside a compact accounting of what'll be sent. In HTML mode this panel is the *only* way the review reaches GitHub — the run itself posts nothing — so never omit it and never leave its counts approximate.
 
 Add this CSS to the page `<style>` block (after the existing `.footer` rule):
 
@@ -794,15 +838,147 @@ $HOME/Downloads/pr-<N>-review-<slug>-YYYY-MM-DD-HHMM.html
 
 `<slug>` is a kebab-case of the PR title (≤40 chars). Use the literal expansion of `$HOME` (e.g. `/Users/toddprice/Downloads/...`) — don't pass `$HOME` to `Write`. The HTML lives next to the JSON payload in `~/Downloads/` so both review artifacts are in one place. After writing, `open <path>`.
 
-### 7c. Final response
+### 7c. Post the review (Post mode only)
+
+> **Post mode only** — the default. HTML mode and `--json-only` never reach this step.
+
+This is the step that replaced "copy the command out of the HTML." You run it. Don't print the command and stop, don't ask "want me to post this?", don't hedge with "the payload is ready when you are." Todd asked for the review to land on the PR; a run that ends with an unposted payload has not done its job.
+
+#### Preflight (three checks, each with a defined action)
+
+Run these before posting. None of them is a reason to stop and ask — each one has an answer already.
+
+```bash
+ME=$(gh api user -q .login)
+HEAD_SHA=$(gh pr view <N> --json headRefOid -q .headRefOid)
+# Already-posted guard: did I review this exact commit before?
+gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews \
+  --jq "[.[] | select(.user.login == \"$ME\" and .commit_id == \"$HEAD_SHA\")] | length"
+```
+
+| Check | Condition | Action |
+|-------|-----------|--------|
+| **PR state** (from Step 1) | `state != "OPEN"` | Force `event: "COMMENT"`, post it as a post-merge note, and lead your final response with the fact that the PR is already closed/merged. |
+| **Self-authored** | PR `author.login` == `$ME` | Force `event: "COMMENT"`. GitHub 422s `APPROVE`/`REQUEST_CHANGES` on your own PR. Keep the body and every inline comment exactly as written — only the event changes. |
+| **Duplicate** | the count above is `> 0` | **Don't post.** You already reviewed this commit. Report the existing review's URL and the fresh JSON path, and stop. Re-posting spams the author with a second identical review. |
+
+When a check forces `event` down to `COMMENT`, rewrite the `event` field in the payload file before posting so the artifact matches what was actually sent — and say which check forced it.
+
+**Also re-verify every blocking finding against `origin/main` before you post.** The expensive steps in this command run long enough for an actively-worked PR to move underneath them, and a squash merge hides the fix. `git show origin/main:<path>` and grep for it. A finding that's already fixed doesn't get deleted silently — reframe it as "you got there first" plus any residual difference worth knowing, and drop it from the blocking set (which may soften the verdict and the `event`).
+
+#### Anchor pre-validation — do this before posting, not after the 422
+
+The whole payload posts atomically, so **one** bad anchor rejects the entire review with a `422`
+that doesn't say which line. Don't discover that by posting. The usual cause isn't a bad parser —
+it's that the PR moved: this command runs long enough for a push to shift every line number in the
+touched files.
+
+**a. Did the PR move under you?**
+```bash
+gh pr view <N> --json headRefOid -q .headRefOid   # compare to the SHA you reviewed
+```
+If it moved, read the new commits before re-anchoring — a finding may already be fixed, or the code
+may have relocated somewhere better. Also re-pull `.../pulls/<N>/comments`; reviewers who were
+`pending` when you started may have posted since.
+
+**b. Rebuild the commentable line set from the authoritative source.** Not from the `gh pr diff`
+you fetched in Step 1 — that's a snapshot, and it's exactly what goes stale. Only the `+` and
+context lines inside a hunk are commentable on the RIGHT side; `-` lines don't advance the new-side
+counter.
+
+```bash
+gh api repos/<OWNER>/<REPO>/pulls/<N>/files --paginate > /tmp/pr-<N>-files.json
+
+jq -r '.[] | select(.patch) | .filename as $f
+  | .patch | split("\n")
+  | reduce .[] as $l ({n:0, out:[]};
+      if   ($l|startswith("@@")) then .n = ($l | capture("\\+(?<c>[0-9]+)") | .c | tonumber)
+      elif ($l|startswith("+"))  then .out += ["\($f):\(.n)"] | .n += 1
+      elif ($l|startswith("-"))  then .
+      elif ($l|startswith("\\")) then .
+      else                            .out += ["\($f):\(.n)"] | .n += 1 end)
+  | .out[]' /tmp/pr-<N>-files.json | sort -u > /tmp/pr-<N>-anchors.txt
+```
+
+The `\\`-prefixed skip matters — `\ No newline at end of file` is not a context line and must not
+advance the counter.
+
+**c. Check every anchor in the payload against that set.**
+```bash
+jq -r '.comments[] | "\(.path):\(.line)"' "$HOME/Downloads/pr-<N>-review.json" \
+  | sort -u | comm -23 - /tmp/pr-<N>-anchors.txt
+```
+Any output is an anchor GitHub will reject. **Demote exactly those into the top-level `body`** as
+`path/file.ext:L##` references, keeping their wording, and rewrite the payload file before posting.
+Never drop a finding to make the POST succeed.
+
+Empty output means every anchor resolves and you can post.
+
+#### Post it
+
+```bash
+gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews \
+  --method POST \
+  --input "$HOME/Downloads/pr-<N>-review.json" \
+  --jq '.html_url'
+```
+
+`<OWNER>/<REPO>` comes from `gh pr view <N> --json url -q .url` (parse the URL) — don't hardcode `dscout/dscout`, forks exist. Capture the returned `html_url`; it's what you report in 7d.
+
+The whole payload posts atomically: body, event, and every inline comment as one review event. If one anchor is invalid, GitHub rejects the entire request, so a half-posted review isn't a state you can land in.
+
+#### When the post fails
+
+With pre-validation done, a rejected anchor (`422`, `"line must be part of the diff"` /
+`"Line could not be resolved"`) should no longer happen — if it does, the PR moved *between* your
+validation and your POST. Bounded recovery, **one attempt**:
+
+1. Re-run the pre-validation above against a fresh `.../pulls/<N>/files` pull. That names the bad
+   anchors directly; don't try to infer them from the error text, which doesn't say which line.
+2. Demote exactly those into the top-level `body` as `path/file.ext:L##` references, keeping their wording.
+3. Re-post once.
+
+If the retry also fails, stop. Report the error verbatim, the JSON path, and the fact that nothing was posted. Do not strip comments one at a time until something sticks — silently shedding findings to force a green POST is worse than a failed run Todd can see.
+
+Any other failure (auth, 404, network) — report it and stop. Don't fall back to a body-only review; that quietly discards every inline finding.
+
+### 7d. Final response
+
+#### Post mode (default)
+
+Lead with what landed. In order:
+
+1. **VERDICT** — Approve / Request Changes / Request Clarification, stated plainly.
+2. **Posted review URL** — the `html_url` from 7c.
+3. **What was sent** — one line: `<count> inline comments · <count> PR-wide notes`.
+4. **JSON payload path** — `$HOME/Downloads/pr-<N>-review.json`, as the local record.
+
+Then a short findings summary (top 3–5, one line each). If any preflight check forced `event: "COMMENT"`, or a finding turned out already-fixed, or anchors were demoted on retry — say so here. Don't bury a downgraded event in a paragraph; Todd needs to know the review posted as a comment rather than an approval.
+
+If the verdict is **Request Changes** or **Request Clarification**, make that unmistakable so the run isn't mistaken for an approval.
+
+#### HTML mode (`--html`)
 
 End the chat response with two things, in this order:
 
 1. **HTML visualization** — `$HOME/Downloads/pr-<N>-review-<slug>-...html` (already opened)
 2. **JSON review payload** — `$HOME/Downloads/pr-<N>-review.json` (referenced by the submit command embedded in the HTML)
 
-Don't surface the `gh api` command in chat — it lives at the bottom of the HTML, which is the intended review surface. Tell Todd in one line what to do: *"Review the HTML; when satisfied, copy the submit command at the bottom and run it."*
+Don't surface the `gh api` command in chat — it lives at the bottom of the HTML, which is the intended review surface. Tell Todd in one line what to do: *"Review the HTML; when satisfied, copy the submit command at the bottom and run it."* State plainly that **nothing was posted**.
 
 If the verdict is **Request Changes** or **Request Clarification**, mention that explicitly in the chat summary so Todd doesn't accidentally treat the run as an approval.
+
+#### `--json-only`
+
+Report four lines and nothing else — no HTML path, no submit command, no "review the HTML" instruction, no posted URL (nothing was posted). A caller is parsing this:
+
+```
+JSON: /Users/toddprice/Downloads/pr-<N>-review.json
+VERDICT: Approve | Request Changes | Request Clarification
+INLINE: <count> inline comments
+BODY_NOTES: <count> PR-wide notes in the top-level body
+```
+
+Then stop. Skip the narrative summary too — under `--json-only` the JSON *is* the deliverable, and the caller reads the file.
 
 Now review PR #$ARGUMENTS.

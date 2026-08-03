@@ -10,7 +10,9 @@ description: >
   word "skill" and even when he names a specific reviewer (baz, sam, mbrashid62) or a PR number.
   This skill fetches the threads itself (you do NOT need them pasted in), fact-checks each claim
   against the actual code, and by default PROPOSES a plan + draft replies and waits for approval
-  before changing code or pushing.
+  before changing code or pushing. It also accepts a local self-review JSON produced by
+  `todd:pr_review --json-only` against Todd's OWN PR ("address the self-review at
+  ~/Downloads/pr-27600-review.json") — see Local findings mode in Step 1.
 allowed-tools: Bash(gh:*), Bash(git:*), Bash(mix:*), Bash(yarn:*), Bash(uv:*), Bash(cat:*), Bash(mktemp:*), Read, Grep, Glob, Agent
 ---
 
@@ -31,9 +33,9 @@ If Todd's request clearly says "just do it" / "resolve them for me and push" / "
 run straight through — but still show the triage table first so he can abort, then proceed without a
 second prompt.
 
-## Step 1 — Identify the PR
+## Step 1 — Identify the PR and pick a mode
 
-`$ARGUMENTS` may contain a PR number, reviewer name(s), or be empty.
+`$ARGUMENTS` may contain a PR number, reviewer name(s), a path to a review JSON, or be empty.
 
 - PR number → use it.
 - Empty → `gh pr view --json number,headRefName,url -q '{n:.number,b:.headRefName,u:.url}'` for the
@@ -42,6 +44,51 @@ second prompt.
   then loop the steps below over each, reporting which PRs actually have unaddressed comments.
 
 Resolve `{owner}/{repo}` once: `gh repo view --json nameWithOwner -q .nameWithOwner`.
+
+### Which mode?
+
+**GitHub mode (the default).** Comments live on the PR. Pull them in Step 2, reply to the threads in
+Step 6. This is everything below unless a path says otherwise.
+
+**Local findings mode.** `$ARGUMENTS` contains a path to a review JSON — typically
+`~/Downloads/pr-<N>-review.json` from `todd:pr_review --json-only`. Before doing anything with it,
+check who owns the PR:
+
+```bash
+gh pr view <N> --json author,isDraft,headRefName -q '{a:.author.login,d:.isDraft,b:.headRefName}'
+```
+
+- **PR author is Todd (`@me`)** → this is a *self-review he has not posted*, and it's inbound work.
+  Use Local findings mode (next section). This is the `/todd:loop` path: review your own draft, fix
+  what you find, never publish the nitpicking.
+- **PR author is anyone else** → this is Todd's review of *their* PR, waiting to be published. Wrong
+  skill — hand off to `todd:sync-review` and say so. (Same rule for a `.html`/`.md` artifact
+  regardless of author: those are outbound by construction.)
+
+### Local findings mode — build pseudo-threads instead of Step 2
+
+Read the JSON. Its shape is the GitHub review-payload schema (canonical spec:
+`~/.claude/skills/_shared/review-payload.md`) — a top-level `body`, an `event`, and a `comments[]`
+array of `{path, line, side, body}`.
+
+Convert it into the same thread records the rest of this skill expects:
+
+- **Each `comments[]` entry → one pseudo-thread**: `path`, `line`, `body`, reviewer `self-review`,
+  `isResolved: false`, no root comment id (there is no GitHub thread — nothing was posted).
+- **The top-level `body`** → split on its markdown headings. The `## VERDICT:` line is context, not
+  a finding; skip it. Each non-blocking note / PR-wide observation under the other headings becomes a
+  pseudo-thread with path `(general)` and no line.
+- **Severity**: the JSON carries no severity field. Infer it from the verdict tier language the
+  review already used — `requires changes` → high, `requires clarification` → medium, everything
+  else → low. Don't invent a severity the review didn't imply.
+
+Then **rejoin the normal flow at Step 3** and fact-check every one of them. Yes, even though a
+previous pass of yours wrote them: a review generated without the ability to run the tests is
+exactly the kind of thing that produces confident, wrong findings, and Step 3 is the check that
+catches it. Treat `self-review` with the same skepticism as baz, not the deference given a human.
+
+Two things differ downstream, both flagged where they land: the triage table's Reviewer column reads
+`self-review`, and Step 6 posts **no replies** — there are no threads to reply to.
 
 ## Step 2 — Pull every thread (this is the part Todd hates doing by hand)
 
@@ -130,7 +177,17 @@ Under the table, for each thread give: the **draft reply** (Todd's voice — cle
 with the answer; cite `file:line` evidence) and, for the ones you'll fix, a one-line **what you'll
 change**. Then ask Todd to confirm, edit, or drop any before you proceed.
 
-Use the `speak-as-todd` skill conventions for reply wording.
+Use `~/.claude/skills/_shared/voice-brief.md` for reply wording — that's the review-scoped
+voice reference. Don't load the full `speak-as-todd` skill here; it's the Slack/standup guide
+and costs ~6x the tokens for material a PR reply never uses.
+
+**In Local findings mode** the Reviewer column reads `self-review` and there are no draft replies to
+write — nothing was ever posted, so there's nothing to reply to. Show the table, the one-line *what
+you'll change* per fix, and the rationale for anything you're declining. Then call out **judgement
+calls separately**: a finding is a judgement call when fact-checking couldn't settle it (two
+defensible designs, a scope question, a fix that reaches past what the ticket asked for). List those
+explicitly and ask about them before implementing — they're the reason this mode stops here rather
+than running straight through.
 
 ## Step 5 — Implement (after approval)
 
@@ -159,6 +216,10 @@ CWD is often a *different* branch's tree. Before editing: confirm you're on the 
 > Posting mechanics + the Answer-only rule (no `<details>Instructions for AI Agents</details>` block
 > on Todd's replies) are the shared canonical spec at `~/.claude/skills/_shared/review-payload.md`.
 
+**In Local findings mode, skip the replies entirely** — there are no threads, and posting the
+self-review to the PR after the fact would publish nitpicks Todd already fixed. Commit, push, and
+report. Don't post the review JSON to GitHub as a consolation prize.
+
 Reply on the **comments** endpoint (thread replies are NOT the reviews endpoint):
 
 ```bash
@@ -178,8 +239,10 @@ gh api repos/{owner}/{repo}/pulls/<N>/comments -f body="<reply>" -F in_reply_to=
 ## Notes
 
 - Never push without showing the triage table first.
-- If Todd points at a local review file instead (`~/Downloads/pr-XXXX-review.{md,json,html}`), that's
-  the inverse direction — publishing *his* review — handing off to `todd:sync-review` is the better
-  fit; mention it.
+- A local review file (`~/Downloads/pr-XXXX-review.{md,json,html}`) is ambiguous on its face — resolve
+  it by PR authorship, per Step 1. Someone else's PR means Todd is *publishing* his review and
+  `todd:sync-review` is the right skill; say so and hand off. His own PR plus a `.json` means it's a
+  self-review to act on — Local findings mode, stay here. An `.html`/`.md` artifact is outbound
+  either way; those are hand-edited for publishing, not machine-generated for consumption.
 - If a comment says "filed for later" or implies a follow-up ticket, check whether one actually
   exists and offer `todd:followup-ticket` to create it.

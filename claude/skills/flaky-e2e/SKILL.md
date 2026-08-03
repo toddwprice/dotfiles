@@ -10,6 +10,7 @@ description: >
   matching that class. This is the E2E counterpart to `axon-flaky-test` (Elixir) — reach for that one
   for `mix test` flakes, this one for the Playwright suite.
 allowed-tools: Bash(rwx *), Bash(npx playwright:*), Bash(npm:*), Bash(gh:*), Bash(git:*), Bash(cat:*), Read, Grep, Glob, Agent
+disable-model-invocation: true
 ---
 
 # Fix a flaky E2E test

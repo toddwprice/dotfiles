@@ -79,7 +79,7 @@ git -C <candidate> remote -v
 Spawn **one background `general-purpose` Agent per selected PR**, all in a single message so they run concurrently. Each agent prompt MUST:
 
 1. State the repo context: the working directory / checkout path, and which `owner/repo` the PR lives in (so `gh` resolves correctly). For non-monorepo PRs, instruct it to `cd` into the local checkout first and verify `gh pr view <n>` shows the expected PR.
-2. Invoke the skill named `todd:pr_review` via the Skill tool, passing the PR number as the argument.
+2. Invoke the skill named `todd:pr_review` via the Skill tool, passing **`<N> --html`** as the argument. The `--html` flag is required, not decorative — `/todd:pr_review`'s *default* mode posts the review to GitHub itself, and `--html` is what puts it in render-and-hold mode. Drop the flag and this command starts firing unreviewed verdicts at teammates' PRs.
 3. **Do NOT post anything to GitHub.** Stop at artifact generation (HTML + JSON). Do not run `gh api .../reviews`. Todd reviews the artifacts first.
 4. Include the PR's title/author and the main risk surface (from Step 2) as context, and — if CI was red — instruct it to assess whether the failures are substantive vs. transient and fold that into the verdict.
 5. Report back concisely: (a) the VERDICT, (b) absolute paths to the HTML and JSON artifacts, (c) top 3–5 findings (severity + one line each), (d) the exact `gh api` submit command the skill generated (printed, NOT executed).

@@ -157,15 +157,20 @@ The script prints "Changing directory:" and `cd`s internally, but that dies with
 
 ## Step 8 — Move the session into the worktree
 
-Use **`EnterWorktree` with the `path` parameter**, not a bare `cd`:
+Try **`EnterWorktree` with the `path` parameter** first:
 
 ```
 EnterWorktree(path: "/Users/toddprice/dscout-wt/<ticket-lower>")
 ```
 
-This is the mechanism for switching into a worktree that already exists on disk. A plain `cd` changes the shell's directory but leaves the session's file-edit isolation pointed at the old checkout, so edits can be rejected. `EnterWorktree` moves the session properly.
+**Expect this to fail in this repo, and don't burn time on it.** `dscout-wt` is laid out around a `.bare` clone, and `EnterWorktree` validates the target against `git -C .bare worktree list` — which in this layout returns only `.bare` itself, never the linked worktrees. So every path is rejected with "is not a registered worktree", even though the worktree is real, registered under `.bare/worktrees/`, and reports `.bare` as its `git-common-dir`. Listing from a sibling worktree (`git -C main worktree list`) *does* show it.
 
-Confirm you landed: `git rev-parse --show-toplevel` and `git branch --show-current`.
+Fall back to absolute paths. Two things to know:
+
+- **The shell cwd does not persist.** `cd` inside a Bash call is reset to the primary working directory when the call ends, so a one-time `cd` won't stick. Either prefix each command (`cd /Users/toddprice/dscout-wt/<ticket-lower> && …`) or use `git -C <path>`.
+- **Pass absolute paths to Read/Edit/Write** rooted at `/Users/toddprice/dscout-wt/<ticket-lower>/…`. Relative paths resolve against the primary directory and will silently edit the wrong checkout.
+
+Confirm you landed with `git -C <path> rev-parse --show-toplevel` and `git -C <path> branch --show-current` before touching anything.
 
 ## Step 9 — Load the ticket content
 
@@ -197,10 +202,32 @@ Repo orientation for localizing (from the monorepo `CLAUDE.md`):
 | Symptom surface | Where to look | Test command |
 |---|---|---|
 | GraphQL / API / background job / auth | `apps/axon` (Elixir) | `cd apps/axon && mix test` |
-| Researcher or participant web UI | `apps/dendra` (React) | `cd apps/dendra && yarn test` |
+| Researcher or participant web UI | `apps/dendra` (React) | see the dendra note below — **not** `yarn test` |
 | DYS / dscript / EYD / ML analysis | `apps/astro` (Python) | `cd apps/astro && uv run pytest` |
 | AI moderation session | `apps/ai_mod` (Python) | `cd apps/ai_mod && uv run pytest` |
 | Axon-hosted SPA (eyd, dscript, ai_studio) | `apps/axon/assets` | `cd apps/axon/assets && npm test` |
+
+### Running dendra tests
+
+`yarn test` fails on the host with `karma: command not found`. `apps/dendra/node_modules` is an **empty directory** in every worktree — dendra's dependencies live in a Docker named volume (`dscout_dendra-node-modules`), populated when the image was built. Run tests in a one-off container against your worktree:
+
+```bash
+docker run --rm \
+  -v /Users/toddprice/dscout-wt/<ticket-lower>/apps/dendra:/app \
+  -v dscout_dendra-node-modules:/app/node_modules \
+  -w /app \
+  -e NODE_ENV=test -e TZ=America/Chicago -e INDOCKER=true \
+  dscout-dendra \
+  yarn test:rtl --only efflux --path app/components/<subpath>/ --single-run
+```
+
+Three things this depends on:
+
+- **`-e INDOCKER=true` is required.** Without it `karma.shared.conf.js:7` picks plain `ChromeHeadless`, which refuses to start as root without `--no-sandbox` ("Running as root without --no-sandbox is not supported"). With it, karma uses the `ChromeHeadlessRoot` launcher. The image already ships chromium at `/usr/bin/chromium`.
+- **Scope the run** with `--only <entry> --path <subpath>` (entries are listed in `karma.conf.js` `TEST_ENTRIES_MAP`: `efflux`, `scouts`, `live`, `shared`, …). A scoped run is ~50s; unscoped is far longer. The webpack test bundle rebuilds every run.
+- **The filename suffix picks the runner.** `*.test.tsx` → RTL (`yarn test:rtl`, `karma.conf.js`). `*_test.jsx` → Enzyme (`yarn test:enzyme`, `karma.enzyme.conf.js`). Name the file for the runner you want.
+
+Run `npx eslint <files>` and `npx tsc --strictNullChecks false --noEmit --project tsconfig.lint.json` in the same container to lint and typecheck.
 
 For a prod bug with ids in the ticket, Datadog logs and Braintrust traces will localize it faster than reading code — pivot there first. `/todd:repro_localhost` is the companion for reproducing against the local stack.
 

@@ -42,7 +42,7 @@
     "dscout-quality@dscout-claude-plugins": true,
     "warp@claude-code-warp": true,
     "understand-anything@understand-anything": true,
-    "agent-skills@addy-agent-skills": true
+    "agent-skills@addy-agent-skills": false
   },
   "extraKnownMarketplaces": {
     "claude-code-warp": {

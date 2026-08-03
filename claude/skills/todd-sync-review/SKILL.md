@@ -91,7 +91,8 @@ Rules that keep GitHub happy and the review clean:
   offer to demote them into the `body`.
 
 Write the rebuilt payload back to the sidecar JSON (next to the HTML) so Todd has the synced file,
-and use the `speak-as-todd` conventions for any wording you generate.
+and use `~/.claude/skills/_shared/voice-brief.md` for any wording you generate — the
+review-scoped voice reference, not the full `speak-as-todd` Slack guide.
 
 ## Step 4 — Show, confirm, post
 

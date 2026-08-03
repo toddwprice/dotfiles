@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+#
+# pr-review-queue — the PRs GitHub is waiting on me to review, printed as
+# ready-to-run lines, one per PR:
+#
+#   claude --bg '/todd:pr_review 27615'
+#
+# /todd:pr_review's default mode posts its review to
+# GitHub on its own; --html renders the local artifact and posts nothing. These
+# are other people's PRs, so the queue fans out reviews for me to read first.
+# Override with --command if you really want the whole queue posting itself.
+#
+# Mirrors https://github.com/pulls/reviews with the query:
+#   is:pr review-requested:@me state:open archived:false sort:updated-desc
+#
+# stdout carries nothing but the command lines, so it pipes cleanly:
+#   pr-review-queue | pbcopy
+#   pr-review-queue | head -3
+#   pr-review-queue | sh          # fan the whole queue out as background agents
+#
+# Everything else — counts, titles, errors — goes to stderr.
+
+set -euo pipefail
+
+REPO="dscout/dscout"
+LIMIT=100
+SKIP_DRAFTS=false
+VERBOSE=false
+RAW=false
+CMD="/todd:pr_review"
+
+usage() {
+  cat <<'EOF'
+Usage: pr-review-queue [options]
+
+Prints one `claude --bg '/todd:pr_review <number>'` line per open PR that
+has requested your review, most-recently-updated first.
+
+Options:
+  -r, --repo OWNER/NAME  Scope the search to one repo (default: dscout/dscout)
+  -a, --all-repos        Search every repo. Cross-repo results print as
+                         OWNER/NAME#N, because a bare number is only
+                         unambiguous inside a single repo.
+  -n, --limit N          Max results to return (default: 100)
+  -d, --no-drafts        Leave draft PRs out
+  -c, --command CMD      Slash command to run per PR
+                         (default: /todd:pr_review — renders each review
+                         locally and posts nothing. Bare /todd:pr_review posts
+                         every review to GitHub unattended.)
+      --raw              Emit the bare `<command> <number>` without the
+                         `claude --bg '...'` wrapper
+  -v, --verbose          Print repo / author / title for each PR to stderr
+  -h, --help             Show this help
+
+Examples:
+  pr-review-queue                     # dscout/dscout review queue
+  pr-review-queue | sh                # launch a background review per PR
+  pr-review-queue -v -d               # skip drafts, show what each one is
+  pr-review-queue -n 5 | pbcopy       # top 5, straight to the clipboard
+  pr-review-queue --raw               # bare /todd:pr_review --html N lines
+  pr-review-queue -a                  # every repo, qualified refs
+EOF
+}
+
+die() { echo "pr-review-queue: $*" >&2; exit 2; }
+
+# Guard the flags that take a value, so `--repo` with nothing after it reports
+# itself instead of leaking a bash substitution error.
+need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -r|--repo)      need_value "$@"; REPO="$2"; shift 2 ;;
+    -a|--all-repos) REPO=""; shift ;;
+    -n|--limit)     need_value "$@"; LIMIT="$2"; shift 2 ;;
+    -d|--no-drafts) SKIP_DRAFTS=true; shift ;;
+    -c|--command)   need_value "$@"; CMD="$2"; shift 2 ;;
+    --raw)          RAW=true; shift ;;
+    -v|--verbose)   VERBOSE=true; shift ;;
+    -h|--help)      usage; exit 0 ;;
+    *)              echo "pr-review-queue: unknown option '$1'" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+[[ "$LIMIT" =~ ^[0-9]+$ && "$LIMIT" -gt 0 ]] || die "--limit must be a positive number (got '$LIMIT')"
+[[ -z "$REPO" || "$REPO" == */* ]] || die "--repo must look like OWNER/NAME (got '$REPO')"
+
+for tool in gh jq; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "pr-review-queue: '$tool' not found on PATH. Install it (brew install $tool)." >&2
+    exit 1
+  }
+done
+
+gh auth status >/dev/null 2>&1 || {
+  echo "pr-review-queue: gh is not authenticated. Run: gh auth login" >&2
+  exit 1
+}
+
+# `gh search prs` has no --repo flag, so scope goes in as a raw search
+# qualifier alongside archived:false.
+search_qualifiers=("archived:false")
+[[ -n "$REPO" ]] && search_qualifiers+=("repo:$REPO")
+
+# gh exits non-zero when a search matches nothing. That's a normal empty queue,
+# not a failure — so catch that one message and let every other error through.
+err_file="$(mktemp)"
+trap 'rm -f "$err_file"' EXIT
+
+if ! json="$(gh search prs "${search_qualifiers[@]}" \
+      --review-requested=@me \
+      --state=open \
+      --sort=updated \
+      --order=desc \
+      --limit "$LIMIT" \
+      --json number,repository,isDraft,title,author,updatedAt 2>"$err_file")"; then
+  if grep -qi 'no pull requests matched' "$err_file"; then
+    json='[]'
+  else
+    cat "$err_file" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$SKIP_DRAFTS" == true ]]; then
+  json="$(jq '[.[] | select(.isDraft | not)]' <<<"$json")"
+fi
+
+count="$(jq 'length' <<<"$json")"
+if [[ "$count" -eq 0 ]]; then
+  echo "pr-review-queue: nothing awaiting your review${REPO:+ in $REPO}." >&2
+  exit 0
+fi
+
+echo "pr-review-queue: $count PR(s) awaiting your review${REPO:+ in $REPO}." >&2
+
+if [[ "$VERBOSE" == true ]]; then
+  jq -r '.[] |
+    "  #\(.number)  \(.repository.nameWithOwner)  @\(.author.login)\(if .isDraft then "  [draft]" else "" end)\n      \(.title)"' \
+    <<<"$json" >&2
+  echo >&2
+fi
+
+# Wrap a string in single quotes for safe `sh` evaluation, escaping any
+# embedded quote the close-escape-reopen way ('\''). Matters because the lines
+# are meant to be runnable — `pr-review-queue | sh` shouldn't be able to break
+# out of the quoting via a --command value.
+shell_quote() {
+  local s=${1//\'/\'\\\'\'}
+  printf "'%s'" "$s"
+}
+
+# Bare numbers are only unambiguous when the search was scoped to one repo.
+if [[ -n "$REPO" ]]; then
+  refs="$(jq -r '.[] | "\(.number)"' <<<"$json")"
+else
+  refs="$(jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' <<<"$json")"
+fi
+
+while IFS= read -r ref; do
+  [[ -n "$ref" ]] || continue
+  if [[ "$RAW" == true ]]; then
+    printf '%s %s\n' "$CMD" "$ref"
+  else
+    printf 'claude --bg %s\n' "$(shell_quote "$CMD $ref")"
+  fi
+done <<<"$refs"
