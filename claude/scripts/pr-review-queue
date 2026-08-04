@@ -13,6 +13,12 @@
 # Mirrors https://github.com/pulls/reviews with the query:
 #   is:pr review-requested:@me state:open archived:false sort:updated-desc
 #
+# PRs a live background agent is already reviewing are left out, so running
+# this twice doesn't relaunch a review that's still going. Only `claude --bg`
+# sessions are visible to that check — an interactive session where you typed
+# /todd:pr_review yourself carries no recoverable prompt, so it won't suppress
+# anything. --include-running turns the filter off.
+#
 # stdout carries nothing but the command lines, so it pipes cleanly:
 #   pr-review-queue | pbcopy
 #   pr-review-queue | head -3
@@ -27,7 +33,13 @@ LIMIT=100
 SKIP_DRAFTS=false
 VERBOSE=false
 RAW=false
+SKIP_RUNNING=true
 CMD="/todd:pr_review"
+
+# Where the in-flight check reads from. Both are overridable so the filter can
+# be exercised against fixtures — see the test harness note further down.
+AGENTS_JSON_FILE="${PR_REVIEW_QUEUE_AGENTS_JSON:-}"
+JOBS_DIR="${PR_REVIEW_QUEUE_JOBS_DIR:-$HOME/.claude/jobs}"
 
 usage() {
   cat <<'EOF'
@@ -49,6 +61,9 @@ Options:
                          every review to GitHub unattended.)
       --raw              Emit the bare `<command> <number>` without the
                          `claude --bg '...'` wrapper
+      --include-running  Keep PRs a live background agent is already
+                         reviewing. They're left out by default; whatever
+                         gets left out is always named on stderr.
   -v, --verbose          Print repo / author / title for each PR to stderr
   -h, --help             Show this help
 
@@ -59,6 +74,7 @@ Examples:
   pr-review-queue -n 5 | pbcopy       # top 5, straight to the clipboard
   pr-review-queue --raw               # bare /todd:pr_review --html N lines
   pr-review-queue -a                  # every repo, qualified refs
+  pr-review-queue --include-running   # don't hide in-flight reviews
 EOF
 }
 
@@ -76,6 +92,7 @@ while [[ $# -gt 0 ]]; do
     -d|--no-drafts) SKIP_DRAFTS=true; shift ;;
     -c|--command)   need_value "$@"; CMD="$2"; shift 2 ;;
     --raw)          RAW=true; shift ;;
+    --include-running) SKIP_RUNNING=false; shift ;;
     -v|--verbose)   VERBOSE=true; shift ;;
     -h|--help)      usage; exit 0 ;;
     *)              echo "pr-review-queue: unknown option '$1'" >&2; usage >&2; exit 2 ;;
@@ -133,6 +150,193 @@ if [[ "$count" -eq 0 ]]; then
 fi
 
 echo "pr-review-queue: $count PR(s) awaiting your review${REPO:+ in $REPO}." >&2
+
+# --- in-flight review suppression --------------------------------------------
+#
+# A PR a live background agent is already reviewing shouldn't print again. Two
+# sources, joined on the job id:
+#
+#   claude agents --json        the live sessions, with id / kind / state /
+#                               startedAt. Already filtered to live processes,
+#                               so a session that got killed can't go on hiding
+#                               a PR forever.
+#   $JOBS_DIR/<id>/state.json   .intent — the verbatim launch prompt, and the
+#                               only field where the PR number reliably
+#                               survives. The agents-json .name is generated
+#                               after the fact and drops numbers (a
+#                               "/copy-data ... staging 19 to staging 22" job
+#                               became "copy templates staging migration"), so
+#                               it's the fallback, not the source.
+#
+# Every failure in here fails OPEN — it prints the PR rather than hiding it. A
+# PR shown twice costs one duplicate session you can see; a PR wrongly hidden
+# is invisible, and you never find out it was there.
+#
+# To exercise this without live agents, point PR_REVIEW_QUEUE_AGENTS_JSON at a
+# file of fixture session JSON and PR_REVIEW_QUEUE_JOBS_DIR at a fixture jobs
+# tree.
+
+# In-flight is an allowlist, not a denylist of terminal states, so a state this
+# script doesn't know (a future Claude Code adding "paused", say) falls through
+# as not-in-flight and the PR still prints. Note that finished sessions linger
+# in `claude agents --json` as live idle processes with state "done" — which is
+# exactly why being in that list can't be the test on its own.
+IN_FLIGHT_STATES='["working","blocked"]'
+
+# Print the live-session JSON array, or nothing at all if it can't be had.
+read_agents_json() {
+  local out
+  if [[ -n "$AGENTS_JSON_FILE" ]]; then
+    if ! out="$(cat "$AGENTS_JSON_FILE" 2>/dev/null)"; then
+      echo "pr-review-queue: can't read $AGENTS_JSON_FILE; not filtering in-flight reviews." >&2
+      return 0
+    fi
+  elif ! command -v claude >/dev/null 2>&1; then
+    echo "pr-review-queue: 'claude' not on PATH; not filtering in-flight reviews." >&2
+    return 0
+  elif ! out="$(claude agents --json 2>/dev/null)"; then
+    echo "pr-review-queue: 'claude agents --json' failed; not filtering in-flight reviews." >&2
+    return 0
+  fi
+  if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$out"; then
+    echo "pr-review-queue: background-session list wasn't a JSON array; not filtering." >&2
+    return 0
+  fi
+  printf '%s' "$out"
+}
+
+# Epoch millis rendered short: 45s, 6m, 2h 5m, 3d 4h. A missing startedAt says
+# so rather than measuring from the epoch and claiming 20000-odd days.
+human_age() {
+  local started_ms=$1 secs
+  if (( started_ms <= 0 )); then printf 'an unknown time'; return; fi
+  secs=$(( $(date +%s) - started_ms / 1000 ))
+  if (( secs < 0 )); then secs=0; fi
+  if   (( secs < 60 ));    then printf '%ds' "$secs"
+  elif (( secs < 3600 ));  then printf '%dm' $(( secs / 60 ))
+  elif (( secs < 86400 )); then printf '%dh %dm' $(( secs / 3600 )) $(( secs % 3600 / 60 ))
+  else                          printf '%dd %dh' $(( secs / 86400 )) $(( secs % 86400 / 3600 ))
+  fi
+}
+
+agents_json=""
+if [[ "$SKIP_RUNNING" == true ]]; then
+  agents_json="$(read_agents_json)"
+fi
+
+if [[ -n "$agents_json" ]]; then
+  # The command as it shows up in a launch prompt is the first word of $CMD, so
+  # `-c '/todd:pr_review --html'` still matches an intent of
+  # `/todd:pr_review 27713 --html`.
+  cmd_token="${CMD%% *}"
+
+  # Auto-generated job names render "/todd:pr_review" as "pr review", so the
+  # name fallback drops the leading slash and the namespace, and lets either an
+  # underscore or a space join the words.
+  loose_word="${cmd_token#/}"
+  loose_word="${loose_word##*:}"
+  loose_re="${loose_word//_/[_ ]}"
+
+  # One line per PR ref found in a live in-flight session:
+  #   kind \t ref \t state \t startedAt \t cwd \t prompt
+  # kind is n for a bare number, q for a qualified owner/name#N. Empty fields
+  # would collapse under a tab IFS, so the jq below substitutes "-" rather than
+  # emitting one.
+  inflight=""
+
+  while IFS=$'\t' read -r job_id job_state job_started job_cwd job_name; do
+    [[ -n "$job_id" ]] || continue
+
+    job_text=""
+    if [[ -r "$JOBS_DIR/$job_id/state.json" ]]; then
+      job_text="$(jq -r '.intent // empty' "$JOBS_DIR/$job_id/state.json" 2>/dev/null || true)"
+    fi
+
+    # Ref scanning starts at the command token when the verbatim prompt is
+    # available, and at the start of the string when we're down to the
+    # auto-generated name. Either way every ref-shaped token after that point
+    # counts, so flag order doesn't matter — `--html 27713` and `27713 --html`
+    # both yield 27713.
+    if [[ -n "$job_text" ]]; then
+      [[ "$job_text" == *"$cmd_token"* ]] || continue
+      scanning=false
+    else
+      job_text="$job_name"
+      [[ "$job_text" =~ $loose_re ]] || continue
+      scanning=true
+    fi
+
+    job_prompt="$(printf '%s' "$job_text" | tr '\n\t' '  ')"
+
+    while IFS= read -r tok; do
+      [[ -n "$tok" ]] || continue
+      if [[ "$scanning" == false ]]; then
+        [[ "$tok" == *"$cmd_token"* ]] && scanning=true
+        continue
+      fi
+      if [[ "$tok" =~ ^[0-9]+$ ]]; then
+        inflight="$inflight""n"$'\t'"$tok"$'\t'"$job_state"$'\t'"$job_started"$'\t'"$job_cwd"$'\t'"$job_prompt"$'\n'
+      elif [[ "$tok" =~ ^[^/[:space:]]+/[^/#[:space:]]+#[0-9]+$ ]]; then
+        inflight="$inflight""q"$'\t'"$tok"$'\t'"$job_state"$'\t'"$job_started"$'\t'"$job_cwd"$'\t'"$job_prompt"$'\n'
+      fi
+    done < <(tr -s ' \t\n' '\n' <<<"$job_text")
+  done < <(jq -r --argjson live "$IN_FLIGHT_STATES" '
+      def dash: if . == null or . == "" then "-" else . end;
+      .[]
+      | select(.kind == "background")
+      | select(.id != null)
+      | select(.state as $s | ($live | index($s)) != null)
+      | [(.id | dash), (.state | dash), ((.startedAt // 0) | tostring),
+         (.cwd | dash), (.name | dash)]
+      | @tsv' <<<"$agents_json")
+
+  # A bare in-flight number matches that number in any repo — only reachable
+  # under --all-repos, where a cross-repo collision could over-suppress. The
+  # stderr report below always names what got skipped, so it can't be silent.
+  bare_json="$(awk -F'\t' '$1 == "n" { print $2 }' <<<"$inflight" |
+    jq -R -s 'split("\n") | map(select(length > 0)) | unique')"
+  qual_json="$(awk -F'\t' '$1 == "q" { print $2 }' <<<"$inflight" |
+    jq -R -s 'split("\n") | map(select(length > 0)) | unique')"
+
+  kept_json="$(jq --argjson bare "$bare_json" --argjson qual "$qual_json" '
+    [ .[]
+      | . as $pr
+      | select(($bare | index($pr.number | tostring)) == null)
+      | select(($qual | index("\($pr.repository.nameWithOwner)#\($pr.number)")) == null)
+    ]' <<<"$json")"
+
+  # Report only the PRs this actually removed. An in-flight review of a PR
+  # that isn't in the queue anyway is noise, not news.
+  dropped_json="$(jq --argjson kept "$kept_json" '
+    [ $kept[] | "\(.repository.nameWithOwner)#\(.number)" ] as $keep
+    | [ .[]
+        | . as $pr
+        | select(($keep | index("\($pr.repository.nameWithOwner)#\($pr.number)")) == null) ]
+  ' <<<"$json")"
+
+  dropped_count="$(jq 'length' <<<"$dropped_json")"
+  if [[ "$dropped_count" -gt 0 ]]; then
+    echo "pr-review-queue: skipping $dropped_count already in flight:" >&2
+    while IFS=$'\t' read -r d_num d_repo; do
+      match="$(awk -F'\t' -v n="$d_num" -v q="$d_repo#$d_num" \
+        '($1 == "n" && $2 == n) || ($1 == "q" && $2 == q) { print; exit }' <<<"$inflight")"
+      [[ -n "$match" ]] || continue
+      IFS=$'\t' read -r _ _ m_state m_started m_cwd m_prompt <<<"$match"
+      printf '    %s  %s  (started %s ago)\n' \
+        "$d_num" "$m_state" "$(human_age "$m_started")" >&2
+      if [[ "$VERBOSE" == true ]]; then
+        printf '        %s\n        %s\n' "$m_cwd" "$m_prompt" >&2
+      fi
+    done < <(jq -r '.[] | [(.number | tostring), .repository.nameWithOwner] | @tsv' <<<"$dropped_json")
+  fi
+
+  json="$kept_json"
+  count="$(jq 'length' <<<"$json")"
+  if [[ "$count" -eq 0 ]]; then
+    echo "pr-review-queue: every PR awaiting your review is already in flight." >&2
+    exit 0
+  fi
+fi
 
 if [[ "$VERBOSE" == true ]]; then
   jq -r '.[] |
