@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 #
-# pr-review-queue — the PRs GitHub is waiting on me to review, printed as
-# ready-to-run lines, one per PR:
+# pr-review-queue — the PRs GitHub is waiting on me to review. It starts a
+# background review agent per PR and prints the line it ran, one per PR:
 #
 #   claude --bg '/todd:pr_review 27615'
 #
-# /todd:pr_review's default mode posts its review to
-# GitHub on its own; --html renders the local artifact and posts nothing. These
-# are other people's PRs, so the queue fans out reviews for me to read first.
-# Override with --command if you really want the whole queue posting itself.
+# Launching is the default; there's no copy-paste step. --print-only goes back
+# to printing and running nothing, which is what you want when something
+# downstream is going to consume the lines.
+#
+# Know what one invocation does: bare `/todd:pr_review` is the command's posting
+# mode, so each agent submits its review to GitHub on its own. Typing
+# `pr-review-queue` publishes a review on every PR in the queue, on other
+# people's PRs, with nobody reading them first. That is the intended behavior
+# here — the whole point is not hand-driving a queue of reviews — but it isn't a
+# dry run, and there's no undo short of deleting the reviews on GitHub.
+#
+# `-c '/todd:pr_review --html'` is the read-first version: each agent renders a
+# local HTML artifact and posts nothing, and you submit the ones you want.
+# Reach for it when the queue is unfamiliar or you want to eyeball the output.
 #
 # Mirrors https://github.com/pulls/reviews with the query:
 #   is:pr review-requested:@me state:open archived:false sort:updated-desc
@@ -19,12 +29,16 @@
 # /todd:pr_review yourself carries no recoverable prompt, so it won't suppress
 # anything. --include-running turns the filter off.
 #
-# stdout carries nothing but the command lines, so it pipes cleanly:
-#   pr-review-queue | pbcopy
-#   pr-review-queue | head -3
-#   pr-review-queue | sh          # fan the whole queue out as background agents
+# stdout still carries nothing but the command lines, so it pipes cleanly:
+#   pr-review-queue --print-only | pbcopy
+#   pr-review-queue --print-only | head -3
 #
-# Everything else — counts, titles, errors — goes to stderr.
+# Piping without --print-only launches as a side effect of the pipe, and
+# `pr-review-queue | sh` launches everything twice — the in-flight filter only
+# suppresses across separate runs, never within one. Reach for --print-only
+# whenever the lines are going somewhere that will run them.
+#
+# Everything else — counts, titles, launch results, errors — goes to stderr.
 
 set -euo pipefail
 
@@ -34,6 +48,13 @@ SKIP_DRAFTS=false
 VERBOSE=false
 RAW=false
 SKIP_RUNNING=true
+LAUNCH=true
+LAUNCH_UNAVAILABLE=false
+
+# Bare, so each launched agent posts its own review to GitHub — see the header
+# and the --command help for what that means before changing it. Only the first
+# word is used to match in-flight sessions, so adding a flag here (`--html`)
+# rides along harmlessly there.
 CMD="/todd:pr_review"
 
 # Where the in-flight check reads from. Both are overridable so the filter can
@@ -45,22 +66,32 @@ usage() {
   cat <<'EOF'
 Usage: pr-review-queue [options]
 
-Prints one `claude --bg '/todd:pr_review <number>'` line per open PR that
-has requested your review, most-recently-updated first.
+Starts a background review agent per open PR that has requested your review,
+most-recently-updated first, and prints the `claude --bg '...'` line it ran
+for each.
 
 Options:
   -r, --repo OWNER/NAME  Scope the search to one repo (default: dscout/dscout)
   -a, --all-repos        Search every repo. Cross-repo results print as
                          OWNER/NAME#N, because a bare number is only
                          unambiguous inside a single repo.
-  -n, --limit N          Max results to return (default: 100)
+  -n, --limit N          Max results to return (default: 100). Doubles as the
+                         cap on how many agents one run can start.
   -d, --no-drafts        Leave draft PRs out
-  -c, --command CMD      Slash command to run per PR
-                         (default: /todd:pr_review — renders each review
-                         locally and posts nothing. Bare /todd:pr_review posts
-                         every review to GitHub unattended.)
+  -p, --print-only       Print the lines and launch nothing (the old
+                         behavior). Use this whenever the lines are piped
+                         somewhere — otherwise the pipe still launches, and
+                         `| sh` launches everything a second time.
+                         --dry-run is an alias.
+  -c, --command CMD      Slash command to run per PR (default:
+                         /todd:pr_review, the posting mode — every agent
+                         submits its review to GitHub itself. Pass
+                         -c '/todd:pr_review --html' to render each review
+                         locally and post nothing, and submit them yourself.)
       --raw              Emit the bare `<command> <number>` without the
-                         `claude --bg '...'` wrapper
+                         `claude --bg '...'` wrapper. That form is slash-command
+                         text for an interactive session, not something a shell
+                         can exec, so --raw implies --print-only.
       --include-running  Keep PRs a live background agent is already
                          reviewing. They're left out by default; whatever
                          gets left out is always named on stderr.
@@ -68,13 +99,16 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  pr-review-queue                     # dscout/dscout review queue
-  pr-review-queue | sh                # launch a background review per PR
+  pr-review-queue                     # review + post on every PR awaiting me
   pr-review-queue -v -d               # skip drafts, show what each one is
-  pr-review-queue -n 5 | pbcopy       # top 5, straight to the clipboard
-  pr-review-queue --raw               # bare /todd:pr_review --html N lines
+  pr-review-queue -n 3                # only the 3 most recent
+  pr-review-queue -p                  # just show me the queue, launch nothing
+  pr-review-queue -p -n 5 | pbcopy    # top 5, straight to the clipboard
+  pr-review-queue -c '/todd:pr_review --html'   # render locally, post nothing
+  pr-review-queue --raw               # bare /todd:pr_review N lines
   pr-review-queue -a                  # every repo, qualified refs
   pr-review-queue --include-running   # don't hide in-flight reviews
+  claude agents                       # check on what this started
 EOF
 }
 
@@ -92,6 +126,7 @@ while [[ $# -gt 0 ]]; do
     -d|--no-drafts) SKIP_DRAFTS=true; shift ;;
     -c|--command)   need_value "$@"; CMD="$2"; shift 2 ;;
     --raw)          RAW=true; shift ;;
+    -p|--print-only|--dry-run) LAUNCH=false; shift ;;
     --include-running) SKIP_RUNNING=false; shift ;;
     -v|--verbose)   VERBOSE=true; shift ;;
     -h|--help)      usage; exit 0 ;;
@@ -102,12 +137,31 @@ done
 [[ "$LIMIT" =~ ^[0-9]+$ && "$LIMIT" -gt 0 ]] || die "--limit must be a positive number (got '$LIMIT')"
 [[ -z "$REPO" || "$REPO" == */* ]] || die "--repo must look like OWNER/NAME (got '$REPO')"
 
+# --raw emits `/todd:pr_review 27615` — slash-command text you paste into a
+# session, not a program a shell can find. Launching it would try to exec a
+# file at /todd:pr_review, so --raw is print-only by construction.
+if [[ "$RAW" == true ]]; then
+  LAUNCH=false
+fi
+
 for tool in gh jq; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "pr-review-queue: '$tool' not found on PATH. Install it (brew install $tool)." >&2
     exit 1
   }
 done
+
+# `claude` still isn't in the loop above, because the in-flight filter treats a
+# missing `claude` as "can't tell — show the PR" and carries on. Launching has
+# no such graceful version: with no `claude` there is nothing to start. So it
+# degrades to printing and exits non-zero at the end, rather than printing a
+# tidy queue and looking like it launched something.
+if [[ "$LAUNCH" == true ]] && ! command -v claude >/dev/null 2>&1; then
+  echo "pr-review-queue: 'claude' not on PATH — can't launch anything." >&2
+  echo "pr-review-queue: printing the commands instead; fix PATH or run them yourself." >&2
+  LAUNCH=false
+  LAUNCH_UNAVAILABLE=true
+fi
 
 gh auth status >/dev/null 2>&1 || {
   echo "pr-review-queue: gh is not authenticated. Run: gh auth login" >&2
@@ -346,9 +400,10 @@ if [[ "$VERBOSE" == true ]]; then
 fi
 
 # Wrap a string in single quotes for safe `sh` evaluation, escaping any
-# embedded quote the close-escape-reopen way ('\''). Matters because the lines
-# are meant to be runnable — `pr-review-queue | sh` shouldn't be able to break
-# out of the quoting via a --command value.
+# embedded quote the close-escape-reopen way ('\''). Only the *printed* lines
+# need this — launch mode passes the prompt as one argv element and no shell
+# sees it. It still matters, because a --print-only run's lines are meant to be
+# runnable and a --command value shouldn't be able to break out of the quoting.
 shell_quote() {
   local s=${1//\'/\'\\\'\'}
   printf "'%s'" "$s"
@@ -361,11 +416,62 @@ else
   refs="$(jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' <<<"$json")"
 fi
 
+launched=0
+launch_failed=0
+
+if [[ "$LAUNCH" == true ]]; then
+  echo "pr-review-queue: starting $count background review(s)." >&2
+fi
+
 while IFS= read -r ref; do
   [[ -n "$ref" ]] || continue
+
   if [[ "$RAW" == true ]]; then
     printf '%s %s\n' "$CMD" "$ref"
   else
     printf 'claude --bg %s\n' "$(shell_quote "$CMD $ref")"
   fi
+
+  [[ "$LAUNCH" == true ]] || continue
+
+  # The prompt goes in as a single argv element, so no shell ever re-parses it
+  # — the quoting that makes the *printed* line safe to pipe plays no part in
+  # what actually runs here. `claude --bg` detaches and returns, so these fan
+  # out concurrently instead of running one review at a time.
+  #
+  # Two redirections, each fixing something that actually went wrong:
+  #
+  #   </dev/null  `claude` reads stdin and APPENDS it to the prompt. This loop
+  #               is fed by a here-string, so without this the first launch
+  #               swallows every remaining ref: the loop runs exactly once and
+  #               that one agent gets the prompt
+  #               "/todd:pr_review --html 27615\n27616\n27617". Observed, not
+  #               theoretical — it spawned a real agent with that prompt.
+  #   >&2         keeps `claude`'s own startup chatter off our stdout, so the
+  #               command-lines-only contract survives launch mode.
+  #
+  # A failure here is per-PR, not fatal: the remaining PRs still get launched
+  # and the count of failures sets the exit status at the end. One agent that
+  # wouldn't start shouldn't cost you the rest of the queue.
+  if claude --bg "$CMD $ref" >&2 </dev/null; then
+    launched=$(( launched + 1 ))
+    printf '    started  %s\n' "$ref" >&2
+  else
+    launch_failed=$(( launch_failed + 1 ))
+    printf '    FAILED   %s  (no agent started for this one)\n' "$ref" >&2
+  fi
 done <<<"$refs"
+
+if [[ "$LAUNCH" == true ]]; then
+  echo "pr-review-queue: started $launched of $count — follow them with 'claude agents'." >&2
+  if (( launch_failed > 0 )); then
+    echo "pr-review-queue: $launch_failed failed to start (listed above)." >&2
+    exit 1
+  fi
+fi
+
+# Nothing launched because `claude` was missing. The lines are on stdout, but
+# this run did not do the thing it exists to do, so don't report success.
+[[ "$LAUNCH_UNAVAILABLE" == true ]] && exit 1
+
+exit 0

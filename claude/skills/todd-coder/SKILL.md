@@ -33,6 +33,11 @@ Before starting work, check if running in a git worktree:
 
 ## Plan Mode
 
+Writes the prose plan below. For anything an agent will implement unattended, `/todd:plan TICKET`
+is the better door — same Linear comment, same first line, plus a Gherkin Behavior Spec whose
+Scenarios become the implementer's checklist and whose steps are grounded in verified symbols.
+This mode stays for the small stuff where that ceremony costs more than it saves.
+
 ### Steps
 
 1. **Detect worktree environment** (see above)
@@ -68,7 +73,7 @@ Before starting work, check if running in a git worktree:
 
 3. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
-4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`.
+4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`. If that comment also carries a `## 🥒 Behavior Spec` section — written by `/todd:plan` — then **the Scenarios are the acceptance criteria**: the prose above them is context, the Gherkin is the contract. Say which kind of plan you found when you report.
 
 5. **Assess readiness**:
    - If plan found: proceed to implementation using the plan as guide.
@@ -77,6 +82,14 @@ Before starting work, check if running in a git worktree:
      - **Complex** (multi-file, ambiguous requirements, high risk): stop and suggest running `/todd:coder plan TICKET_ID` first.
 
 6. **Implement incrementally with TDD**: **REQUIRED: Use superpowers:test-driven-development** as the inner loop. How much structure wraps it depends on scope (from step 5) — slicing engages only when the work warrants it:
+
+   **If the plan carries a `## 🥒 Behavior Spec`, it drives the loop** — whichever path below you take:
+   - **Each Scenario is one RED test.** Write it failing before the code that satisfies it. Don't batch several scenarios into one test because they're adjacent.
+   - **`@slice-N` tags give the order.** A slice is done when every Scenario tagged with it is green — not when the code looks finished.
+   - **`# target:` names the test file.** Put it there. If that file doesn't exist or genuinely doesn't fit, put it where it belongs and say which you did and why.
+   - **`# falsifies:` is a mutation check, not a note.** Once the test is green, confirm it would go red *for that reason* — revert the change behind it, or assert against the pre-change value, and watch it fail. A test that passes with and without your change cost you time and bought nothing. This is where real bugs have hidden: a padded `Then A And B And C` where only A can ever fail, an assertion with no failing input.
+   - **Never skip a Scenario silently.** If one turns out wrong, unimplementable, or already covered by an existing test, name it in the summary with the reason. A spec you can quietly drop items from isn't a spec.
+   - **`Not covered` is a boundary.** Behavior the spec deliberately excludes isn't yours to build. Note it, don't fix it.
 
    **Straightforward fast path** (single-file / single-function, low-risk — the same shape as step 5's skip-the-plan case): just do strict red-green-refactor, then one commit. No slice ceremony.
    - Write a failing test first (RED)
@@ -99,6 +112,7 @@ Before starting work, check if running in a git worktree:
      - axon: `mix format --check-formatted && mix compile --warnings-as-errors && mix test`
      - dendra: `yarn lint && yarn test`
      - astro: `uv run ruff check . && uv run pytest`
+     - **anything else** — a tool under `.claude/`, a script in `bin/`, terraform, a shared Python package, e2e: there is no entry here for it. Use the plan's `### Verification` block, which names the real commands **and** what a green run doesn't prove (a suite outside CI, a harness that `exit 0`s on skip, a filter that matches nothing). Where the plan covers a surface, it wins over this list. If the plan has no Verification block and the surface isn't one of the three above, say so in the summary rather than declaring it verified.
    - **Red flags** — stop and slice smaller: more than ~100 lines before a test, unrelated changes mixed into one slice, "let me just quickly add this too," a broken build between slices.
    - **Definition of done** (final gate, after the last slice): the full per-app Pre-Push Checklist in CLAUDE.md passes, the feature works end-to-end, and no uncommitted changes remain.
 
@@ -106,6 +120,7 @@ Before starting work, check if running in a git worktree:
    - **What was done**: Files created/modified, features implemented
    - **Decisions made**: Any choices or tradeoffs during implementation, and why
    - **Test plan**: List of test cases written, what they cover, how to run them
+   - **Scenario coverage** (only if the plan had a Behavior Spec): every Scenario, the test it became, and whether it's green and mutation-checked. Skipped ones get a reason, not a blank.
    - **Remaining work**: Anything deferred or out of scope
 
 8. **Post summary to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
@@ -171,6 +186,13 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 |------|--------|---------|
 | `test_name` | [what it validates] | `make test-unit` |
 
+### Scenario Coverage
+<!-- Only when the plan carried a Behavior Spec. Every Scenario gets a row. -->
+| Scenario | Test | Status |
+|---|---|---|
+| [scenario name] | `path/to/test.exs:42` | ✅ green, mutation-checked |
+| [scenario name] | — | ⏭️ skipped — [why] |
+
 ### How to Verify
 1. [Step-by-step verification]
 
@@ -212,6 +234,7 @@ TICKET: {TICKET_ID}
 COMMIT: {branch-tip sha, or "none"}
 FILES: {count} changed
 TESTS: {e.g. "42 passed" or "3 failed: <names>"}
+SCENARIOS: {e.g. "11/11 green" or "9/11 green, 2 skipped", or "none" if the plan had no Behavior Spec}
 BLOCKERS: {one line, or "none"}
 PR_TITLE: {suggested PR title}
 PR_BODY: |

@@ -52,9 +52,9 @@ Do this inline (it's small) and report a one-line summary.
 
 Then branch on what you found:
 
-- **Linear comment** → nothing more to do. `/todd:coder impl` finds it on its own.
+- **Linear comment** → nothing more to do. `/todd:coder impl` finds it on its own. Note in your phase-0 line whether it carries a `## 🥒 Behavior Spec` and how many Scenarios — a spec'd plan gives phase 1 a hard checklist and gives you a real completion number to report at the end; a prose-only plan means "done" is the impl agent's judgement call. Worth knowing which kind of run this is before it starts.
 - **Notion doc only** → **you must carry the plan forward yourself.** `/todd:coder impl` only looks for that Linear comment; a Notion-only plan is invisible to it, and it will quietly grade the ticket "straightforward" and improvise. Extract the plan text and paste it into the phase 1 subagent prompt.
-- **Neither** → stop. Say the loop needs a plan and to run `/todd:coder plan $TICKET` (or write one in Notion and link it) first. Don't offer to plan it here — planning wants Todd's eyes, and that's the whole reason this command takes a *planned* ticket.
+- **Neither** → stop. Say the loop needs a plan and to run `/todd:plan $TICKET` first — an unattended run is exactly the case its Behavior Spec is for, since there's nobody around to resolve an ambiguous "handle the edge case". `/todd:coder plan $TICKET` or a linked Notion doc also work. Don't offer to plan it here — planning wants Todd's eyes, and that's the whole reason this command takes a *planned* ticket.
 
 **Find or make the worktree.** `WT_ROOT=$HOME/dscout-wt`, and the conventional path is `$WT_ROOT/<ticket-lowercased>`.
 
@@ -93,6 +93,8 @@ Its prompt needs to work cold:
 | `fatal` | Stop and report `BLOCKERS` verbatim. |
 
 If `TESTS` shows failures, treat it as `fatal` regardless of what `STATUS` claims. A red tree does not get a PR.
+
+If the plan had a Behavior Spec, `SCENARIOS` says how many landed. A skipped scenario isn't fatal on its own — the impl agent has to give a reason for each — but carry the count and the reasons into the final report. "11/11 green" and "9/11, two skipped as already-covered" describe very different PRs, and only one of them is finished.
 
 ---
 
@@ -190,7 +192,7 @@ Keep it short:
 
 - Ticket, PR URL, current state (ready / draft), and whether CI is green.
 - One line per phase: what changed. Self-review findings fixed vs dropped, baz rounds run, threads addressed vs declined.
-- **Anything still open** — unanswered threads, skipped findings, a red check, the round cap. This is the part Todd actually reads.
+- **Anything still open** — unanswered threads, skipped findings, skipped Behavior Spec scenarios and why, a red check, the round cap. This is the part Todd actually reads.
 
 ---
 
@@ -206,7 +208,7 @@ Keep it short:
 
 | Failure | Do |
 |---|---|
-| No plan found | Stop. Point at `/todd:coder plan $TICKET`. |
+| No plan found | Stop. Point at `/todd:plan $TICKET` (or `/todd:coder plan` for something small). |
 | `start-ticket.sh` fails | Stop with its stderr — usually `linctl` auth or a branch that already exists. |
 | Impl returns `fatal` | Stop, report `BLOCKERS`. Worktree and commits survive for a `--resume impl`. |
 | Push rejected | Someone else moved the branch. Stop — don't force. |

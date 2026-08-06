@@ -1,0 +1,335 @@
+#!/usr/bin/env bash
+#
+# loop-pr-review-queue — run `pr-review-queue` every N minutes, forever.
+#
+#   loop-pr-review-queue          # every 15 minutes
+#   loop-pr-review-queue 30       # every 30 minutes
+#   loop-pr-review-queue 90s      # every 90 seconds
+#   loop-pr-review-queue 2h       # every 2 hours
+#
+# READ THIS BEFORE STARTING ONE. `pr-review-queue` doesn't print a queue — it
+# launches a background review agent per PR, and the command it launches is
+# bare `/todd:pr_review`, the POSTING mode. Each agent submits its review to
+# GitHub on its own. So this loop reviews and publishes on other people's PRs,
+# unattended, every N minutes, until you stop it. That is what it's for, but
+# it isn't a dry run and there's no undo short of deleting the reviews.
+#
+# The read-first loop passes the flag through to the child:
+#
+#   loop-pr-review-queue 30 -c '/todd:pr_review --html'
+#
+# Every argument after the interval goes straight to `pr-review-queue`, so
+# `-d`, `-v`, `-n 3`, `-r owner/name` all work. The interval has to come first;
+# anything else in that slot is treated as a child argument and you get the
+# 15-minute default.
+#
+# Two things about `pr-review-queue` are what make looping safe rather than a
+# way to review the same PR twelve times an hour:
+#
+#   - `review-requested:@me` is self-cleaning. GitHub drops you from the
+#     requested reviewers the moment a review is submitted, so a PR the last
+#     tick reviewed is simply not in the next tick's queue.
+#   - In-flight suppression. A PR a live `claude --bg` agent is still working
+#     on is left out, so a review that takes longer than the interval doesn't
+#     get a second agent thrown at it.
+#
+# Neither of those protects you from running two loops at once — they'd both
+# pass the in-flight check in the same second and both launch. Hence the
+# single-instance lock below; `--no-lock` turns it off if you know why you
+# want two.
+#
+# A failing run does not stop the loop: a `gh` blip, a rate limit, one agent
+# that wouldn't start — the next tick tries again. Two exceptions, both cases
+# where continuing is just noise:
+#
+#   - A usage error from the child (exit 2, e.g. a misspelled flag) stops
+#     immediately. That is never going to start working on its own.
+#   - N consecutive failures stops (default 5, `--max-failures 0` to never
+#     give up). This is the one that matters when you're asleep: expired
+#     `gh` auth otherwise fails quietly ninety-six times overnight.
+#
+# stdout carries only what the child puts there — the `claude --bg ...` command
+# lines. Every banner, countdown, and error this script writes goes to stderr,
+# so `loop-pr-review-queue 15 -p >> queue.log` still logs just the lines.
+#
+# Stop it with Ctrl-C, or `kill` it if you backgrounded it; either prints a
+# run tally on the way out. SIGTERM is handled during the sleep too, so a
+# detached loop shuts down at once instead of at the end of the interval.
+
+set -euo pipefail
+
+DEFAULT_INTERVAL="15m"
+MAX_FAILURES=5
+USE_LOCK=true
+
+# Overridable so the loop can be exercised against a stub child on a one-second
+# interval — same testing-hook convention pr-review-queue uses for its
+# PR_REVIEW_QUEUE_* variables. MIN_INTERVAL is a floor, not a default: without
+# it a fat-fingered `loop-pr-review-queue 0` spins as fast as GitHub answers.
+QUEUE_BIN="${LOOP_PR_REVIEW_QUEUE_BIN:-}"
+MIN_INTERVAL_SECS="${LOOP_PR_REVIEW_QUEUE_MIN_INTERVAL:-30}"
+LOCK_DIR="${LOOP_PR_REVIEW_QUEUE_LOCK:-${TMPDIR:-/tmp}/loop-pr-review-queue.lock}"
+
+usage() {
+  cat <<'EOF'
+Usage: loop-pr-review-queue [INTERVAL] [pr-review-queue args...]
+
+Runs pr-review-queue immediately, then again every INTERVAL, until you stop it.
+
+INTERVAL
+  A bare number is minutes: `20` means every 20 minutes. Suffixes work too --
+  `90s`, `20m`, `2h`. Default: 15m. It must be the first argument.
+
+Options (everything else is passed through to pr-review-queue)
+      --max-failures N   Stop after N runs fail in a row (default: 5).
+                         0 never gives up. A single failure never stops the
+                         loop; a usage error from the child always does.
+      --no-lock          Skip the single-instance check. Two loops running at
+                         once can both launch a review on the same PR, and
+                         both will post it.
+  -h, --help             Show this help
+
+Examples
+  loop-pr-review-queue                          # every 15m, reviews and POSTS
+  loop-pr-review-queue 30                       # every 30m
+  loop-pr-review-queue 30 -c '/todd:pr_review --html'   # render locally, post nothing
+  loop-pr-review-queue 10 -d -v                 # skip drafts, show each PR
+  loop-pr-review-queue 60 -n 3                  # hourly, 3 most recent only
+  nohup loop-pr-review-queue 15 > /dev/null 2> ~/pr-loop.log &   # detached
+  claude agents                                 # check on what it started
+EOF
+}
+
+die() { echo "loop-pr-review-queue: $*" >&2; exit 2; }
+
+need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
+
+# --- argument parsing ---------------------------------------------------------
+#
+# Only the first positional is ours, and only if it looks like an interval.
+# Everything else — including flags we don't recognize — belongs to the child,
+# so `loop-pr-review-queue -d` is a 15-minute loop that skips drafts rather
+# than an error about an unknown option.
+
+INTERVAL_RAW=""
+QUEUE_ARGS=()
+
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    [0-9]*)    INTERVAL_RAW="$1"; shift ;;
+  esac
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)      usage; exit 0 ;;
+    --max-failures) need_value "$@"; MAX_FAILURES="$2"; shift 2 ;;
+    --no-lock)      USE_LOCK=false; shift ;;
+    --)             shift; QUEUE_ARGS+=("$@"); break ;;
+    *)              QUEUE_ARGS+=("$1"); shift ;;
+  esac
+done
+
+[[ "$MAX_FAILURES" =~ ^[0-9]+$ ]] || die "--max-failures must be a number (got '$MAX_FAILURES')"
+
+# Minutes when there's no suffix, because that's the unit the loop is described
+# in. The suffixes exist so `90s` during testing and `2h` for a slow sweep
+# don't need mental arithmetic.
+parse_interval() {
+  local raw="$1" num unit
+  [[ "$raw" =~ ^([0-9]+)([smh]?)$ ]] || return 1
+  num="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]:-m}"
+  case "$unit" in
+    s) printf '%s' "$num" ;;
+    m) printf '%s' $(( num * 60 )) ;;
+    h) printf '%s' $(( num * 3600 )) ;;
+  esac
+}
+
+INTERVAL_SECS="$(parse_interval "${INTERVAL_RAW:-$DEFAULT_INTERVAL}")" ||
+  die "interval must be a number, optionally with s/m/h (got '$INTERVAL_RAW')"
+
+if (( INTERVAL_SECS < MIN_INTERVAL_SECS )); then
+  die "interval ${INTERVAL_RAW} is under the ${MIN_INTERVAL_SECS}s floor — that's fast enough to hammer GitHub and spawn agents in a tight loop"
+fi
+
+# --- locating the child -------------------------------------------------------
+#
+# Sibling first: these two scripts travel together, and ~/.claude/scripts holds
+# a symlink to each, so dirname of $0 finds pr-review-queue whether you ran the
+# symlink or the file in ~/.dotfiles. PATH is the fallback for the case where
+# only one of them is installed somewhere odd.
+
+if [[ -z "$QUEUE_BIN" ]]; then
+  self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -x "$self_dir/pr-review-queue" ]]; then
+    QUEUE_BIN="$self_dir/pr-review-queue"
+  elif command -v pr-review-queue >/dev/null 2>&1; then
+    QUEUE_BIN="$(command -v pr-review-queue)"
+  else
+    die "can't find pr-review-queue next to this script or on PATH"
+  fi
+fi
+
+[[ -x "$QUEUE_BIN" ]] || die "'$QUEUE_BIN' isn't executable"
+
+# --- single-instance lock -----------------------------------------------------
+#
+# `mkdir` is the atomic primitive here — two loops racing to create the same
+# directory, exactly one wins, no flock needed (macOS doesn't ship it).
+#
+# The failure this prevents is specific: two loops tick a second apart, both
+# read `claude agents --json` before the other's agents reach the `working`
+# state, both pass the in-flight filter, and both launch a review on the same
+# PR. Duplicate reviews land on someone else's PR and there's no undo.
+#
+# A lock whose owner is gone is cleared rather than reported — a crashed loop
+# shouldn't need manual cleanup before you can start another.
+
+LOCK_HELD=false
+
+acquire_lock() {
+  local owner
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    LOCK_HELD=true
+    echo "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+
+  owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null; then
+    echo "loop-pr-review-queue: another loop is already running (pid $owner)." >&2
+    echo "loop-pr-review-queue: two loops can post duplicate reviews to the same PR." >&2
+    echo "loop-pr-review-queue: stop it, or pass --no-lock if you meant to run both." >&2
+    exit 1
+  fi
+
+  echo "loop-pr-review-queue: clearing a stale lock at $LOCK_DIR (owner ${owner:-unknown} is gone)." >&2
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR" 2>/dev/null || die "couldn't take the lock at $LOCK_DIR"
+  LOCK_HELD=true
+  echo "$$" > "$LOCK_DIR/pid"
+}
+
+release_lock() {
+  # Only ever remove a lock this process created, so the losing side of a race
+  # can't delete the winner's.
+  if [[ "$LOCK_HELD" == true ]]; then
+    rm -rf "$LOCK_DIR"
+    LOCK_HELD=false
+  fi
+}
+
+trap release_lock EXIT
+
+if [[ "$USE_LOCK" == true ]]; then
+  acquire_lock
+fi
+
+# --- formatting helpers -------------------------------------------------------
+
+# 45s, 15m, 1m 30s, 1h 30m — the interval read back the way you'd say it.
+# Remainders are shown rather than floored, so `90s` doesn't echo back as the
+# "1m" it isn't. Seconds are dropped once there's an hour on the clock, where
+# they stop being worth the noise.
+human_interval() {
+  local secs=$1 h m s
+  h=$(( secs / 3600 ))
+  m=$(( secs % 3600 / 60 ))
+  s=$(( secs % 60 ))
+  if   (( h > 0 && m > 0 )); then printf '%dh %dm' "$h" "$m"
+  elif (( h > 0 ));          then printf '%dh' "$h"
+  elif (( m > 0 && s > 0 )); then printf '%dm %ds' "$m" "$s"
+  elif (( m > 0 ));          then printf '%dm' "$m"
+  else                            printf '%ds' "$s"
+  fi
+}
+
+# BSD `date -r`, GNU `date -d @` — the dotfiles land on Linux too.
+clock_at() {
+  local epoch=$1
+  date -r "$epoch" '+%H:%M:%S' 2>/dev/null ||
+    date -d "@$epoch" '+%H:%M:%S' 2>/dev/null ||
+    printf '??:??:??'
+}
+
+# --- the loop -----------------------------------------------------------------
+
+RUNS=0
+OK=0
+FAILED=0
+CONSECUTIVE=0
+SLEEP_PID=""
+
+summary() {
+  printf 'loop-pr-review-queue: %d run(s) — %d ok, %d failed.\n' "$RUNS" "$OK" "$FAILED" >&2
+}
+
+on_signal() {
+  # Killing the sleep is what makes this prompt. bash won't run a trap while a
+  # foreground child is running, so a plain `sleep 900` would swallow SIGTERM
+  # for up to fifteen minutes; the loop backgrounds it and waits instead.
+  if [[ -n "$SLEEP_PID" ]]; then
+    kill "$SLEEP_PID" 2>/dev/null || true
+  fi
+  echo >&2
+  echo "loop-pr-review-queue: stopping." >&2
+  summary
+  release_lock
+  exit 0
+}
+
+trap on_signal INT TERM
+
+echo "loop-pr-review-queue: running '$(basename "$QUEUE_BIN")${QUEUE_ARGS[*]+ ${QUEUE_ARGS[*]}}' every $(human_interval "$INTERVAL_SECS"). Ctrl-C to stop." >&2
+
+while true; do
+  RUNS=$(( RUNS + 1 ))
+  echo >&2
+  printf 'loop-pr-review-queue: run %d — %s\n' "$RUNS" "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+
+  # `${ARR[@]+"${ARR[@]}"}` rather than a bare `"${ARR[@]}"`: under `set -u`,
+  # bash 3.2 (what a fresh Mac has before Homebrew) treats an empty array
+  # expansion as an unbound variable and dies. This form is empty-safe there.
+  rc=0
+  "$QUEUE_BIN" ${QUEUE_ARGS[@]+"${QUEUE_ARGS[@]}"} || rc=$?
+
+  if (( rc == 0 )); then
+    OK=$(( OK + 1 ))
+    CONSECUTIVE=0
+  else
+    FAILED=$(( FAILED + 1 ))
+    CONSECUTIVE=$(( CONSECUTIVE + 1 ))
+
+    # Exit 2 is pr-review-queue's `die` — a bad flag or a malformed value. It
+    # will fail identically forever, so retrying it every interval is just a
+    # way to fill a log.
+    if (( rc == 2 )); then
+      echo "loop-pr-review-queue: pr-review-queue rejected its arguments (exit 2) — that won't fix itself." >&2
+      summary
+      exit 2
+    fi
+
+    printf 'loop-pr-review-queue: run %d failed (exit %d) — %d in a row.\n' \
+      "$RUNS" "$rc" "$CONSECUTIVE" >&2
+
+    if (( MAX_FAILURES > 0 && CONSECUTIVE >= MAX_FAILURES )); then
+      echo "loop-pr-review-queue: $CONSECUTIVE consecutive failures — giving up." >&2
+      echo "loop-pr-review-queue: check 'gh auth status' and that 'claude' is on PATH." >&2
+      summary
+      exit 1
+    fi
+  fi
+
+  printf 'loop-pr-review-queue: next run at %s (in %s).\n' \
+    "$(clock_at $(( $(date +%s) + INTERVAL_SECS )))" \
+    "$(human_interval "$INTERVAL_SECS")" >&2
+
+  sleep "$INTERVAL_SECS" &
+  SLEEP_PID=$!
+  # `wait` is interruptible by a trapped signal; a foreground `sleep` is not.
+  wait "$SLEEP_PID" 2>/dev/null || true
+  SLEEP_PID=""
+done

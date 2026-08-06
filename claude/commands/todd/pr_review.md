@@ -39,7 +39,9 @@ Three modes. Each row is the complete list of what that run produces — nothing
 
 **Post mode is the default because the copy-the-command-out-of-the-HTML step was pure friction.** The HTML render is also the most expensive step in this command (a big PR can take ~25 minutes on its own), so a run nobody is going to open shouldn't pay for it.
 
-**The two batch surfaces stay in HTML mode on purpose.** `/todd:open-prs` and the `pr-review-queue` script both fan out reviews across *other people's* PRs, so they pass `--html` explicitly and Todd decides per PR what to submit. If you're editing either one, don't "simplify" the flag away.
+**`/todd:open-prs` stays in HTML mode on purpose.** It fans out reviews across *other people's* PRs and stops before posting, so it passes `--html` explicitly and Todd decides per PR what to submit. If you're editing it, don't "simplify" the flag away.
+
+**`pr-review-queue` is the opposite, deliberately (2026-08-05, Todd's call).** It launches a `claude --bg '/todd:pr_review N'` agent per queued PR in the **posting** mode — one invocation reviews and publishes across the whole queue unattended. This file used to say both batch surfaces passed `--html`; that is no longer true, so don't "restore" the flag there. `-c '/todd:pr_review --html'` is that script's read-first escape hatch.
 
 ## Model & Performance Strategy
 
@@ -93,7 +95,7 @@ gh pr diff $ARGUMENTS
 
 `state`, `mergedAt`, and `author` are not decoration — in Post mode they decide what you're allowed to send:
 
-- **`state != "OPEN"`** — the PR is already merged or closed. Say so in the first line of your output and force `event: "COMMENT"`. A `REQUEST_CHANGES` on merged code is noise, and an `APPROVE` is a lie. The run becomes a post-merge note.
+- **`state != "OPEN"`** — the PR is already merged or closed. Say so in the first line of your output and force `event: "COMMENT"`. A `REQUEST_CHANGES` on merged code is noise, and an `APPROVE` is a lie. The run becomes a post-merge note — and a post-merge note is **body-only**: drop `comments[]` entirely and fold every finding into the body as `path/file.ext:L##` references. Inline threads on merged code are near-dead; nobody actions them, and they still cost the author a resolve. Say plainly in your final response that the actionable output here is a follow-up ticket, not a review.
 - **`author.login` is the authenticated user** (`gh api user -q .login`) — this is Todd's own PR. Force `event: "COMMENT"`; GitHub 422s any attempt to approve or request changes on your own PR.
 
 Both checks are re-stated as preflight gates in Step 7c, because that's where they bite.
@@ -567,21 +569,47 @@ This posts everything atomically — body + every inline comment as one review e
 
 #### What goes inline vs. top-level body
 
-**Inline (`comments[]` entry)** — anything that points to a specific file:line:
-- Phase 2 self-answered questions where the question cites a file path + line range. The inline body is the sub-agent's **Answer**, verbatim, with no bold header and no "How I checked" section — see "Inline comment body structure" below for the exact shape and real examples of what Todd actually posts.
-- Phase 3 non-blocking notes that cite a specific file:line.
-- Context observations grounding a fact about a specific line ("dropping this check is not a regression because `models/base.py:467` enforces it").
-- Positive callouts that praise a specific line/file pattern.
+**The inline test — apply this before writing any `comments[]` entry.**
 
-**Top-level `body`** — PR-wide or unanchorable content:
+An inline comment is a **request for a change.** It obligates the author to write a reply *and* resolve
+a thread. A body bullet obligates nothing. So the question isn't "does this cite a file:line" — it's
+*"do I want something changed here?"*
+
+If your own conclusion is **"no action needed"**, **"leaving this as-is"**, **"just so you know"**, or
+**"this is correct"** — it is **not** an inline comment, however precise the anchor. It goes in the body
+with a `path/file.ext:L##` reference.
+
+> Why this rule exists, measured: across 425 posted comments, **25** drew a reply quoting Todd's own
+> conclusion back at him ("leaving this as-is per your own call here. No code change") and **16** existed
+> only to confirm something was fine ("thanks for the independent verification"). Forty-one threads, each
+> costing the author a written reply and a resolve click, for zero code change. Meanwhile **23%** of all
+> threads drew no reply at all — concentrated on exactly the PRs that got the most comments.
+
+**Inline (`comments[]` entry)** — a specific file:line *and* something you want changed or answered:
+- Phase 2 self-answered questions where the question cites a file path + line range **and** the answer
+  could plausibly change the code. The inline body is the sub-agent's **Answer**, verbatim, with no bold
+  header and no "How I checked" section — see "Inline comment body structure" below.
+- Phase 3 non-blocking notes that cite a specific file:line **and** propose a concrete change. A
+  non-blocking note whose disposition is already "keep it" fails the inline test — body.
+- Context observations that correct a claim about a specific line, where being wrong would change what
+  the author does next.
+
+**Budget: at most 8 inline comments.** Past 8, rank by whether a reply could change the code and demote
+the rest into the body. This is enforced mechanically in Step 7c's payload lint, so don't treat it as a
+suggestion. A review with 20 inline threads does not get 20 answers — it gets triaged. (Worst measured:
+35 inline threads on one PR, then 27, then 23.)
+
+**Top-level `body`** — PR-wide, unanchorable, or no-action content:
+- Positive callouts — **all of them**, including ones about a specific line. Praise doesn't need a
+  resolvable thread; the body's "Positive callouts" section is where it belongs.
+- Any finding that failed the inline test above, carrying its `path/file.ext:L##` reference.
 - Verdict statement (`## VERDICT: **Approve**` / Request Changes / Request Clarification) at the very top of the body.
 - Phase 1 existing-thread replies (so they stay together as a discoverable block — don't try to post them as new inline threads because they'd duplicate the originals).
 - Phase 3 non-blocking notes that span multiple files or describe a PR-wide pattern.
-- Phase 3 positive callouts that span multiple files (e.g. "test maintenance under a tightening contract" affecting 5+ test files).
 - Self-answered question **summaries** that reference where the full answer lives inline ("see inline note on `path/file.py:NN`").
 - The signature line.
 
-When a single finding has both a specific anchor *and* PR-wide relevance, inline it at the anchor and leave a one-line pointer in the body.
+When a single finding has both a specific anchor *and* PR-wide relevance, inline it at the anchor and leave a one-line pointer in the body — provided it passes the inline test.
 
 #### Line anchoring rules (critical — wrong anchors fail the whole API call)
 
@@ -589,7 +617,8 @@ When a single finding has both a specific anchor *and* PR-wide relevance, inline
 - **The line must be in the PR's diff** — added, modified, or within a 3-line context window of a hunk. Lines unchanged and outside any hunk's context will be rejected.
 - **`side: "RIGHT"`** for added/modified lines (default). Only use `"LEFT"` to comment on a removed line by its old-file line number, and only if the removed line is still surfaceable on the diff.
 - **Multi-line concerns** — pick a single representative line (the API supports `start_line` + `line` for ranges, but single-line + a body that references the range is simpler and equally readable).
-- **Pre-existing review threads** — don't try to reply via the reviews API. Either (a) leave the reply in the top-level body as a "Thread reply" block, or (b) open a fresh inline comment at the same `line` (creates a parallel thread — only do this if your reply adds load-bearing new info that deserves its own discussion).
+- **Pre-existing review threads** — don't try to reply via the reviews API. Either (a) leave the reply in the top-level body as a "Thread reply" block, or (b) open a fresh inline comment at the same `line` (creates a parallel thread — only do this if your reply adds new information that gates a decision and deserves its own discussion).
+- **`baz-reviewer` threads are a dead letter for prose.** Replying into one does not correct baz and does not train it — it earns a canned *"I can only save feedback to memory for specific code review findings, not general feedback or PR-level discussion."* That fired **8 times** in a single week against carefully-traced rebuttals. So when the disposition is "baz is wrong", keep the in-thread reply to **one line** for the human author's benefit, and put the actual reasoning in your own review body under "Existing thread replies", where a human reads it.
 
 #### When in doubt
 
@@ -851,16 +880,57 @@ Run these before posting. None of them is a reason to stop and ask — each one 
 ```bash
 ME=$(gh api user -q .login)
 HEAD_SHA=$(gh pr view <N> --json headRefOid -q .headRefOid)
-# Already-posted guard: did I review this exact commit before?
-gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews \
-  --jq "[.[] | select(.user.login == \"$ME\" and .commit_id == \"$HEAD_SHA\")] | length"
+P="$HOME/Downloads/pr-<N>-review.json"
+
+# Content fingerprint of what we're about to post — body + the sorted anchor set.
+FP=$(jq -S '{body, anchors: ([.comments[] | "\(.path):\(.line)"] | sort)}' "$P" \
+       | shasum -a 256 | cut -c1-16)
+
+# Post lock. mkdir is atomic — exactly one concurrent run wins it.
+LOCK="$HOME/Downloads/.pr-<N>-review.lock"
+# Break a stale lock left by a crashed run (older than 30 minutes).
+if [ -d "$LOCK" ] && [ -z "$(find "$LOCK" -maxdepth 0 -mmin -30 2>/dev/null)" ]; then
+  rmdir "$LOCK" 2>/dev/null
+fi
+if ! mkdir "$LOCK" 2>/dev/null; then
+  echo "ANOTHER RUN HOLDS THE POST LOCK for PR <N> — not posting"; exit 0
+fi
+
+# Already-posted guard, part 1: did I review this exact commit before?
+# --paginate is MANDATORY. See the warning below.
+gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews --paginate \
+  --jq ".[] | select(.user.login == \"$ME\") | .commit_id" \
+  | grep -qx "$HEAD_SHA" && echo "DUPLICATE: already reviewed $HEAD_SHA"
+
+# Already-posted guard, part 2: have I posted this exact content before,
+# even against a different commit?
+MARKER="$HOME/Downloads/pr-<N>-review.posted"
+test -f "$MARKER" && grep -q "$FP" "$MARKER" && echo "DUPLICATE: content $FP already posted"
 ```
+
+> **The lock does not auto-release, and that's deliberate.** Shell variables and `trap` handlers do
+> **not** survive between Bash tool calls — a `trap 'rmdir' EXIT` here would fire at the end of *this*
+> call, freeing the lock before you ever reach the POST, which is worse than no lock because it looks
+> protective. So release it with an explicit `rmdir "$HOME/Downloads/.pr-<N>-review.lock"` after the
+> POST succeeds, **and on every path that abandons the post** (duplicate detected, anchor validation
+> unrecoverable, payload lint can't be satisfied, auth failure). The 30-minute staleness break above is
+> the safety net for a run that dies before it can clean up. For the same reason, don't expect `$FP`,
+> `$ME`, or `$HEAD_SHA` to still be set later in this step — recompute what you need.
+
+> **`--paginate` is not optional here.** `/pulls/<N>/reviews` returns **30 per page, oldest
+> first**. Page 1 of an active PR is its *oldest* 30 reviews, so the newest review is never in it
+> and an unpaginated guard is structurally unable to fire. Measured on PR #27643 (69 reviews):
+> a real Todd review of commit `3b1306ab` returns `0` unpaginated and `1` with `--paginate`.
+> This is the common case, not an edge — 31 of 61 recently-reviewed PRs carry 25+ review events
+> (#27722 has 93). When this guard failed on PR #27568, the same 3,165-char review posted **4×**
+> in 53 minutes and cost the author **18** "duplicate review" replies.
 
 | Check | Condition | Action |
 |-------|-----------|--------|
-| **PR state** (from Step 1) | `state != "OPEN"` | Force `event: "COMMENT"`, post it as a post-merge note, and lead your final response with the fact that the PR is already closed/merged. |
+| **PR state** (from Step 1) | `state != "OPEN"` | Post **body-only**: drop `comments[]` entirely, fold every finding into the body as `path/file.ext:L##` references, and force `event: "COMMENT"`. Lead your final response with the fact that the PR is already closed/merged, and that the actionable output is a follow-up ticket rather than a review. |
 | **Self-authored** | PR `author.login` == `$ME` | Force `event: "COMMENT"`. GitHub 422s `APPROVE`/`REQUEST_CHANGES` on your own PR. Keep the body and every inline comment exactly as written — only the event changes. |
-| **Duplicate** | the count above is `> 0` | **Don't post.** You already reviewed this commit. Report the existing review's URL and the fresh JSON path, and stop. Re-posting spams the author with a second identical review. |
+| **Duplicate** | either guard above printed `DUPLICATE` | **Don't post.** Report the existing review's URL and the fresh JSON path, and stop. Re-posting spams the author with a second identical review. |
+| **Lock** | `mkdir` failed | **Don't post.** Another run owns this PR. Say so and stop — do not wait and retry; the run that holds the lock is posting the same findings. |
 
 When a check forces `event` down to `COMMENT`, rewrite the `event` field in the payload file before posting so the artifact matches what was actually sent — and say which check forced it.
 
@@ -914,16 +984,76 @@ Never drop a finding to make the POST succeed.
 
 Empty output means every anchor resolves and you can post.
 
-#### Post it
+#### Payload lint — the noise gate, run right here
+
+The routing and length rules in "Comment Quality Guidelines" don't survive a long run on their own.
+Measured over 425 real posted comments: the median was **127 words** against a stated ~120-word bar,
+**56% were over it**, and **46% self-labeled `NON-BLOCKING`** against 2.4% blocking. Prose 300 lines
+up doesn't bind; a `jq` check against the payload does. So enforce them here, beside the anchor check.
 
 ```bash
-gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews \
-  --method POST \
-  --input "$HOME/Downloads/pr-<N>-review.json" \
-  --jq '.html_url'
+P="$HOME/Downloads/pr-<N>-review.json"
+
+# a. Inline budget.
+jq '.comments | length' "$P"
+
+# b. Per-comment length.
+jq -r '.comments[] | select((.body | split(" ") | length) > 120)
+       | "TOO LONG (\(.body | split(" ") | length)w): \(.path):\(.line)"' "$P"
+
+# c. Comments that read like praise, confirmation, or a heads-up rather than a request.
+#    Pattern set derived from 412 real posted comments — not guessed. See the note below.
+jq -r --arg rx '^(nice\b|worth (noting|saying|knowing|naming|flagging)|heads.?up|context for whoever|re-?confirming|verified |checked this|this is the good kind|this is genuinely right|this is the test i|keep the |leaving )|rather than a change request|for whoever reads this later|no action needed|leaving (this|it) as-?is|just so you know|nothing to (do|change)|keep (this|it) as is|not worth (code|a change)|is inert\b|harmless\b' \
+  '.comments[] | select(.body | test($rx; "i")) | "RE-APPLY THE INLINE TEST: \(.path):\(.line)"' "$P"
+```
+
+| Check | Threshold | Action |
+|-------|-----------|--------|
+| **(a) count** | `> 8` | Rank the comments by whether a reply could plausibly change the code, keep the top 8 inline, demote the rest into the body. Re-lint. |
+| **(b) length** | any output | Rewrite those bodies down. An over-length comment is almost always smuggling in the "How I checked" evidence layer — cut that, not the point. Re-lint. |
+| **(c) not a request** | any output | Re-read that comment and apply the inline test honestly. If it's praise, a confirmation, or a heads-up, move it into the body verbatim with a `path/file.ext:L##` reference. If it genuinely asks for a change, keep it inline. Re-lint. |
+
+Same contract as the anchor check: **demote, never delete.** Shedding a finding to get the payload
+under budget is worse than a long review. And re-lint after each pass — demoting for (c) can bring
+you under the (a) budget, which may un-demote something more useful.
+
+> **(c) is a prompt to reconsider, not a verdict** — unlike (a) and (b), which are hard thresholds. Its
+> pattern set was tuned against 412 real posted comments: it catches **14 of the 23** whose replies
+> proved no action was wanted, at **6 false positives out of 132** genuine change requests, flagging
+> ~18% of comments overall. So expect roughly one in twelve flags to be a real request you should keep
+> inline — that's cheap, and the alternative was measured: a plausible-looking guessed pattern set
+> ("no action needed", "leaving this as-is") caught only **4 of 23**. If you extend this regex, extend
+> it from comments that actually drew a "no change needed" reply, not from phrasing that sounds right.
+
+#### Post it
+
+**Re-run the duplicate guard from the preflight one more time, immediately before this POST.** Not as
+ceremony: the anchor validation and payload lint above take long enough for a parallel run — or Todd
+in another terminal — to land the same review in between. The preflight check is stale by the time you
+get here. If it now says `DUPLICATE`, stop and report, same as before.
+
+```bash
+P="$HOME/Downloads/pr-<N>-review.json"
+
+# Recompute the fingerprint — shell state from the preflight call is gone.
+FP=$(jq -S '{body, anchors: ([.comments[] | "\(.path):\(.line)"] | sort)}' "$P" \
+       | shasum -a 256 | cut -c1-16)
+
+URL=$(gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews \
+  --method POST --input "$P" --jq '.html_url')
+
+# Record what landed, so a later run recognizes its own content even after the commit moves.
+printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$FP" "$URL" >> "$HOME/Downloads/pr-<N>-review.posted"
+
+# Release the post lock — nothing else will.
+rmdir "$HOME/Downloads/.pr-<N>-review.lock" 2>/dev/null
+echo "$URL"
 ```
 
 `<OWNER>/<REPO>` comes from `gh pr view <N> --json url -q .url` (parse the URL) — don't hardcode `dscout/dscout`, forks exist. Capture the returned `html_url`; it's what you report in 7d.
+
+Writing the marker is part of posting, not bookkeeping — it's the only guard that survives across
+separate invocations once the head commit has moved.
 
 The whole payload posts atomically: body, event, and every inline comment as one review event. If one anchor is invalid, GitHub rejects the entire request, so a half-posted review isn't a state you can land in.
 
@@ -941,6 +1071,16 @@ validation and your POST. Bounded recovery, **one attempt**:
 If the retry also fails, stop. Report the error verbatim, the JSON path, and the fact that nothing was posted. Do not strip comments one at a time until something sticks — silently shedding findings to force a green POST is worse than a failed run Todd can see.
 
 Any other failure (auth, 404, network) — report it and stop. Don't fall back to a body-only review; that quietly discards every inline finding.
+
+**On every one of these abort paths, release the post lock before you stop:**
+
+```bash
+rmdir "$HOME/Downloads/.pr-<N>-review.lock" 2>/dev/null
+```
+
+Leaving it held blocks the next legitimate run for 30 minutes until the staleness break clears it. Do
+*not* write the `.posted` marker on an abort — the marker means "this content landed on GitHub," and a
+run that recorded a post it never made would suppress the retry.
 
 ### 7d. Final response
 
