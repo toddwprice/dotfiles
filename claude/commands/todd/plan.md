@@ -29,7 +29,7 @@ more than it saves. Use this for anything an agent will implement unattended.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--dry-run` | off | Print the full plan in chat. Post nothing to Linear. Still writes the local copy. |
-| `--no-gherkin` | off | Human plan only, coder's format, no Behavior Spec. Skips **Phase 4 only** — every other phase still runs, including Phase 6, so the plan still gets posted. Escape hatch for a trivial ticket. |
+| `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail and drops the coverage table, the Gherkin block, and `Not covered`. Every phase still runs, including Phase 6, so the plan still gets posted. Escape hatch for a trivial ticket. |
 
 No ticket id → show usage and stop. First word isn't a ticket id → this is the wrong tool; say so
 and stop rather than improvising.
@@ -51,9 +51,17 @@ So:
 
 - The comment's first line is `## 📋 Implementation Plan`. Not "Plan", not "📋 Plan", not a
   preamble above it.
-- The Behavior Spec goes **inside that same comment**, below the human plan. One comment, one
-  plan. Two comments means the impl agent reads whichever `list_comments` hands back first and the
-  other one silently does nothing.
+- Everything else goes **inside that same comment**, below the brief — the Behavior Spec and the
+  implementation detail both. One comment, one plan. Two comments means the impl agent reads
+  whichever `list_comments` hands back first and the other one silently does nothing.
+- **Section 2's heading starts with the literal `## 🥒 Behavior Spec` whenever there is Gherkin.**
+  `todd-coder` Impl Mode step 4 and `loop.md` phase 0 both branch on that string to decide whether
+  the Scenarios are the acceptance criteria or the prose is.
+  `## 🥒 Behavior Spec & Implementation Detail` matches. `## Implementation Detail (Behavior Spec)`
+  does not, and would quietly downgrade a spec'd plan to a prose one.
+- **`### Verification` keeps that exact heading wherever it sits.** `todd-coder` Impl Mode step 6
+  sends the implementer to "the plan's `### Verification` block" for any surface outside
+  axon/dendra/astro. Rename it and non-app work loses its verify path entirely.
 - Exactly one plan comment per ticket. See "An existing plan" below.
 
 ⚠️ **You are not the only writer, and the other one doesn't check.** `/todd:coder plan` on a ticket
@@ -66,6 +74,26 @@ unattended: its plan-staleness guard re-plans a stale plan by running `/todd:cod
 Nothing you can fix from here — the guard belongs in `todd-coder`'s Plan Mode step 5, which needs
 this command's find-then-update-in-place logic. What you *can* do is not add to the problem: always
 resolve an existing plan comment through phase 0 before writing.
+
+## Two sections, two readers
+
+One comment, two audiences, and they want opposite things.
+
+| Section | Reader | Job | Budget |
+|---|---|---|---|
+| `## 📋 Implementation Plan` | an architect, reviewing | Decide whether the approach is right | **~200 words. One screen.** |
+| `## 🥒 Behavior Spec & Implementation Detail` | the implementing agent | Build it without guessing | None. Let it be long. |
+
+Section 1 is a **brief, not a document**. Someone reviewing the approach needs six things: what
+changes, why this approach, what's already been decided, what could go wrong, what's still open,
+and how big it is. Every file path, every command, every scenario is detail — it goes below.
+
+The test for any line in section 1: **would an architect change their mind about the approach
+after reading it?** If no, it's detail. Move it down.
+
+**Lean is not short.** Nothing gets deleted to hit the budget — it gets relocated. A brief that
+drops the Verification block instead of moving it has made the plan worse, not leaner. If you're
+cutting rather than moving, you're doing the wrong thing.
 
 ## Environment facts that will bite you
 
@@ -177,32 +205,106 @@ read whole files for this.
 
 ---
 
-## Phase 3 — Write the human plan
+## Phase 3 — Write the architect's brief
 
-Coder's format, unchanged. This is what Todd reads to decide whether the approach is right, so it
-carries the *judgement* — the Behavior Spec carries the *detail*. Don't duplicate the scenarios up
-here in prose.
+Section 1. This is what gets read to decide whether the approach is right, so it carries the
+*judgement* and nothing else — phase 4 carries the detail, the Behavior Spec carries the
+expectations. Six headings, **~200 words all in**. Same in both modes; `--no-gherkin` changes
+nothing here.
 
 ````markdown
 ## 📋 Implementation Plan
 
 ### Summary
-[What the ticket asks for, in your own words. If your reading differs from the ticket's wording, say
-so here — that's the disagreement worth catching before code. A correction to the ticket's proposed
-fix goes here too, in bold, above the approach that supersedes it.]
+[≤3 sentences. What the ticket asks for in your own words, and the shape of your answer. If your
+reading differs from the ticket's wording, say so — that's the disagreement worth catching before
+code. A correction to the ticket's proposed fix goes here too, in bold, above the approach that
+supersedes it.]
 
 ### Changed since the last plan
 <!-- Only when phase 0 replaced an existing plan. Omit the whole section otherwise. -->
-- **[What changed]** — [what the old plan claimed, what's actually true, how you verified it]
+- **[What changed]** — [what the old plan claimed, what's actually true]
 
 ### Decisions
-<!-- Settled calls that shape the design, with who made them and when. Omit if there were none. -->
+<!-- Settled calls that shape the design. One line each, with who made them and when. Omit if none. -->
 - **[The call]** — [why, and what it rules out]. (Todd, YYYY-MM-DD)
 
 ### Approach
-1. [Slice 1 — a vertical path that leaves the tree working]
+1. [Slice 1 — one line. Name the outcome, not the steps. A vertical path that leaves the tree working.]
 2. [Slice 2]
 
+### Risks
+<!-- ≤3, one line each. Omit the section if there genuinely are none. -->
+- [Risk, and what makes it one]
+
+### Questions / Blockers
+- ❓ [Anything still open, including every ungrounded anchor from phase 2. One line, phrased as the
+  question it actually is. Settled calls go in Decisions, not here.]
+
+### Scope
+[Small / Medium / Large] · [N] slices · [N] files ([apps touched]) · [N] deferred
+````
+
+**Slices are the spine.** Number them in `Approach`, because the Behavior Spec tags every Scenario
+with the slice it belongs to and the implementer walks them in order. A slice that no Scenario tags
+is a slice with no acceptance criteria — either it needs one or it isn't really a slice. (Under
+`--no-gherkin` there are no Scenarios to tag, so number the slices anyway and let the prose carry
+the ordering.) One line each: if a slice needs a paragraph to describe, it's two slices.
+
+**`Scope` is one line and it's the blast radius.** The size word alone tells a reviewer nothing.
+The file count and the apps are what makes them look twice — "Small · 2 slices · 14 files (axon,
+dendra, astro)" is a plan worth a second read, and the old `### Estimated Scope` would have said
+"Small" and moved on. Count the files from phase 4's `Files to Modify`. `[N] deferred` is the count
+of ticket requirements marked `⏸️ deferred` in the coverage table; drop that clause at zero, and
+drop it entirely under `--no-gherkin`.
+
+**`Risks` means risk to the approach, not to the implementation.** "This prop rename breaks three
+external Strata consumers" changes whether the approach is right — it belongs here. "Remember the
+factory is called `build(:mission_draft)`" doesn't — that's a note for whoever writes the test, and
+it goes next to the thing it's about in phase 4. Three risks is the cap. A list of five means you
+haven't decided which ones matter.
+
+**Decisions are settled; Questions are open.** Don't leave a resolved call sitting in
+`Questions / Blockers` — an implementer who reads a question stops and asks it. Move it to
+`Decisions` with the reason and the date. A decision that reverses something in the ticket
+description belongs there too, and the `Summary` correction should point at it.
+
+### What does not go in section 1
+
+Every one of these was in the brief before and is now in phase 4. Putting one back is the failure
+mode this split exists to prevent.
+
+| Not here | Where | Why |
+|---|---|---|
+| `### Files to Modify` | phase 4 | An architect judges the approach, not the file list. The count in `Scope` is the part that changes their mind. |
+| `### Existing Code to Reuse` | phase 4 | Reuse is *how* you build it, not *whether* to. |
+| `### Verification` and its `⚠️` line | phase 4 | Commands are for whoever runs them. |
+| A Scenario restated in prose | phase 4 | The Gherkin says it better, and two copies drift. |
+| A gotcha the implementer needs | phase 4, next to the thing it's about | It's a note on the work, not a risk to the approach. |
+| Background on how the code works today | nowhere | It was phase 1 input. It's how you *arrived* at the approach, not part of it. |
+
+---
+
+## Phase 4 — Write the implementation section
+
+Section 2 of the same comment: everything the implementer needs and the architect doesn't. **No
+budget here.** This is where the detail belongs, so let it run as long as the work warrants — the
+brief stayed short precisely so this one can be complete.
+
+The heading, and it matters — see "The contract you must not break":
+
+| Mode | Heading |
+|---|---|
+| default | `## 🥒 Behavior Spec & Implementation Detail` |
+| `--no-gherkin` | `## 🔧 Implementation Detail` |
+
+The first starts with the literal `## 🥒 Behavior Spec`, which is what impl and loop look for. The
+second deliberately doesn't — that absence is how they know this plan's acceptance criteria are
+prose rather than Scenarios. Don't "fix" the inconsistency by giving them the same heading.
+
+### The detail block — both modes, always
+
+````markdown
 ### Files to Modify
 - `path/to/file.ex` — [reason]
 
@@ -214,23 +316,11 @@ fix goes here too, in bold, above the approach that supersedes it.]
 [the exact commands that prove this work, for every surface it touches]
 ```
 ⚠️ [what a green run does NOT prove. Omit the line only if there is genuinely nothing.]
-
-### Risks & Considerations
-- [Risk, and what makes it a risk]
-
-### Questions / Blockers
-- ❓ [Anything still open, including every ungrounded anchor from phase 2. Settled calls go in
-  Decisions, not here.]
-
-### Estimated Scope
-[Small / Medium / Large]
 ````
 
-**Slices are the spine.** Number them in `Approach`, because the Behavior Spec tags every Scenario
-with the slice it belongs to and the implementer walks them in order. A slice that no Scenario tags
-is a slice with no acceptance criteria — either it needs one or it isn't really a slice. (Under
-`--no-gherkin` there are no Scenarios to tag, so number the slices anyway and let the prose carry
-the ordering.)
+This is also where the implementer's gotchas live — the ones phase 3 kept out of `Risks`. Put each
+one next to the thing it's about: a factory's real name under the file that needs it, a fixture's
+quirk under the module it belongs to. A gotcha in a list at the bottom gets read after the mistake.
 
 **Verification is required, and it is not the pre-push checklist.** `/todd:coder impl` knows exactly
 three verify commands — `mix test` for axon, `yarn lint && yarn test` for dendra,
@@ -252,24 +342,15 @@ real from this repo:
 Find one of these and it belongs in the `⚠️` line, because the implementer will otherwise trust a
 green terminal.
 
-**Decisions are settled; Questions are open.** Don't leave a resolved call sitting in
-`Questions / Blockers` — an implementer who reads a question stops and asks it. Move it to
-`Decisions` with the reason and the date. A decision that reverses something in the ticket
-description belongs there too, and the `Summary` correction should point at it.
+**Under `--no-gherkin`, phase 4 ends here.** Continue to phase 5 — the plan still gets
+self-checked, written to disk, and posted. The hard rules and the failure table below apply in
+every mode.
 
-**Under `--no-gherkin`: skip Phase 4, then continue to Phase 5.** Phases 5 and 6 still run — the
-plan still gets self-checked, written to disk, and posted to Linear. The hard rules and the failure
-table below apply in every mode. This flag drops the Behavior Spec, not the rest of the command.
+### The Behavior Spec — skipped under `--no-gherkin`
 
----
-
-## Phase 4 — Write the Behavior Spec
-
-Second top-level section of the same comment:
+Below the detail block, in the same section:
 
 ```markdown
-## 🥒 Behavior Spec
-
 Each Scenario is one required failing test. A slice is not done until every Scenario tagged with it
 is green. `# falsifies:` is the mutation check — if reverting the change doesn't turn that scenario
 red, the test isn't testing the change.
@@ -389,7 +470,7 @@ you chose (a limit of 50, a timeout of 30s) is part of the spec and needs no pin
 
 ### Coverage table
 
-Sits between the human plan and the Gherkin so a reader can check the mapping without reading
+Sits between the detail block and the Gherkin so a reader can check the mapping without reading
 Gherkin. One row per requirement from the ticket:
 
 ```markdown
@@ -434,27 +515,38 @@ Run this against what you wrote. Fix inline; don't report the failures, just fix
 1. Comment's first line is exactly `## 📋 Implementation Plan`. This is the cross-file contract —
    it's the check that matters *most* under `--no-gherkin`, because impl and loop still find the
    plan by that string whether or not it carries a spec.
-2. Every concrete noun you named — module, function, file, factory, config key, error atom —
+2. **Count the words in section 1.** Over ~250 and something in it is detail. Find it against the
+   "What does not go in section 1" table and move it to section 2 — move, never delete.
+3. **Section 1 has only these headings**, in this order: `Summary`, `Changed since the last plan`
+   (conditional), `Decisions`, `Approach`, `Risks`, `Questions / Blockers`, `Scope`. Anything else
+   up there is misfiled. `Summary` is ≤3 sentences, each slice and each risk is one line, `Risks`
+   is ≤3 bullets, and `Scope` is one line.
+4. `### Scope`'s file count matches the number of entries in section 2's `Files to Modify`, and its
+   apps match the paths there. Two numbers that disagree is worse than one number.
+5. Section 2's heading is `## 🥒 Behavior Spec & Implementation Detail`, or
+   `## 🔧 Implementation Detail` under `--no-gherkin`. Not one of them under both.
+6. Every concrete noun you named — module, function, file, factory, config key, error atom —
    traces to a phase-2 anchor. Anything that doesn't is now a blocker, not a claim.
-3. `### Verification` names real commands covering every surface in `Files to Modify`, and says
-   what a green run doesn't prove.
-4. Nothing settled is sitting in `Questions / Blockers`. A resolved call belongs in `Decisions`
+7. `### Verification` exists in section 2 under that exact heading, names real commands covering
+   every surface in `Files to Modify`, and says what a green run doesn't prove.
+8. Nothing settled is sitting in `Questions / Blockers`. A resolved call belongs in `Decisions`
    with its date — left phrased as a question, it reads as a reason to stop.
-5. If phase 0 replaced a plan, `### Changed since the last plan` exists and names each difference.
+9. If phase 0 replaced a plan, `### Changed since the last plan` exists and names each difference.
 
 **Gherkin only — skip these under `--no-gherkin`:**
 
-6. Every requirement in the ticket appears in the coverage table, resolved as a Scenario, a
-   `⏸️ deferred` marker, or a `Questions / Blockers` entry. No empty cells, no dropped rows.
-7. Every Scenario has a `@slice-N` tag, and every slice in `Approach` has at least one Scenario.
-8. Every Scenario has an app-or-area tag, a `# target:`, and a `# falsifies:`.
-9. Every slice has at least one `@negative` or `@boundary` Scenario.
-10. Every measured constant asserted in a `Then` is either derived at runtime or carries a
+10. Every requirement in the ticket appears in the coverage table, resolved as a Scenario, a
+    `⏸️ deferred` marker, or a `Questions / Blockers` entry. No empty cells, no dropped rows.
+11. `Scope`'s deferred count equals the number of `⏸️ deferred` rows in the coverage table.
+12. Every Scenario has a `@slice-N` tag, and every slice in `Approach` has at least one Scenario.
+13. Every Scenario has an app-or-area tag, a `# target:`, and a `# falsifies:`.
+14. Every slice has at least one `@negative` or `@boundary` Scenario.
+15. Every measured constant asserted in a `Then` is either derived at runtime or carries a
     `# pinned:` line naming its source and the date you measured it.
-11. No Scenario has two `When` steps.
-12. No two Scenarios assert the same thing.
-13. Every `And` under a `Then` can fail independently.
-14. `Not covered` is present, and every line in it says what's excluded *and why*. If genuinely
+16. No Scenario has two `When` steps.
+17. No two Scenarios assert the same thing.
+18. Every `And` under a `Then` can fail independently.
+19. `Not covered` is present, and every line in it says what's excluded *and why*. If genuinely
     nothing is out of scope, write that as the single line — an empty section reads as forgotten.
 
 ---
@@ -471,7 +563,7 @@ phase 0 found one. Under `--dry-run`, post nothing and say so plainly.
 
 ```
 FRG-1234 — <ticket title>
-Scope: Medium · 3 slices · 11 scenarios (4 negative/boundary) · 2 blockers
+Scope: Medium · 3 slices · 7 files (axon, dendra) · 11 scenarios (4 negative/boundary) · 2 blockers
 Plan: <linear comment url>
 
 ❓ Blockers
@@ -482,10 +574,14 @@ Slices
 2. ...
 ```
 
+The `Scope:` line is section 1's `### Scope` plus the counts only this report carries — scenarios
+and blockers. Keep the two consistent; a report claiming 7 files over a brief claiming 5 means one
+of them was written from memory.
+
 Under `--no-gherkin` there are no scenario counts to report. Drop them rather than printing zeros —
-the `Scope:` line becomes `Scope: Small · 2 slices · 1 blocker`, the per-slice lines lose their
-scenario counts, and say plainly that this plan has no Behavior Spec so Todd knows which kind of
-run `impl` is about to get.
+the `Scope:` line becomes `Scope: Small · 2 slices · 3 files (astro) · 1 blocker`, the per-slice
+lines lose their scenario counts, and say plainly that this plan has no Behavior Spec so Todd knows
+which kind of run `impl` is about to get.
 
 Then the plan itself. If phase 2 corrected the ticket's premise, **lead with the correction** — it's
 the finding, and a reader who skims past it implements the wrong thing. If the correction was big
@@ -498,6 +594,10 @@ enough that you stopped, that's the whole report.
 - Never invent an anchor. An ungrounded noun is a blocker, not a Given.
 - Never leave more than one `## 📋 Implementation Plan` comment on a ticket.
 - Never change the first line of that comment.
+- Never put implementation detail in section 1. If it names a file path, a command, or a Scenario,
+  it belongs in section 2.
+- Never hit the section-1 budget by deleting. Move it down, every time. The brief is short so the
+  detail can be complete, not instead of it.
 - Never create a worktree or move the ticket's Linear state. Planning is read-mostly; the one write
   is the comment.
 - Never write a Scenario you can't finish the `# falsifies:` line for.
@@ -511,7 +611,7 @@ enough that you stopped, that's the whole report.
 | Linear MCP blocked or truncating | Fall back to `linctl issue get $TICKET --json`. |
 | Multiple existing plan comments | Stop and report. Todd picks. |
 | Ticket premise contradicted by the code | Correct it in bold in `Summary` and keep planning if the plan survives the correction; stop and report only if it doesn't. Never quietly plan around it. |
-| Can't ground more than about half the anchors | The ticket is under-specified. Post the human plan with the blockers and say the Behavior Spec needs answers first. Don't ship a spec built on guesses. |
+| Can't ground more than about half the anchors | The ticket is under-specified. Post the brief and the detail block with the blockers, and say the Behavior Spec needs answers first. Don't ship a spec built on guesses. |
 | `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
 
 Now plan $ARGUMENTS.

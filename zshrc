@@ -84,25 +84,3 @@ alias dc="docker compose"
 # Personal + work zsh config (kept out of the public repo)
 [[ -r ~/.config/zsh/personal.zsh ]] && source ~/.config/zsh/personal.zsh
 [[ -r ~/.config/zsh/dscout.zsh ]]   && source ~/.config/zsh/dscout.zsh
-
-slack-post() {
-    local webhook_url="$SLACK_WEBHOOK_URL"
-    local message=""
-
-    # If data is being piped into the function, read from stdin
-    if [ ! -t 0 ]; then
-        message=$(cat)
-    else
-        # Otherwise, use the first argument or the default message
-        message="${1:-"Hello from the macOS terminal! 🚀"}"
-    fi
-
-    # Escape quotes and backslashes for safe JSON encoding
-    local escaped_message=$(echo "$message" | sed 's/"/\\"/g' | sed 's/\\/\\\\/g')
-
-    curl -s -X POST -H 'Content-type: application/json' \
-        --data "{\"text\":\"$escaped_message\"}" \
-        "$webhook_url"
-
-    echo ""
-}
