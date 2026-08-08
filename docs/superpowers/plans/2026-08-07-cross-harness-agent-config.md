@@ -469,11 +469,19 @@ cd ~/.dotfiles && rcup -v 2>&1 | grep -i 'claude\|/\.ai/' || echo "rcm touched n
 
 Expected: `rcm touched nothing`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Check what's staged, then commit**
+
+`git mv` in Step 3 already staged every rename, and it staged them with the *committed* content — a file carrying an unstaged edit shows as `RM`, with the modification left in the working tree. So there is nothing left to add here, and **no `git add`**: a bare `git add -A` would sweep unrelated working-tree edits into the cutover commit. Confirm that before committing.
 
 ```bash
 cd ~/.dotfiles
-git add -A ai
+git diff --cached --name-status | grep -v '^R' || echo "renames only — good"
+```
+
+Expected: `renames only — good`. Any other line is something you did not mean to commit.
+
+```bash
+cd ~/.dotfiles
 git commit -m "Move the agent config to a harness-neutral ai/ tree
 
 claude/ became ai/, CLAUDE.md became AGENTS.md, and the four Claude-only
