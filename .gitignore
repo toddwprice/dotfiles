@@ -21,3 +21,7 @@ id_rsa
 id_ed25519
 .env
 .env.*
+
+# Python bytecode — cp -R drags this in when vendoring a Python skill
+__pycache__/
+*.pyc
