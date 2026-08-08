@@ -32,7 +32,9 @@ ROWS=(
   "claude/scripts|$HOME/.claude/scripts|$HOME/.claude"
 )
 
-tilde() { printf '%s' "${1/#"$HOME"/\~}"; }
+# The tilde has to come from a variable: bash 3.2 emits an escaped \~
+# literally, and bash 5 tilde-expands a bare ~ back to $HOME.
+tilde() { local t='~'; printf '%s' "${1/#"$HOME"/$t}"; }
 
 status=0
 
