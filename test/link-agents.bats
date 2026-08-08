@@ -63,3 +63,56 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"MISSING"* ]]
 }
+
+@test "--dry-run creates nothing" {
+  run "$SCRIPT" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"link"* ]]
+  [ ! -e "$HOME/.claude/skills" ]
+  [ ! -e "$HOME/.agents" ]
+}
+
+@test "gates codex and opencode rows when those harnesses are absent" {
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"gate"* ]]
+  [ ! -e "$HOME/.codex" ]
+  [ ! -e "$HOME/.config/opencode" ]
+}
+
+@test "links codex rows once ~/.codex exists" {
+  mkdir -p "$HOME/.codex"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$HOME/.codex/prompts")" = "$DOTFILES/ai/commands" ]
+  [ "$(readlink "$HOME/.codex/AGENTS.md")" = "$DOTFILES/ai/AGENTS.md" ]
+}
+
+@test "second run is a no-op and reports ok" {
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok"* ]]
+  [[ "$output" != *"link "* ]]
+}
+
+@test "repoints a symlink that points somewhere else" {
+  mkdir -p "$BATS_TEST_TMPDIR/elsewhere"
+  ln -sfn "$BATS_TEST_TMPDIR/elsewhere" "$HOME/.claude/skills"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repoint"* ]]
+  [ "$(readlink "$HOME/.claude/skills")" = "$DOTFILES/ai/skills" ]
+}
+
+@test "re-linking does not nest a link inside the target directory" {
+  mkdir -p "$BATS_TEST_TMPDIR/elsewhere"
+  ln -sfn "$BATS_TEST_TMPDIR/elsewhere" "$HOME/.claude/skills"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  # Without -n, ln descends into the existing symlink-to-directory and creates
+  # the new link inside it instead of replacing it.
+  [ ! -e "$BATS_TEST_TMPDIR/elsewhere/skills" ]
+  [ "$(readlink "$HOME/.claude/skills")" = "$DOTFILES/ai/skills" ]
+}
