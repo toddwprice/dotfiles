@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# link-agents — symlink the shared agent config into every installed harness.
+#
+# One source tree (ai/) is linked whole into each tool's own location, so a new
+# skill or command is live everywhere the moment it lands in the repo. Rows for
+# harnesses that aren't installed are skipped. Real content is never deleted:
+# a destination holding a real file or directory is refused and reported, and
+# the run exits non-zero so bootstrap.sh fails loudly rather than half-linking.
+
+set -euo pipefail
+
+DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+AI="$DOTFILES/ai"
+
+DRY_RUN=
+[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+
+# source (relative to ai/) | destination | harness root ("" = never gated)
+ROWS=(
+  "skills|$HOME/.claude/skills|$HOME/.claude"
+  "skills|$HOME/.agents/skills|"
+  "commands|$HOME/.claude/commands|$HOME/.claude"
+  "commands|$HOME/.codex/prompts|$HOME/.codex"
+  "commands|$HOME/.config/opencode/commands|$HOME/.config/opencode"
+  "AGENTS.md|$HOME/.claude/CLAUDE.md|$HOME/.claude"
+  "AGENTS.md|$HOME/.codex/AGENTS.md|$HOME/.codex"
+  "AGENTS.md|$HOME/.config/opencode/AGENTS.md|$HOME/.config/opencode"
+  "claude/settings.json|$HOME/.claude/settings.json|$HOME/.claude"
+  "claude/statusline-command.sh|$HOME/.claude/statusline-command.sh|$HOME/.claude"
+  "claude/agents|$HOME/.claude/agents|$HOME/.claude"
+  "claude/scripts|$HOME/.claude/scripts|$HOME/.claude"
+)
+
+tilde() { printf '%s' "${1/#"$HOME"/\~}"; }
+
+status=0
+
+for row in "${ROWS[@]}"; do
+  IFS='|' read -r src dst root <<<"$row"
+  source_path="$AI/$src"
+
+  if [[ -n "$root" && ! -d "$root" ]]; then
+    printf '  %-7s %s (no %s)\n' "gate" "$(tilde "$dst")" "$(tilde "$root")"
+    continue
+  fi
+
+  if [[ ! -e "$source_path" ]]; then
+    printf '  %-7s %s\n' "MISSING" "$(tilde "$source_path")"
+    status=1
+    continue
+  fi
+
+  if [[ -L "$dst" ]]; then
+    if [[ "$(readlink "$dst")" == "$source_path" ]]; then
+      printf '  %-7s %s\n' "ok" "$(tilde "$dst")"
+      continue
+    fi
+    action="repoint"
+  elif [[ -e "$dst" ]]; then
+    printf '  %-7s %s is real content — not touching it\n' "REFUSE" "$(tilde "$dst")"
+    status=1
+    continue
+  else
+    action="link"
+  fi
+
+  printf '  %-7s %s -> %s\n' "$action" "$(tilde "$dst")" "$(tilde "$source_path")"
+  [[ -n "$DRY_RUN" ]] && continue
+
+  mkdir -p "$(dirname "$dst")"
+  # -n so an existing symlink-to-directory is replaced, not descended into.
+  ln -sfn "$source_path" "$dst"
+done
+
+exit "$status"
