@@ -1,2 +1,2 @@
 DOTFILES_DIRS="$HOME/.dotfiles"
-EXCLUDES="*.swp .DS_Store README.md LICENSE Brewfile bootstrap.sh"
+EXCLUDES="*.swp .DS_Store README.md LICENSE Brewfile bootstrap.sh ai docs test"

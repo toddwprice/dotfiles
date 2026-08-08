@@ -1,0 +1,35 @@
+{
+  "eval_id": 0,
+  "eval_name": "pr-creation",
+  "prompt": "I just pushed my branch. Create a PR targeting main with the title 'Fix screen recording loop on Android' and tag it with the 'bug' label. Add alice and bob as reviewers. The body should reference issue #540 so it auto-closes when merged.",
+  "assertions": [
+    {
+      "text": "Uses gh pr create (not gh api or other approach)",
+      "rationale": "The built-in command is the idiomatic way to create PRs"
+    },
+    {
+      "text": "Includes --title with the exact title 'Fix screen recording loop on Android'",
+      "rationale": "User specified an exact title"
+    },
+    {
+      "text": "Includes --label bug (or --labels bug)",
+      "rationale": "User asked for the bug label"
+    },
+    {
+      "text": "Includes --reviewer alice,bob (or --reviewer alice --reviewer bob)",
+      "rationale": "User specified both reviewers"
+    },
+    {
+      "text": "Body contains 'Closes #540' or 'Fixes #540' (GitHub auto-close keywords)",
+      "rationale": "User specifically asked for auto-close on merge — requires GitHub linking keywords"
+    },
+    {
+      "text": "Includes --base main to target the main branch",
+      "rationale": "User said 'targeting main' — should be explicit even if main is default"
+    },
+    {
+      "text": "Mentions that 'Closes' or 'Fixes' in the body is what triggers auto-close",
+      "rationale": "Educational value — the user should understand why this syntax matters"
+    }
+  ]
+}

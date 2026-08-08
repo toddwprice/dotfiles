@@ -1,0 +1,27 @@
+{
+  "eval_id": 1,
+  "eval_name": "ci-debugging",
+  "prompt": "CI is failing on my PR #247. Can you check what's going on? Show me the failing checks and then show me the logs for the failed jobs.",
+  "assertions": [
+    {
+      "text": "Uses gh pr checks 247 (or equivalent) to see check status",
+      "rationale": "First step in CI debugging is seeing which checks failed"
+    },
+    {
+      "text": "Uses gh run view with --log-failed or --log to get failure logs",
+      "rationale": "User asked to see logs for failed jobs — --log-failed is most efficient"
+    },
+    {
+      "text": "Demonstrates a multi-step workflow (not just one command)",
+      "rationale": "CI debugging requires inspecting checks, then drilling into specific failures"
+    },
+    {
+      "text": "Explains how to identify the run ID from the checks output",
+      "rationale": "The bridge between 'checks' and 'run view' requires knowing the run ID"
+    },
+    {
+      "text": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data",
+      "rationale": "JSON output is useful for programmatic inspection of check status"
+    }
+  ]
+}

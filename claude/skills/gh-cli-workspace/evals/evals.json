@@ -1,0 +1,48 @@
+{
+  "skill_name": "gh-cli",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I just pushed my branch. Create a PR targeting main with the title 'Fix screen recording loop on Android' and tag it with the 'bug' label. Add alice and bob as reviewers. The body should reference issue #540 so it auto-closes when merged.",
+      "expected_output": "A correct gh pr create command with --title, --body containing 'Closes #540', --label bug, --reviewer alice,bob, and --base main",
+      "files": [],
+      "assertions": [
+        "Uses gh pr create (not gh api or other approach)",
+        "Includes --title with the exact title 'Fix screen recording loop on Android'",
+        "Includes --label bug (or --labels bug)",
+        "Includes --reviewer alice,bob (or --reviewer alice --reviewer bob)",
+        "Body contains 'Closes #540' or 'Fixes #540' (GitHub auto-close keywords)",
+        "Includes --base main to target the main branch",
+        "Mentions that 'Closes' or 'Fixes' in the body is what triggers auto-close"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "CI is failing on my PR #247. Can you check what's going on? Show me the failing checks and then show me the logs for the failed jobs.",
+      "expected_output": "Uses gh pr checks 247, identifies failures, then uses gh run view with --log-failed to show failed job logs. May also use gh pr view 247 --json statusCheckRollup for structured data.",
+      "files": [],
+      "assertions": [
+        "Uses gh pr checks 247 (or equivalent) to see check status",
+        "Uses gh run view with --log-failed or --log to get failure logs",
+        "Demonstrates a multi-step workflow (not just one command)",
+        "Explains how to identify the run ID from the checks output",
+        "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I need to find all open issues labeled 'bug' in our repo that were created in the last month, and output them as a simple table with issue number, title, and assignee. Then close all the ones that are also labeled 'stale' with a comment saying we're cleaning up old bugs.",
+      "expected_output": "Uses gh issue list with --label bug --state open and appropriate --json/--jq for the table output. Then chains gh issue list --label bug,stale with xargs to gh issue close with --comment.",
+      "files": [],
+      "assertions": [
+        "Uses gh issue list with --label bug and --state open",
+        "Filters by creation date (last month) using --search or --jq",
+        "Uses --json with number, title, and assignees fields",
+        "Uses --jq or column formatting to produce readable table output",
+        "Uses a pipeline (xargs or loop) to close stale issues in bulk",
+        "The close command includes --comment with a cleanup message",
+        "Warns about irreversibility or suggests a dry-run/preview before bulk close"
+      ]
+    }
+  ]
+}

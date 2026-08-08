@@ -1,0 +1,192 @@
+{
+  "metadata": {
+    "skill_name": "gh-cli",
+    "skill_path": "/Users/toddprice/.agents/skills/gh-cli",
+    "executor_model": "claude-opus-4-6",
+    "analyzer_model": "claude-opus-4-6",
+    "timestamp": "2026-04-08T12:00:00Z",
+    "evals_run": [0, 1, 2],
+    "runs_per_configuration": 1
+  },
+
+  "runs": [
+    {
+      "eval_id": 0,
+      "eval_name": "PR Creation",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 82.8,
+        "tokens": 28226,
+        "tool_calls": 6,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "Uses gh pr create (not gh api or other approach)", "passed": true, "evidence": "Primary command is gh pr create with all flags."},
+        {"text": "Includes --title with the exact title 'Fix screen recording loop on Android'", "passed": true, "evidence": "Exact match: --title \"Fix screen recording loop on Android\""},
+        {"text": "Includes --label bug (or --labels bug)", "passed": true, "evidence": "Uses --label bug"},
+        {"text": "Includes --reviewer alice,bob (or --reviewer alice --reviewer bob)", "passed": true, "evidence": "Uses --reviewer alice,bob"},
+        {"text": "Body contains 'Closes #540' or 'Fixes #540' (GitHub auto-close keywords)", "passed": true, "evidence": "Body contains Closes #540 in HEREDOC"},
+        {"text": "Includes --base main to target the main branch", "passed": true, "evidence": "Uses --base main"},
+        {"text": "Mentions that 'Closes' or 'Fixes' in the body is what triggers auto-close", "passed": true, "evidence": "Dedicated explanation section about auto-close keywords"}
+      ],
+      "notes": ["Used HEREDOC for body formatting", "Included 7 gotchas", "Referenced skill file patterns"]
+    },
+    {
+      "eval_id": 0,
+      "eval_name": "PR Creation",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 61.5,
+        "tokens": 20258,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "Uses gh pr create (not gh api or other approach)", "passed": true, "evidence": "Primary command is gh pr create."},
+        {"text": "Includes --title with the exact title 'Fix screen recording loop on Android'", "passed": true, "evidence": "Exact match present"},
+        {"text": "Includes --label bug (or --labels bug)", "passed": true, "evidence": "Uses --label \"bug\""},
+        {"text": "Includes --reviewer alice,bob (or --reviewer alice --reviewer bob)", "passed": true, "evidence": "Uses --reviewer alice,bob"},
+        {"text": "Body contains 'Closes #540' or 'Fixes #540' (GitHub auto-close keywords)", "passed": true, "evidence": "Body contains Closes #540"},
+        {"text": "Includes --base main to target the main branch", "passed": true, "evidence": "Uses --base main"},
+        {"text": "Mentions that 'Closes' or 'Fixes' in the body is what triggers auto-close", "passed": true, "evidence": "Dedicated section explaining auto-close keywords"}
+      ],
+      "notes": ["Pure built-in knowledge", "Also included structured body and gotchas"]
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "CI Debugging",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 121.4,
+        "tokens": 31666,
+        "tool_calls": 7,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "Uses gh pr checks 247 (or equivalent) to see check status", "passed": true, "evidence": "Step 1: gh pr checks 247"},
+        {"text": "Uses gh run view with --log-failed or --log to get failure logs", "passed": true, "evidence": "Step 5: --log-failed, Step 7: --log"},
+        {"text": "Demonstrates a multi-step workflow (not just one command)", "passed": true, "evidence": "7-step workflow in 4 phases"},
+        {"text": "Explains how to identify the run ID from the checks output", "passed": true, "evidence": "Step 3 bridges checks to run IDs via gh run list"},
+        {"text": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data", "passed": true, "evidence": "Step 2 shows exact command with --json statusCheckRollup and --jq expression"}
+      ],
+      "notes": ["Used actual branch name from git status", "Included interpretation tables and decision trees", "Read both SKILL.md and references/actions.md"]
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "CI Debugging",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.8,
+        "passed": 4,
+        "failed": 1,
+        "total": 5,
+        "time_seconds": 95.5,
+        "tokens": 20522,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "Uses gh pr checks 247 (or equivalent) to see check status", "passed": true, "evidence": "Step 1: gh pr checks 247"},
+        {"text": "Uses gh run view with --log-failed or --log to get failure logs", "passed": true, "evidence": "Steps 5-6 use --log-failed and --log --job"},
+        {"text": "Demonstrates a multi-step workflow (not just one command)", "passed": true, "evidence": "7 progressive steps"},
+        {"text": "Explains how to identify the run ID from the checks output", "passed": true, "evidence": "Uses gh run list --branch to bridge to run IDs"},
+        {"text": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data", "passed": false, "evidence": "statusCheckRollup not mentioned anywhere in response or transcript"}
+      ],
+      "notes": ["Did not surface JSON statusCheckRollup alternative", "Otherwise thorough workflow"]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "Issue Triage",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 91.7,
+        "tokens": 27858,
+        "tool_calls": 6,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "Uses gh issue list with --label bug and --state open", "passed": true, "evidence": "Both flags present in Step 1"},
+        {"text": "Filters by creation date (last month) using --search or --jq", "passed": true, "evidence": "Uses --search \"created:>=2026-03-08\""},
+        {"text": "Uses --json with number, title, and assignees fields", "passed": true, "evidence": "Exact fields specified"},
+        {"text": "Uses --jq or column formatting to produce readable table output", "passed": true, "evidence": "Uses --jq with @tsv and header row"},
+        {"text": "Uses a pipeline (xargs or loop) to close stale issues in bulk", "passed": true, "evidence": "xargs -I {} pipeline"},
+        {"text": "The close command includes --comment with a cleanup message", "passed": true, "evidence": "Includes meaningful comment inviting reopening"},
+        {"text": "Warns about irreversibility or suggests a dry-run/preview before bulk close", "passed": true, "evidence": "Edge Case #6 recommends running Step 2 as preview first"}
+      ],
+      "notes": ["Used --reason 'not planned' semantically", "10 edge cases documented", "Referenced skill's issues.md for close reasons"]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "Issue Triage",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 129.1,
+        "tokens": 21890,
+        "tool_calls": 4,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "Uses gh issue list with --label bug and --state open", "passed": true, "evidence": "Both flags present"},
+        {"text": "Filters by creation date (last month) using --search or --jq", "passed": true, "evidence": "Uses --search \"created:>=2026-03-08\""},
+        {"text": "Uses --json with number, title, and assignees fields", "passed": true, "evidence": "All three fields present"},
+        {"text": "Uses --jq or column formatting to produce readable table output", "passed": true, "evidence": "Uses --jq with @tsv and column -t"},
+        {"text": "Uses a pipeline (xargs or loop) to close stale issues in bulk", "passed": true, "evidence": "while read loop pipeline"},
+        {"text": "The close command includes --comment with a cleanup message", "passed": true, "evidence": "Includes cleanup comment"},
+        {"text": "Warns about irreversibility or suggests a dry-run/preview before bulk close", "passed": true, "evidence": "Edge cases #8 and #9 address this"}
+      ],
+      "notes": ["Complete script with error handling", "Includes set -euo pipefail"]
+    }
+  ],
+
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0},
+      "time_seconds": {"mean": 98.6, "stddev": 16.3, "min": 82.8, "max": 121.4},
+      "tokens": {"mean": 29250, "stddev": 1590, "min": 27858, "max": 31666}
+    },
+    "without_skill": {
+      "pass_rate": {"mean": 0.93, "stddev": 0.09, "min": 0.80, "max": 1.0},
+      "time_seconds": {"mean": 95.4, "stddev": 27.7, "min": 61.5, "max": 129.1},
+      "tokens": {"mean": 20890, "stddev": 669, "min": 20258, "max": 21890}
+    },
+    "delta": {
+      "pass_rate": "+0.07",
+      "time_seconds": "+3.2",
+      "tokens": "+8360"
+    }
+  },
+
+  "notes": [
+    "Eval 0 (PR Creation): Tie at 100% — both approaches handle straightforward PR creation equally well. Skill version used more tokens (28K vs 20K) due to reading skill files.",
+    "Eval 1 (CI Debugging): Skill wins 100% vs 80% — the statusCheckRollup JSON alternative was only surfaced by the skill-equipped agent. This is the key differentiator.",
+    "Eval 2 (Issue Triage): Tie at 100% — both approaches produced comprehensive solutions. Without-skill version was actually slower (129s vs 92s).",
+    "Token overhead: With-skill runs average ~40% more tokens due to reading skill + reference files. This is the cost of progressive disclosure.",
+    "The assertions may under-count the skill's value — qualitative differences in explanation depth, structure, and gotchas are not fully captured by pass/fail assertions."
+  ]
+}

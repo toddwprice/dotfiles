@@ -1,0 +1,101 @@
+{
+  "expectations": [
+    {
+      "text": "Uses gh issue list with --label bug and --state open",
+      "passed": true,
+      "evidence": "Step 1 in response.md shows: `gh issue list --label bug --state open --search \"created:>=2026-03-08\" --limit 200 --json number,title,assignees --jq '...'`. Both `--label bug` and `--state open` are present."
+    },
+    {
+      "text": "Filters by creation date (last month) using --search or --jq",
+      "passed": true,
+      "evidence": "Step 1 uses `--search \"created:>=2026-03-08\"` which leverages GitHub's search qualifier syntax to filter issues created in the last month (today being 2026-04-08). The transcript also explains the decision: 'gh issue list has no native --since or --created-after flag... The --search flag accepts GitHub's search query syntax, which supports created:>=YYYY-MM-DD.'"
+    },
+    {
+      "text": "Uses --json with number, title, and assignees fields",
+      "passed": true,
+      "evidence": "Step 1 includes `--json number,title,assignees` with exactly these three fields."
+    },
+    {
+      "text": "Uses --jq or column formatting to produce readable table output",
+      "passed": true,
+      "evidence": "Step 1 uses `--jq` with a header row `[\"NUMBER\", \"TITLE\", \"ASSIGNEE\"]` and `@tsv` formatting to produce tab-separated table output. The response also includes a detailed breakdown of the jq expression and notes the subtlety of the `//` operator with empty assignees arrays."
+    },
+    {
+      "text": "Uses a pipeline (xargs or loop) to close stale issues in bulk",
+      "passed": true,
+      "evidence": "Step 3 pipes `gh issue list ... --jq '.[].number'` into `xargs -I {} gh issue close {} --comment ... --reason \"not planned\"`. The response explains: 'xargs -I {} reads each issue number from stdin and substitutes it into the gh issue close command.'"
+    },
+    {
+      "text": "The close command includes --comment with a cleanup message",
+      "passed": true,
+      "evidence": "Step 3 includes `--comment \"Closing as part of stale bug cleanup. If this issue is still relevant, please reopen it with additional context.\"` — a meaningful cleanup message that also invites reopening."
+    },
+    {
+      "text": "Warns about irreversibility or suggests a dry-run/preview before bulk close",
+      "passed": true,
+      "evidence": "Edge Case #6 in response.md explicitly states: 'Before running the bulk close in Step 3, always run Step 2 first and review the list of issue numbers. This confirms you're targeting the right issues. There's no undo for closing with a comment (you can reopen, but the comment is permanent).' The transcript also confirms: 'Emphasized running Step 2 (list) before Step 3 (close) as a dry run.'"
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 91.7
+  },
+  "claims": [
+    {
+      "claim": "join(\",\") on an empty array produces empty string, not null, making the // operator ineffective in jq",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is a well-known jq behavior. The response correctly identifies the issue and provides the `if length == 0` workaround."
+    },
+    {
+      "claim": "--label bug,stale applies AND logic (both labels required)",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is documented gh CLI behavior — comma-separated labels in --label require all labels to be present."
+    },
+    {
+      "claim": "Default limit for gh issue list is 30",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is the documented default for gh issue list."
+    },
+    {
+      "claim": "GitHub API hard cap is 1000 issues",
+      "type": "factual",
+      "verified": true,
+      "evidence": "GitHub's REST API does have a 1000-result limit for search and list endpoints."
+    },
+    {
+      "claim": "gh issue close only accepts a single issue number",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct per gh CLI documentation — close takes one issue identifier."
+    },
+    {
+      "claim": "--reason accepts 'completed' (default) or 'not planned'",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Transcript references the issues.md reference confirming these are the two valid close reasons."
+    }
+  ],
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Filters by creation date (last month) using --search or --jq",
+        "reason": "This assertion would pass even if the date calculation were wrong (e.g., off by a month or year). Consider adding an assertion that checks the computed date is reasonable relative to the eval's execution date."
+      },
+      {
+        "reason": "No assertion checks that the bulk close pipeline correctly targets issues with BOTH 'bug' AND 'stale' labels (not just 'bug'). The response correctly uses `--label bug,stale` for Step 3 while using `--label bug` for Step 1, which is a meaningful distinction the eval doesn't verify."
+      },
+      {
+        "reason": "No assertion checks that `--reason \"not planned\"` was used (vs the default 'completed'). The response made a deliberate and semantically correct choice here that would be worth validating."
+      }
+    ],
+    "overall": "All 7 assertions pass cleanly with strong evidence. The response is thorough with edge cases and explanations. The eval could be strengthened by verifying the bug+stale label combination is used specifically for the close step and by checking the close reason."
+  }
+}

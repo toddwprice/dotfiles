@@ -1,0 +1,35 @@
+{
+  "eval_id": 2,
+  "eval_name": "issue-triage",
+  "prompt": "I need to find all open issues labeled 'bug' in our repo that were created in the last month, and output them as a simple table with issue number, title, and assignee. Then close all the ones that are also labeled 'stale' with a comment saying we're cleaning up old bugs.",
+  "assertions": [
+    {
+      "text": "Uses gh issue list with --label bug and --state open",
+      "rationale": "Core filtering for bug issues"
+    },
+    {
+      "text": "Filters by creation date (last month) using --search or --jq",
+      "rationale": "User asked for issues created in the last month — needs date filtering"
+    },
+    {
+      "text": "Uses --json with number, title, and assignees fields",
+      "rationale": "User wants a table with these specific columns"
+    },
+    {
+      "text": "Uses --jq or column formatting to produce readable table output",
+      "rationale": "User asked for 'a simple table' — needs formatting beyond raw JSON"
+    },
+    {
+      "text": "Uses a pipeline (xargs or loop) to close stale issues in bulk",
+      "rationale": "Closing multiple issues requires iteration over the filtered set"
+    },
+    {
+      "text": "The close command includes --comment with a cleanup message",
+      "rationale": "User specified a comment about cleaning up old bugs"
+    },
+    {
+      "text": "Warns about irreversibility or suggests a dry-run/preview before bulk close",
+      "rationale": "Bulk closing issues is a destructive operation — good practice to preview first"
+    }
+  ]
+}

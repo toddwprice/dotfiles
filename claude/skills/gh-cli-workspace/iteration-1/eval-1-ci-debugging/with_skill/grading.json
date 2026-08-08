@@ -1,0 +1,91 @@
+{
+  "expectations": [
+    {
+      "text": "Uses gh pr checks 247 (or equivalent) to see check status",
+      "passed": true,
+      "evidence": "Step 1 of the response explicitly shows `gh pr checks 247` as the first command in the workflow. The transcript confirms: 'Found `gh pr checks 123` for seeing all checks on a PR' from the skill file."
+    },
+    {
+      "text": "Uses gh run view with --log-failed or --log to get failure logs",
+      "passed": true,
+      "evidence": "Step 5 shows `gh run view <run-id> --log-failed` and Step 7 shows `gh run view <run-id> --log`. The transcript confirms both flags were found in the actions reference: '`--log` (full logs), `--log-failed` (only failed step logs)'. The response explains the difference between them."
+    },
+    {
+      "text": "Demonstrates a multi-step workflow (not just one command)",
+      "passed": true,
+      "evidence": "The response contains a 7-step progressive debugging workflow organized into 4 phases: Triage (Steps 1-2), Identify Runs (Step 3), Diagnose (Steps 4-5), and Deep Dive (Steps 6-7). The transcript confirms this was deliberate: 'I designed a 7-step progressive debugging workflow that goes from broad to narrow.'"
+    },
+    {
+      "text": "Explains how to identify the run ID from the checks output",
+      "passed": true,
+      "evidence": "Step 3 explicitly addresses the gap: 'The `gh run list` command filtered by the PR's branch returns recent workflow runs with their **run IDs** (databaseId). You need these IDs to drill into the logs.' Phase 2 of the workflow section reinforces this: '`gh pr checks` shows check names and links, but to use `gh run view` you need the numeric run ID. Listing runs by branch bridges this gap.'"
+    },
+    {
+      "text": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data",
+      "passed": true,
+      "evidence": "Step 2 shows the exact command: `gh pr view 247 --json statusCheckRollup --jq '.statusCheckRollup[] | [.name, .status, .conclusion] | @tsv'`. It is described as providing 'machine-parseable data' as a complement to the human-readable `gh pr checks` output."
+    }
+  ],
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "total": 5,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 121.4
+  },
+  "claims": [
+    {
+      "claim": "gh pr checks 247 shows every CI check associated with the PR: name, status, and a link",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This matches the gh CLI documentation behavior for `gh pr checks`."
+    },
+    {
+      "claim": "--log-failed filters the CI logs down to just the output from failed steps",
+      "type": "factual",
+      "verified": true,
+      "evidence": "The actions reference file confirms `--log-failed` shows 'only failed step logs'."
+    },
+    {
+      "claim": "The workflow progresses from broad to narrow (triage to deep dive)",
+      "type": "quality",
+      "verified": true,
+      "evidence": "The response structure confirms this: starts with check overview, then run listing, then run summary, then filtered logs, then full logs. Each step narrows scope."
+    },
+    {
+      "claim": "gh run rerun <run-id> --failed reruns only failed jobs",
+      "type": "factual",
+      "verified": true,
+      "evidence": "The actions reference confirms `--failed` flag: 'rerun only failed jobs'."
+    },
+    {
+      "claim": "The branch name cnvs-540-screen-recording-loop-android is used in gh run list --branch",
+      "type": "process",
+      "verified": true,
+      "evidence": "Transcript confirms: 'I used the actual branch name from the git status (cnvs-540-screen-recording-loop-android).' This matches the git status showing the current branch."
+    }
+  ],
+  "user_notes_summary": null,
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Uses gh pr checks 247 (or equivalent) to see check status",
+        "reason": "This assertion would pass even if the command was merely mentioned in passing without being part of a coherent workflow. Consider also checking that the command appears as a primary/recommended step, not just a footnote."
+      },
+      {
+        "assertion": "Demonstrates a multi-step workflow (not just one command)",
+        "reason": "This is vague — listing two commands trivially satisfies it. A more discriminating assertion would require the steps to be logically ordered (e.g., 'the workflow shows checks before logs' or 'includes at least 3 distinct gh commands in a logical progression')."
+      },
+      {
+        "reason": "No assertion checks whether the response actually explains the error output or how to interpret log content. This response goes well beyond the assertions by including interpretation tables and decision trees, which is arguably the most valuable part of CI debugging guidance. An assertion like 'Includes guidance on interpreting the log output to identify root causes' would capture this."
+      },
+      {
+        "assertion": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data",
+        "reason": "This is a very specific assertion that tests recall of one particular alternative command. It could pass by rote memorization while missing the broader point. However, it is a useful discriminator — an agent without the skill reference would likely not know this specific flag."
+      }
+    ],
+    "overall": "Assertions cover the key commands and workflow structure well but are mostly presence-checks (does the output mention X?). They don't verify the quality of explanation, correctness of command syntax, or whether the debugging logic is sound. The response significantly exceeds what the assertions measure — it includes interpretation guidance, decision trees, and escalation paths that no assertion tests for. Consider adding assertions that test the 'why' and 'how to interpret' aspects, not just which commands are listed."
+  }
+}
