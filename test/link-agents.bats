@@ -88,6 +88,14 @@ setup() {
   [ "$(readlink "$HOME/.codex/AGENTS.md")" = "$DOTFILES/ai/AGENTS.md" ]
 }
 
+@test "links opencode rows once ~/.config/opencode exists" {
+  mkdir -p "$HOME/.config/opencode"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$HOME/.config/opencode/commands")" = "$DOTFILES/ai/commands" ]
+  [ "$(readlink "$HOME/.config/opencode/AGENTS.md")" = "$DOTFILES/ai/AGENTS.md" ]
+}
+
 @test "second run is a no-op and reports ok" {
   run "$SCRIPT"
   [ "$status" -eq 0 ]
