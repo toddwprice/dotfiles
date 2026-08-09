@@ -124,3 +124,10 @@ setup() {
   [ ! -e "$BATS_TEST_TMPDIR/elsewhere/skills" ]
   [ "$(readlink "$HOME/.claude/skills")" = "$DOTFILES/ai/skills" ]
 }
+
+@test "rejects an unrecognized flag and creates nothing" {
+  run "$SCRIPT" --dry-ru
+  [ "$status" -ne 0 ]
+  [ ! -e "$HOME/.claude/skills" ]
+  [ ! -e "$HOME/.agents" ]
+}

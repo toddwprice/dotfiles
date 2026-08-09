@@ -13,8 +13,24 @@ set -euo pipefail
 DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 AI="$DOTFILES/ai"
 
+usage() { printf 'usage: %s [--dry-run] [-h|--help]\n' "${0##*/}"; }
+
 DRY_RUN=
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
+case $# in
+  0)
+    ;;
+  1)
+    case "$1" in
+      --dry-run) DRY_RUN=1 ;;
+      -h|--help) usage; exit 0 ;;
+      *) usage >&2; exit 1 ;;
+    esac
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
 
 # source (relative to ai/) | destination | harness root ("" = never gated)
 ROWS=(
@@ -37,6 +53,8 @@ ROWS=(
 tilde() { local t='~'; printf '%s' "${1/#"$HOME"/$t}"; }
 
 status=0
+
+[[ -n "$DRY_RUN" ]] && echo "-- dry run: no changes will be made --"
 
 for row in "${ROWS[@]}"; do
   IFS='|' read -r src dst root <<<"$row"
