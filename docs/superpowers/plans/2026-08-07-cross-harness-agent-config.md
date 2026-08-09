@@ -502,6 +502,42 @@ Only once both are confirmed:
 rm -rf ~/.agents/skills.pre-dotfiles ~/.agents/.skill-lock.json
 ```
 
+**If Step 7 fails: back out.** The Step 6 commit is local and unpushed, and
+`~/.agents/skills.pre-dotfiles` hasn't been removed yet, so nothing here is
+lost — but the rename is already in history and the live symlinks already
+point at `ai/`, so undoing it takes more than a plain `git reset`. Run, in
+order:
+
+```bash
+cd ~/.dotfiles
+git reset --hard HEAD^                                             # restore claude/ in the repo
+rm -f ~/.claude/skills ~/.claude/commands ~/.claude/agents ~/.claude/scripts \
+      ~/.claude/CLAUDE.md ~/.claude/settings.json ~/.claude/statusline-command.sh
+                                                                     # these now dangle — ai/ is gone
+rm -f ~/.codex/prompts ~/.codex/AGENTS.md                           # created by Step 3; dangle once ai/ is gone
+rm -f ~/.config/opencode/commands ~/.config/opencode/AGENTS.md      # no-op unless opencode is installed
+rm -f ~/.agents/skills                                              # the dangling link-agents symlink
+mv ~/.agents/skills.pre-dotfiles ~/.agents/skills                   # restore the pre-cutover directory
+env RCRC="$HOME/.dotfiles/rcrc" rcup                                # let rcm re-link ~/.claude/* from claude/
+```
+
+`$DOTFILES` is set by `bootstrap.sh`, not by the shell — a plain terminal
+has no such variable, so this uses `$HOME/.dotfiles` literally rather than
+`$DOTFILES/rcrc`, which would silently expand to `/rcrc`.
+
+Then confirm nothing dangles:
+
+```bash
+find -L ~/.claude ~/.agents ~/.codex -maxdepth 2 -type l -print
+```
+
+Expected: no output — the same idiom Step 4 above uses to prove a real
+cutover resolved cleanly. Also spot-check that `~/.claude/CLAUDE.md`
+resolves into `~/.dotfiles/claude/` (not `ai/`) before starting a new
+Claude Code session. `git reset --hard` is safe here specifically because
+nothing besides the Step 6 commit sits on top of it — check `git status`
+first if that's no longer true by the time you're reading this.
+
 ---
 
 ### Task 5: Wire `bootstrap.sh` and simplify `bin/sync`
@@ -512,7 +548,21 @@ rm -rf ~/.agents/skills.pre-dotfiles ~/.agents/.skill-lock.json
 
 **Interfaces:**
 - Consumes: `bin/link-agents` (Task 1), the `ai/` tree (Task 4).
-- Produces: a `bootstrap.sh` that links the agent config on a fresh machine, and a `bin/sync` that no longer scans directories that can't drift.
+- Produces: a `bootstrap.sh` that links whatever agent-harness roots already
+  exist at the point in the script where it runs, and a `bin/sync` that
+  re-links on every sync and no longer scans directories that can't drift.
+
+**What a fresh machine actually gets from `bootstrap.sh` alone:** the
+`link-agents` call goes in right after `rcup` (`bootstrap.sh:44`), before
+`brew bundle` (`bootstrap.sh:48`) — and nothing in the `Brewfile` installs
+the Claude Code CLI at all (`vscode "anthropic.claude-code"` is the editor
+extension, not the CLI). So on a genuinely fresh machine, `~/.claude`
+doesn't exist yet when `link-agents` runs: 11 of the 12 rows gate, and only
+the ungated `~/.agents/skills` row links. **A second `bin/link-agents` run
+— or just `bin/sync`, which Step 3 below wires to call it automatically —
+is required after installing each harness.** That second run isn't
+optional cleanup; it's the step that actually puts the config in front of
+Claude Code, Codex, and opencode.
 
 - [ ] **Step 1: Add the `link-agents` call to `bootstrap.sh`**
 
@@ -524,6 +574,9 @@ Immediately after the `env RCRC="$DOTFILES/rcrc" rcup` line, insert:
 # rcm is excluded from ai/ — this is what puts the skills, commands, and
 # AGENTS.md in front of Claude Code, Codex, and opencode. Only links the
 # harnesses that are actually installed, so it's safe on any machine.
+# This runs before brew bundle installs anything, so on a fresh machine
+# most rows gate here — re-run `bin/link-agents` (or `bin/sync`) after
+# installing each harness to actually pick it up.
 info "Linking agent config with link-agents"
 "$DOTFILES/bin/link-agents"
 ```
@@ -568,15 +621,19 @@ Expected: no output.
 cd ~/.dotfiles && bats test/
 ```
 
-Expected: 12 passing.
+Expected: 14 passing. (Task 1/2 shipped with 12; the final review's fix
+wave added the opencode positive-path test and the unrecognized-flag
+rejection test.)
 
 - [ ] **Step 6: Verify `bin/sync` runs clean end to end**
 
 ```bash
-cd ~/.dotfiles && printf 'n\nn\n' | bin/sync
+cd ~/.dotfiles && printf 'n\n' | bin/sync
 ```
 
-Expected: `No new files in watched dirs.`, then the `ok` rows from `link-agents`, then the uncommitted-changes list. Two `n`s because `bin/sync` prompts twice when `~/.config/zed` has turned up a new file — the first declines `mkrc`, the second declines the commit. Both declines make this read-only.
+Expected: `No new files in watched dirs.` (true as of this writing — `~/.config/zed` has nothing new), then the `ok`/`link` rows from `link-agents`, then the uncommitted-changes list (Task 5's own edits are still unstaged at this point), then a single `Commit and push? [Y/n]` prompt. One `n` declines it, which keeps this read-only.
+
+If `~/.config/zed` *does* have a new file by the time you run this, the flow is different: the first line reads `Found N new file(s)...` instead, followed by an `mkrc all of them? [Y/n]` prompt — decline that one too, and pipe `printf 'n\nn\n'` so the second `n` reaches the commit prompt that follows. (In `bin/sync`, the `mkrc` prompt and the "No new files" message are mutually exclusive branches — never expect both a new-files count and "No new files" in the same run.)
 
 - [ ] **Step 7: Commit**
 
@@ -600,7 +657,7 @@ Full sequence once every task is done:
 
 ```bash
 cd ~/.dotfiles
-bats test/                                                    # 12 passing
+bats test/                                                    # 14 passing
 shellcheck bin/link-agents bin/sync bootstrap.sh              # silent
 bin/link-agents --dry-run                                     # every row ok
 find -L ~/.claude ~/.agents ~/.codex -maxdepth 2 -type l      # silent
