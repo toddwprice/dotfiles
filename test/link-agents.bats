@@ -28,6 +28,19 @@ setup() {
   [ "$(readlink "$HOME/.claude/CLAUDE.md")" = "$DOTFILES/ai/AGENTS.md" ]
 }
 
+@test "links every ~/.claude row to the path the harness actually reads" {
+  # Source-column typos surface as MISSING, but a destination-column typo just
+  # links somewhere nothing reads. Every ~/.claude row needs its own assertion;
+  # skills and CLAUDE.md have one above, these are the remaining five.
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$HOME/.claude/commands")" = "$DOTFILES/ai/commands" ]
+  [ "$(readlink "$HOME/.claude/settings.json")" = "$DOTFILES/ai/claude/settings.json" ]
+  [ "$(readlink "$HOME/.claude/statusline-command.sh")" = "$DOTFILES/ai/claude/statusline-command.sh" ]
+  [ "$(readlink "$HOME/.claude/agents")" = "$DOTFILES/ai/claude/agents" ]
+  [ "$(readlink "$HOME/.claude/scripts")" = "$DOTFILES/ai/claude/scripts" ]
+}
+
 @test "creates ~/.agents/skills even though ~/.agents does not exist" {
   [ ! -d "$HOME/.agents" ]
   run "$SCRIPT"
@@ -123,6 +136,17 @@ setup() {
   # the new link inside it instead of replacing it.
   [ ! -e "$BATS_TEST_TMPDIR/elsewhere/skills" ]
   [ "$(readlink "$HOME/.claude/skills")" = "$DOTFILES/ai/skills" ]
+}
+
+@test "abbreviates paths with a tilde under both bash 3.2 and bash 5" {
+  # tilde() holds the ~ in a variable because the two obvious spellings each
+  # break one shell: bash 3.2 prints a literal \~, and bash 5 expands a bare ~
+  # in the replacement straight back to $HOME, abbreviating nothing.
+  run "$SCRIPT" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"~/.claude/skills -> ~/.dotfiles/ai/skills"* ]]
+  [[ "$output" != *"$HOME"* ]]
+  [[ "$output" != *'\~'* ]]
 }
 
 @test "rejects an unrecognized flag and creates nothing" {

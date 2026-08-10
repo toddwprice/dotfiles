@@ -5,8 +5,13 @@
 # One source tree (ai/) is linked whole into each tool's own location, so a new
 # skill or command is live everywhere the moment it lands in the repo. Rows for
 # harnesses that aren't installed are skipped. Real content is never deleted:
-# a destination holding a real file or directory is refused and reported, and
-# the run exits non-zero so bootstrap.sh fails loudly rather than half-linking.
+# a destination holding a real file or directory is refused and reported, the
+# rows after it are still linked, and the run exits non-zero at the end. One
+# bad row shouldn't cost you the other eleven, so callers that must not abort
+# on a refusal should invoke this with `|| true` and read the output.
+#
+# --dry-run reports what would change and still exits non-zero when a row
+# would be refused, which makes it usable as a preflight gate.
 
 set -euo pipefail
 

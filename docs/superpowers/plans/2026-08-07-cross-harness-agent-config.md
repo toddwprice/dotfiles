@@ -577,8 +577,14 @@ Immediately after the `env RCRC="$DOTFILES/rcrc" rcup` line, insert:
 # This runs before brew bundle installs anything, so on a fresh machine
 # most rows gate here — re-run `bin/link-agents` (or `bin/sync`) after
 # installing each harness to actually pick it up.
+#
+# Non-fatal on purpose. link-agents exits 1 when it refuses a destination
+# holding real content, and Claude Code writes a real ~/.claude/settings.json
+# on first run — under `set -e` that would abort bootstrap before brew bundle
+# and oh-my-zsh, breaking the "safe to re-run" promise at the top of this file.
+# The refused rows are printed above; the remaining rows still linked.
 info "Linking agent config with link-agents"
-"$DOTFILES/bin/link-agents"
+"$DOTFILES/bin/link-agents" || info "link-agents refused a row (see above) — continuing"
 ```
 
 - [ ] **Step 2: Trim `WATCHED_DIRS` in `bin/sync`**
@@ -603,7 +609,9 @@ In `bin/sync`, immediately after the `cd "$DOTFILES"` line in section 2 and befo
 
 ```bash
 # Wire up any harness that's been installed since the last sync.
-"$DOTFILES/bin/link-agents"
+# Non-fatal for the same reason as in bootstrap.sh: a refused row shouldn't
+# kill the sync before it reaches the commit prompt.
+"$DOTFILES/bin/link-agents" || echo "link-agents refused a row (see above) — continuing"
 echo
 ```
 
@@ -621,9 +629,10 @@ Expected: no output.
 cd ~/.dotfiles && bats test/
 ```
 
-Expected: 14 passing. (Task 1/2 shipped with 12; the final review's fix
+Expected: 16 passing. (Task 1/2 shipped with 12; the final review's fix
 wave added the opencode positive-path test and the unrecognized-flag
-rejection test.)
+rejection test; the self-review added destination assertions for the five
+uncovered `~/.claude` rows and a test pinning the tilde abbreviation.)
 
 - [ ] **Step 6: Verify `bin/sync` runs clean end to end**
 
@@ -657,7 +666,7 @@ Full sequence once every task is done:
 
 ```bash
 cd ~/.dotfiles
-bats test/                                                    # 14 passing
+bats test/                                                    # 16 passing
 shellcheck bin/link-agents bin/sync bootstrap.sh              # silent
 bin/link-agents --dry-run                                     # every row ok
 find -L ~/.claude ~/.agents ~/.codex -maxdepth 2 -type l      # silent
