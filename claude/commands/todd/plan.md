@@ -1,5 +1,5 @@
 ---
-description: Plan a Linear ticket into ONE Linear comment carrying both the human implementation plan and a Gherkin Behavior Spec whose Scenarios are the implementer's TDD checklist. Use when Todd says "/todd:plan FRG-1234", "plan this ticket", "write the spec for this ticket", or wants a plan an implementing agent can't misread. Richer sibling of `/todd:coder plan` — same Linear contract, plus grounded behavior scenarios. Takes `--dry-run`, `--no-gherkin`.
+description: Plan a Linear ticket into ONE Linear comment carrying the human implementation plan, a Gherkin Behavior Spec whose Scenarios are the implementer's TDD checklist, and EARS invariants for the requirements that aren't behavior. Use when Todd says "/todd:plan FRG-1234", "plan this ticket", "write the spec for this ticket", or wants a plan an implementing agent can't misread. Richer sibling of `/todd:coder plan` — same Linear contract, plus grounded behavior scenarios. Pairs with `/todd:plan-check`, which reviews the posted plan cold; this command posts, that one passes it. Also where a failed check comes back — use when Todd says "resolve the blockers on FRG-1234", "fix what plan-check found", or re-runs this on a plan stamped `❌`. Takes `--dry-run`, `--no-gherkin`.
 ---
 
 You are writing Todd's implementation plan for one Linear ticket. Two audiences, one artifact: a
@@ -19,6 +19,15 @@ The Behavior Spec fixes that by forcing each expectation into a form that is **e
 were never real requirements — they were hand-waving, and this command surfaces them as blockers
 instead of shipping them as plan text.
 
+**But not every real requirement is a behavior.** "The public API of `Foo` must not change",
+"no query in this path may exceed 200ms", "the migration must be reversible" — none of those has a
+When, and forcing them into Given/When/Then produces a scenario that reads like a test and isn't
+one. That was the old failure: a legitimate constraint got written as a limp Scenario, or dropped.
+Those go in `### Invariants` as EARS-form statements (phase 4), which are as enumerable and
+falsifiable as Scenarios and don't pretend to be behavior. **Two layers, one coverage table**:
+Scenarios cover what the system *does*, Invariants cover what must stay *true*. A requirement that
+fits neither is still a blocker.
+
 `/todd:coder plan` stays exactly as it is. Use it for a one-file change where the ceremony costs
 more than it saves. Use this for anything an agent will implement unattended.
 
@@ -29,7 +38,11 @@ more than it saves. Use this for anything an agent will implement unattended.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--dry-run` | off | Print the full plan in chat. Post nothing to Linear. Still writes the local copy. |
-| `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail and drops the coverage table, the Gherkin block, and `Not covered`. Every phase still runs, including Phase 6, so the plan still gets posted. Escape hatch for a trivial ticket. |
+| `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail, `### Invariants`, and `### Not covered`, and drops the coverage table and the Gherkin block. Every phase still runs, including Phase 6, so the plan still gets posted. Escape hatch for a trivial ticket. |
+
+`--no-gherkin` used to drop `Not covered` too. It no longer does. Scope boundaries are the
+instruction an unattended run most needs and the cheapest one to write — a trivial ticket is
+exactly where "don't also refactor the neighbours" earns its line.
 
 No ticket id → show usage and stop. First word isn't a ticket id → this is the wrong tool; say so
 and stop rather than improvising.
@@ -129,7 +142,23 @@ because it looks complete.
 `## 📋 Implementation Plan`.
 
 - **None** → normal path, post a new comment at the end.
-- **One exists** → you are replacing it, and you must not lose it. Write the old body verbatim to
+- **One exists** → read its **plan-check stamp** before anything else: the italic `*Plan check: …*`
+  line at the very end of the comment, after the `---`. It decides which of two jobs this is, and
+  they are not the same job.
+
+  | Stamp | What you're doing | Where you go |
+  |---|---|---|
+  | `❌ N blockers` | Resolving known blockers on a plan that has already been checked | **Phase 0B.** Skip phases 1–4. |
+  | `✅ passed` or `⚠️ passed (ungrounded)` | Replacing a plan that passed its check | The replace path below — and open your report by saying you discarded a checked plan, so Todd can stop you if that wasn't the intent |
+  | No stamp | Replacing an unchecked plan | The replace path below |
+
+  **A `❌` stamp means the work is already scoped for you.** Re-planning the ticket from scratch
+  throws away a check that cost a full session and reintroduces everything it passed. Phase 0B
+  exists so the second pass is surgery on three known problems rather than a rewrite that has to be
+  checked all over again.
+
+  **The replace path** — you are replacing the plan, and you must not lose it. Write the old body
+  verbatim to
   `.claude/tmp/<branch-or-ticket>/plan-<TICKET>-superseded-<YYYYMMDD-HHMM>.md`, then **update that
   same comment in place** (`save_comment` with the existing comment id) so exactly one plan comment
   survives. Say in your report that you replaced a plan, when it was written, and where the backup
@@ -146,6 +175,129 @@ because it looks complete.
 Under `--dry-run`, skip the **Linear** write only. The local files — the backup and the plan copy —
 are still written; they're the whole point of the dry run. Say which comment you *would* have
 replaced.
+
+---
+
+## Phase 0B — Resolve blockers on a checked plan
+
+Entered only from phase 0, when the one plan comment carries a `❌ N blockers` stamp. **Skip phases
+1 through 4 entirely** and rejoin the normal flow at phase 5. Everything in the plan that the check
+passed stays exactly as it is; you are here to close N specific findings and nothing else.
+
+**Why this isn't a re-plan.** `/todd:plan-check` reads the plan cold and refuses to fix a 🔴 on
+purpose — a checker that quietly rewrites a blocker hides that the plan was wrong, and its fix would
+be a guess at what the planner meant. That reasoning does not apply to you. You *are* the planner:
+grounding a noun, writing the missing `@negative` Scenario, deriving a `# falsifies:` line are all
+your job, done with your tools. The blocker came back to you because it needed the planner, not
+because it needed Todd.
+
+### Step 1 — Recover the blockers verbatim
+
+Two sources, in this order:
+
+1. **The stamp's `🔴 Open blockers` block**, in the plan comment. Always present on a `❌` stamp
+   written by the current `/todd:plan-check`.
+2. **`.claude/tmp/<branch-or-ticket>/plan-check-<TICKET>-findings.md`** — the full report, which
+   also carries the 🔵 flags the stamp leaves out. Prefer it when it exists; a flag next to a
+   blocker is often the same underlying problem and Todd can settle both in one answer.
+
+**A stamp that names only check ids (`see C1, E11, B5`) and no findings file → stop and say so.**
+That's a stamp from before the blocker text was recorded. Do **not** infer what `C1` meant and do
+not re-derive it: your re-derivation may land on a different noun than the checker's did, and you
+would then close a blocker that is still open, with a stamp saying it's resolved. Offer Todd the two
+real options — re-run `/todd:plan-check <TICKET>` to regenerate the findings, or re-plan the ticket
+from scratch — and let him pick.
+
+### Step 2 — Load the evidence, not the whole codebase
+
+- The **plan body** you're about to edit.
+- **`.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md`** — the phase-2 anchor list. You will be
+  appending to it, not rewriting it.
+- The **ticket**, if a blocker is about coverage (E1) — you can't check a missing requirement
+  against a plan.
+
+Don't re-run phase 1's search agents across the whole feature. Ground the specific nouns the
+blockers name, one `Grep` each. The exploration that produced this plan already happened.
+
+### Step 3 — Triage each blocker before you ask anything
+
+Every blocker is one of two kinds, and getting this wrong is the main way this phase wastes Todd's
+time:
+
+| Kind | Looks like | You |
+|---|---|---|
+| **Yours to fix** | An ungrounded noun that does turn out to exist. A missing `@negative` Scenario. A `# falsifies:` you can now derive. An uncovered surface in `Verification`. A miscount that the checker declined to fix because it sat next to a real blocker. | Do the work. Report it as resolved; don't ask permission. |
+| **Todd's to answer** | The noun doesn't exist and the approach depends on whether it should. A requirement with no coverage and no obvious home. `B5` — four open questions, meaning the ticket was never specified. Anything where two resolutions produce different plans. | Ask. One question, with the options and a recommendation. |
+
+**The test: would two reasonable planners resolve this the same way?** If yes it's yours — grounding
+`Axon.Rooms.join/2` at `rooms.ex:142` has one answer and Todd confirming it teaches him nothing. If
+no, it's his, because you'd be picking an approach and approach is his call.
+
+### Step 4 — Walk Todd through them, and ask only what needs asking
+
+Present **every** blocker so he can see the whole list, then ask about the ones from the right-hand
+column. Use `AskUserQuestion`, batching related ones — a blocker and the 🔵 flag that shares its
+cause belong in one question, not two.
+
+Every question:
+
+- **States what the checker found**, in its words, so he's answering the real finding.
+- **Names what changes depending on the answer.** "Do we support the staff-user path?" is a
+  shrug. "If staff users are in scope, slice 2 grows a permission check and a third Scenario" is a
+  decision.
+- **Leads with a recommendation** and says what it's based on — a precedent in the code, a prior
+  ticket, the cheaper reversal. Todd should be able to accept in one click when you're right.
+
+If he answers something you can turn into a **grounded default** rather than an open question, that's
+a `Decisions` entry marked `(Todd, YYYY-MM-DD)`, not a `Questions / Blockers` entry. The whole point
+is that the revised plan carries fewer open questions than the one that failed.
+
+### Step 5 — Apply each resolution to the plan, surgically
+
+Edit the parts the blockers touch. Do not rewrite sections that passed — a rewritten Scenario the
+checker already accepted has to be re-checked for no reason, and drift is how a passing plan quietly
+regresses.
+
+| Blocker | What resolving it actually changes |
+|---|---|
+| Ungrounded noun (C1–C3) | Append the anchor to `anchors-<TICKET>.md` with today's date and the `file:line` you verified **this session**. If it doesn't exist, the step that named it changes — a different anchor, or the step becomes a `Questions / Blockers` entry. |
+| Slice with no `@negative`/`@boundary` (E11) | Write the Scenario. It needs a `# target:` and a `# falsifies:` like any other; if you can't finish the `# falsifies:`, the slice's behavior isn't understood yet and that's a question for Todd. |
+| Missing `# falsifies:` / `# pinned:` (E9, E14) | Derive it now. Both were BLOCKERs for the checker only because inventing one is worse than leaving it out — you're deriving, not inventing. |
+| Uncovered requirement (E1, E2) | Add the coverage row **and** the thing that covers it: a Scenario, an `INV-N`, or a `⏸️ deferred` marker with its `Not covered` line. A row pointing at nothing is the same gap wearing a table. |
+| Uncovered surface in `Verification` (D4) | Name the real command for that surface. Check it exists. |
+| 4+ open questions (B5) | Todd's answers collapse them into `Decisions`. If three or more are still open after he's answered, the ticket is under-specified — see step 6. |
+
+**Update the anchor file, always.** `/todd:plan-check` traces every concrete noun back to it, so a
+noun you ground here and don't record reads as ungrounded on the next check and comes straight back
+as the same blocker.
+
+**Record every resolution in `### Changed since the last plan`** — the section phase 3 already
+defines. One line per blocker: what the check found, and what you did about it. This is the section
+the next checker reads to see that the second pass was surgery and not a rewrite, and it's what
+stops a claim the check disproved from being quietly re-trusted.
+
+### Step 6 — When a blocker won't resolve
+
+Say so. A revised plan that silently drops an unanswerable blocker is worse than the failed one,
+because the stamp will say it was addressed.
+
+- **Todd doesn't know yet** (needs product, needs another team) → it stays in `Questions / Blockers`,
+  and your report says the plan is still blocked on it. Don't convert an unanswered question into an
+  `(assumed)` Decision to make the count work.
+- **More than three survive** → the ticket is under-specified. Same stop as phase 2: post what you
+  have, say the Behavior Spec needs answers first, and don't dress it up as progress.
+- **A blocker you already resolved once came back.** You can see this without any memory of the
+  previous run: the plan's `### Changed since the last plan` section lists what the last phase-0B
+  pass closed, so a blocker in the current stamp that also appears there as resolved is round two on
+  the same finding. Don't just fix it harder. Something about the resolution didn't take — you
+  grounded a different noun than the checker meant, or the Scenario you added doesn't assert what
+  the check is looking for. Say that to Todd and ask him to settle it, rather than starting a third
+  lap.
+
+### Step 7 — Rejoin
+
+Go to **phase 5** (the contract gate), then **phase 6** (post and report). Phase 6 has a report and
+a handoff specific to this mode; use those, not the fresh-plan ones.
 
 ---
 
@@ -203,6 +355,49 @@ Rules:
 Cheap way to do it: one `Grep` per symbol, or ask the pattern-finder for exact definitions. Don't
 read whole files for this.
 
+**Write the anchor list to disk before you leave this phase.**
+`.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md`, one line per anchor:
+
+```markdown
+| Anchor | Kind | Verified at | Date |
+|---|---|---|---|
+| `Axon.Rooms.join/2` | function | `apps/axon/lib/axon/rooms.ex:142` | 2026-08-08 |
+| `:already_joined` | error atom | `apps/axon/lib/axon/rooms/errors.ex:18` | 2026-08-08 |
+| `build(:mission_draft)` | factory | `apps/axon/test/support/factory.ex:203` | 2026-08-08 |
+```
+
+This is the one thing a later session cannot reconstruct. `/todd:plan-check` traces every concrete
+noun in the plan back to this file; without it, it can only check that a noun *looks* plausible,
+which is precisely the failure grounding exists to prevent. It costs you three lines and it is the
+difference between a check and a vibe. Write it even under `--dry-run` — especially under
+`--dry-run`, since that's when the plan is most likely to be revised before posting.
+
+### Blockers have a budget: three
+
+An ungrounded anchor becomes a blocker. Ungrounded anchors are cheap to produce and a plan that
+lists nine of them has stopped being a plan — Todd reads it as "you didn't do the work", and an
+unattended `impl` run reads nine reasons to halt. **Cap `Questions / Blockers` at three.** Rank by
+what actually changes the plan and keep the top three:
+
+1. **Scope** — does this include or exclude a case? Wrong answer means rebuilding.
+2. **Data and correctness** — which record is authoritative, what happens on conflict.
+3. **User-visible behavior** — what the caller sees on the unhappy path.
+4. **Technical detail** — last. Usually has a defensible default.
+
+Everything below the cut gets a **grounded default instead of a question**: pick the answer the
+codebase already implies, write it into `Decisions` as `(assumed, YYYY-MM-DD)` with the precedent
+you're following, and move on. An assumption Todd can veto in one line beats a question that stops
+the run.
+
+**Don't ask about these at all** — take the local convention, cite it in `Decisions` if it's
+load-bearing, and keep going: error-message wording, log level, naming that follows an existing
+module, test file location when a sibling test exists, timeout and retry values that match the
+neighbouring call, migration naming, changeset validation style.
+
+**More than three blockers survive the ranking → the ticket is under-specified.** That's the
+existing "can't ground half the anchors" branch in the failure table. Post the brief and the detail
+block, say the Behavior Spec needs answers first, and stop. Don't ship a twelve-question plan.
+
 ---
 
 ## Phase 3 — Write the architect's brief
@@ -228,6 +423,7 @@ supersedes it.]
 ### Decisions
 <!-- Settled calls that shape the design. One line each, with who made them and when. Omit if none. -->
 - **[The call]** — [why, and what it rules out]. (Todd, YYYY-MM-DD)
+- **[The call]** — [the default you took, and the precedent in the code you took it from]. (assumed, YYYY-MM-DD)
 
 ### Approach
 1. [Slice 1 — one line. Name the outcome, not the steps. A vertical path that leaves the tree working.]
@@ -238,8 +434,9 @@ supersedes it.]
 - [Risk, and what makes it one]
 
 ### Questions / Blockers
-- ❓ [Anything still open, including every ungrounded anchor from phase 2. One line, phrased as the
-  question it actually is. Settled calls go in Decisions, not here.]
+<!-- Max 3, ranked per phase 2. Anything below the cut became an (assumed) Decision. Omit if none. -->
+- ❓ [One line, phrased as the question it actually is, and naming what changes depending on the
+  answer. Settled calls and taken defaults go in Decisions, not here.]
 
 ### Scope
 [Small / Medium / Large] · [N] slices · [N] files ([apps touched]) · [N] deferred
@@ -268,6 +465,11 @@ haven't decided which ones matter.
 `Questions / Blockers` — an implementer who reads a question stops and asks it. Move it to
 `Decisions` with the reason and the date. A decision that reverses something in the ticket
 description belongs there too, and the `Summary` correction should point at it.
+
+**`(assumed, …)` is a first-class decision, not a weaker question.** It says: I picked this, here's
+the precedent, override me if I'm wrong. It lets `impl` proceed. A question does not. The failure
+this prevents is the plan that hedges on nine small calls and blocks on all of them — three real
+questions and six cited assumptions is a plan; nine questions is a request for a meeting.
 
 ### What does not go in section 1
 
@@ -302,11 +504,27 @@ The first starts with the literal `## 🥒 Behavior Spec`, which is what impl an
 second deliberately doesn't — that absence is how they know this plan's acceptance criteria are
 prose rather than Scenarios. Don't "fix" the inconsistency by giving them the same heading.
 
+**No budget is not the same as no order.** The implementing agent reads this section into a context
+window it also has to hold the codebase in, and recall degrades as that window fills — the middle of
+a long block is where a constraint goes unread. So: **the things that stop the agent doing the wrong
+work go first.** `Files to Modify` and `Invariants` before `Existing Code to Reuse`; the Gherkin,
+which is worked through scenario by scenario rather than scanned, goes last. And if section 2 is
+running past roughly 400 lines, the question to ask is not how to trim it — it's whether this is one
+ticket. Three slices that each need a page of setup are three tickets.
+
 ### The detail block — both modes, always
 
 ````markdown
 ### Files to Modify
 - `path/to/file.ex` — [reason]
+
+### Invariants
+<!-- EARS form. The requirements that are not behavior. See "Invariants" below. Omit if none. -->
+- **INV-1** — THE SYSTEM SHALL [property that must hold]. *Check:* `[command or grep that fails if it doesn't]`
+
+### Unchanged behavior
+<!-- Required when the ticket is a bug fix. Omit for pure feature work. -->
+- [What works today and must still work after the fix] — covered by `[existing test file]`
 
 ### Existing Code to Reuse
 - `path/to/util.ex:function_name` — [what it does, why it fits]
@@ -317,6 +535,54 @@ prose rather than Scenarios. Don't "fix" the inconsistency by giving them the sa
 ```
 ⚠️ [what a green run does NOT prove. Omit the line only if there is genuinely nothing.]
 ````
+
+### Invariants — the requirements that aren't behavior
+
+A Scenario needs a `When`. Plenty of real requirements don't have one: a contract that must not
+change, a budget that must not be exceeded, a property that must hold across every path. Written as
+Gherkin they come out as `When the refactor is done / Then the API is the same`, which is the
+unfalsifiable anti-pattern this command already bans. Written as nothing, they get violated.
+
+Write them in **EARS** form — the same Easy Approach to Requirements Syntax that Kiro's
+`requirements.md` uses. One statement, one of these shapes, and a `Check:` that a machine can run:
+
+| Shape | Use for |
+|---|---|
+| `THE SYSTEM SHALL <property>` | An always-true invariant. The public shape of a module, an index that must exist. |
+| `WHEN <trigger> THE SYSTEM SHALL <response>` | An event-driven constraint that isn't worth a full Scenario. |
+| `IF <condition> THEN THE SYSTEM SHALL <response>` | An unwanted condition — the error path, the conflict. |
+| `WHILE <state> THE SYSTEM SHALL <property>` | A constraint that holds only in a state (during migration, while a flag is on). |
+| `WHERE <feature is present> THE SYSTEM SHALL <property>` | Behavior conditional on a flag or a deployment. |
+
+```markdown
+### Invariants
+- **INV-1** — THE SYSTEM SHALL keep `Axon.Rooms.join/2`'s arity and return shape.
+  *Check:* `grep -rn "Rooms.join(" apps/ --include=*.ex | wc -l` unchanged, and `mix test test/axon/rooms_test.exs`
+- **INV-2** — WHILE the `duplicate_tab_guard` flag is off THE SYSTEM SHALL behave exactly as today.
+  *Check:* `mix test test/axon_web/channels/ai_mod_channel_test.exs --only legacy_path`
+```
+
+**The `Check:` is not optional and it is not prose.** "Verify the API is unchanged" is a wish.
+A command, a grep with an expected result, or a named existing test is a check. An invariant you
+can't write a `Check:` for is the same failure as a Scenario you can't write a `# falsifies:` for —
+sharpen it or move it to `Questions / Blockers`.
+
+**Invariants are numbered `INV-N` and they appear in the coverage table** alongside Scenarios. They
+are not a dumping ground: if the thing has a trigger and an observable outcome, it's a Scenario.
+Invariants are for what must stay true, not for what should happen.
+
+### Unchanged behavior — required on bug tickets
+
+A bug fix has a third requirement class the ticket almost never writes down: *what must keep
+working*. The ticket says what's broken and what it should do instead; nobody writes "and don't
+break the other four callers", so nobody plans for it and the regression ships.
+
+When the ticket is a bug, name the behavior adjacent to the fix that must survive it, with the
+existing test that proves it. If no such test exists, that's a Scenario tagged `@regression` —
+write it, and say in `Not covered` that it didn't exist before this ticket.
+
+This is not the same as `Not covered`. `Not covered` is scope: what you're deliberately not
+building. `Unchanged behavior` is risk: what you could break by accident.
 
 This is also where the implementer's gotchas live — the ones phase 3 kept out of `Risks`. Put each
 one next to the thing it's about: a factory's real name under the file that needs it, a fixture's
@@ -352,8 +618,8 @@ Below the detail block, in the same section:
 
 ```markdown
 Each Scenario is one required failing test. A slice is not done until every Scenario tagged with it
-is green. `# falsifies:` is the mutation check — if reverting the change doesn't turn that scenario
-red, the test isn't testing the change.
+is green **and every Invariant's `Check:` still passes**. `# falsifies:` is the mutation check — if
+reverting the change doesn't turn that scenario red, the test isn't testing the change.
 ```
 
 Then the coverage table, then one fenced ` ```gherkin ` block, then `Not covered`.
@@ -467,6 +733,7 @@ you chose (a limit of 50, a timeout of 30s) is part of the spec and needs no pin
 | Two scenarios asserting the same thing in different words | Inflates the count, adds no coverage | Merge them. |
 | Only happy paths | See above | Add the `@negative`/`@boundary` one. |
 | `Then it holds 364 rows` with no provenance | A number measured from a refreshable source rots, and goes red for reasons unrelated to the change | Derive it from the source, or add `# pinned:` naming where and when you measured it. |
+| A Scenario whose `When` is "the refactor is complete" | It's an invariant wearing a Scenario costume — unfalsifiable, and it inflates the scenario count with something no test will assert | Move it to `### Invariants` in EARS form with a runnable `Check:`. |
 
 ### Coverage table
 
@@ -474,19 +741,26 @@ Sits between the detail block and the Gherkin so a reader can check the mapping 
 Gherkin. One row per requirement from the ticket:
 
 ```markdown
-| Requirement (from the ticket) | Scenario | Slice | Target test |
-|---|---|---|---|
-| Duplicate tab must not join twice | A second tab from the same participant is refused | 1 | `ai_mod_channel_test.exs` |
-| Existing tab must survive | (same) | 1 | `ai_mod_channel_test.exs` |
-| Survives 500 concurrent joins | ⏸️ deferred → Not covered | — | — |
+| Requirement (from the ticket) | Kind | Covered by | Slice | Target test / check |
+|---|---|---|---|---|
+| Duplicate tab must not join twice | Scenario | A second tab from the same participant is refused | 1 | `ai_mod_channel_test.exs` |
+| Existing tab must survive | Scenario | (same) | 1 | `ai_mod_channel_test.exs` |
+| Join API must not change shape | Invariant | INV-1 | 1 | `mix test test/axon/rooms_test.exs` |
+| Survives 500 concurrent joins | — | ⏸️ deferred → Not covered | — | — |
 ```
 
-A requirement with no Scenario is a gap, and there are exactly three ways to close it:
+`Kind` is `Scenario`, `Invariant`, or `—`. It exists so a reviewer can see at a glance that a
+requirement was *classified*, not just mentioned — an invariant sitting in the Scenario column with
+no `When` is the misfiling this column catches.
 
-1. **Write the Scenario.**
-2. **`⏸️ deferred → Not covered`** — a real requirement you're consciously not doing now. Give the
+A requirement with nothing covering it is a gap, and there are exactly four ways to close it:
+
+1. **Write the Scenario** — it has a trigger and an observable outcome.
+2. **Write the Invariant** — it's a property that must hold, with a runnable `Check:`.
+3. **`⏸️ deferred → Not covered`** — a real requirement you're consciously not doing now. Give the
    reason in `Not covered`, and if it deserves its own ticket, say that too.
-3. **Move it to `Questions / Blockers`** — it can't be specified until someone answers something.
+4. **Move it to `Questions / Blockers`** — it can't be specified until someone answers something.
+   Subject to the cap of three; below the cut it becomes an `(assumed)` Decision instead.
 
 **Never leave a cell empty, and never drop the row.** A requirement that quietly disappears from the
 table reads as covered, which is the one failure this table exists to prevent.
@@ -506,55 +780,52 @@ often missing from a plan and the reason unattended runs wander.
 
 ---
 
-## Phase 5 — Check your own work before posting
+## Phase 5 — The pre-post gate
 
-Run this against what you wrote. Fix inline; don't report the failures, just fix them.
+**This is not the plan review.** The full review — 23 checks across contract, brief, detail,
+invariants, and Gherkin — moved to `/todd:plan-check`, which reads the posted plan cold, the way
+the implementing agent will. Two reasons it belongs there and not here:
 
-**Always, both modes:**
+- **It was a second copy of the rules.** Nearly every item in the old phase 5 restated something
+  phases 3 and 4 already say at the point where you're writing it — one `When` per Scenario, a
+  `# falsifies:` on every Scenario, `Verification` required, the ~200-word brief. The guidance
+  stays where it's actionable. The duplicate checklist is what made this command a laundry list,
+  and a laundry list is the shape that degrades the reasoning of the session carrying it.
+- **You are the worst reader of your own plan.** You know what you meant by "the guard", so you
+  can't tell that the plan never says which guard. A session that has never seen your reasoning
+  can. That's the check that actually catches things, and it's structurally impossible from here.
 
-1. Comment's first line is exactly `## 📋 Implementation Plan`. This is the cross-file contract —
-   it's the check that matters *most* under `--no-gherkin`, because impl and loop still find the
-   plan by that string whether or not it carries a spec.
-2. **Count the words in section 1.** Over ~250 and something in it is detail. Find it against the
-   "What does not go in section 1" table and move it to section 2 — move, never delete.
-3. **Section 1 has only these headings**, in this order: `Summary`, `Changed since the last plan`
-   (conditional), `Decisions`, `Approach`, `Risks`, `Questions / Blockers`, `Scope`. Anything else
-   up there is misfiled. `Summary` is ≤3 sentences, each slice and each risk is one line, `Risks`
-   is ≤3 bullets, and `Scope` is one line.
-4. `### Scope`'s file count matches the number of entries in section 2's `Files to Modify`, and its
-   apps match the paths there. Two numbers that disagree is worse than one number.
-5. Section 2's heading is `## 🥒 Behavior Spec & Implementation Detail`, or
-   `## 🔧 Implementation Detail` under `--no-gherkin`. Not one of them under both.
-6. Every concrete noun you named — module, function, file, factory, config key, error atom —
-   traces to a phase-2 anchor. Anything that doesn't is now a blocker, not a claim.
-7. `### Verification` exists in section 2 under that exact heading, names real commands covering
-   every surface in `Files to Modify`, and says what a green run doesn't prove.
-8. Nothing settled is sitting in `Questions / Blockers`. A resolved call belongs in `Decisions`
-   with its date — left phrased as a question, it reads as a reason to stop.
-9. If phase 0 replaced a plan, `### Changed since the last plan` exists and names each difference.
+What stays here is a **contract gate**: five things that make the artifact unusable if they're
+wrong, so there's no point posting it. Fix inline; don't report them, just fix them.
 
-**Gherkin only — skip these under `--no-gherkin`:**
+1. The comment's first line is exactly `## 📋 Implementation Plan`. Four call sites find the plan
+   by that string. Break it and the plan is invisible to the whole chain.
+2. Section 2's heading is `## 🥒 Behavior Spec & Implementation Detail`, or
+   `## 🔧 Implementation Detail` under `--no-gherkin`. Not one of them under both, and never a
+   third wording — impl and loop branch on that literal to decide whether Scenarios or prose are
+   the acceptance criteria.
+3. `### Verification` exists under that exact heading. Non-app work loses its verify path entirely
+   without it.
+4. One comment, and it's the one phase 0 resolved. Never a second `## 📋 Implementation Plan`.
+5. `Questions / Blockers` has at most three entries. Four means you should have stopped in phase 2
+   rather than posted — go back, don't paper over it here. (Coming from phase 0B there is no phase 2
+   to go back to; that's step 6's stop, and the answer is the same — say the ticket is
+   under-specified rather than trimming the list to fit.)
 
-10. Every requirement in the ticket appears in the coverage table, resolved as a Scenario, a
-    `⏸️ deferred` marker, or a `Questions / Blockers` entry. No empty cells, no dropped rows.
-11. `Scope`'s deferred count equals the number of `⏸️ deferred` rows in the coverage table.
-12. Every Scenario has a `@slice-N` tag, and every slice in `Approach` has at least one Scenario.
-13. Every Scenario has an app-or-area tag, a `# target:`, and a `# falsifies:`.
-14. Every slice has at least one `@negative` or `@boundary` Scenario.
-15. Every measured constant asserted in a `Then` is either derived at runtime or carries a
-    `# pinned:` line naming its source and the date you measured it.
-16. No Scenario has two `When` steps.
-17. No two Scenarios assert the same thing.
-18. Every `And` under a `Then` can fail independently.
-19. `Not covered` is present, and every line in it says what's excluded *and why*. If genuinely
-    nothing is out of scope, write that as the single line — an empty section reads as forgotten.
+Everything else — word counts, heading order, count reconciliation, anchor tracing, coverage-table
+completeness, tag and comment presence, EARS form, scenario anti-patterns — is `/todd:plan-check`'s
+job. Don't do it twice.
 
 ---
 
 ## Phase 6 — Post and report
 
-**Write the local copy first**, always, including under `--dry-run`:
-`.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md`. Cheap insurance against a failed Linear write.
+**Write the local copies first**, always, including under `--dry-run`:
+
+- `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` — the plan body exactly as posted. Cheap
+  insurance against a failed Linear write, and what `/todd:plan-check --local` reads.
+- `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md` — the phase-2 anchor list. Not optional;
+  `/todd:plan-check` can't trace nouns without it.
 
 **Post** with `mcp__claude_ai_Linear__save_comment` — new comment, or the existing comment id if
 phase 0 found one. Under `--dry-run`, post nothing and say so plainly.
@@ -563,7 +834,7 @@ phase 0 found one. Under `--dry-run`, post nothing and say so plainly.
 
 ```
 FRG-1234 — <ticket title>
-Scope: Medium · 3 slices · 7 files (axon, dendra) · 11 scenarios (4 negative/boundary) · 2 blockers
+Scope: Medium · 3 slices · 7 files (axon, dendra) · 11 scenarios (4 negative/boundary) · 3 invariants · 2 blockers
 Plan: <linear comment url>
 
 ❓ Blockers
@@ -579,13 +850,79 @@ and blockers. Keep the two consistent; a report claiming 7 files over a brief cl
 of them was written from memory.
 
 Under `--no-gherkin` there are no scenario counts to report. Drop them rather than printing zeros —
-the `Scope:` line becomes `Scope: Small · 2 slices · 3 files (astro) · 1 blocker`, the per-slice
-lines lose their scenario counts, and say plainly that this plan has no Behavior Spec so Todd knows
-which kind of run `impl` is about to get.
+the `Scope:` line becomes `Scope: Small · 2 slices · 3 files (astro) · 2 invariants · 1 blocker`,
+the per-slice lines lose their scenario counts, and say plainly that this plan has no Behavior Spec
+so Todd knows which kind of run `impl` is about to get. Invariants survive the flag, so their count
+stays; drop the clause only at zero.
 
 Then the plan itself. If phase 2 corrected the ticket's premise, **lead with the correction** — it's
 the finding, and a reader who skims past it implements the wrong thing. If the correction was big
 enough that you stopped, that's the whole report.
+
+### After a phase-0B run, three things differ
+
+**1. Replace the stamp.** The plan comment still carries `*Plan check: ❌ N blockers*` with the
+blocker list under it. Leave it and every reader — Todd, `impl`, the next checker — sees a plan
+still failing on findings you just closed. Replace the whole stamp, blocker block included, with:
+
+```markdown
+---
+*Plan revised 2026-08-11 to resolve 3 blockers (C1, E11, B5) — re-check required.*
+```
+
+🛑 **Never write a `✅ passed` stamp.** That stamp is `/todd:plan-check`'s to write and only after it
+has actually run the checks. Stamping your own revision as passed is precisely the laundering the
+checker refuses to do in the other direction, and it would walk an unchecked plan straight past
+every gate that reads the stamp. If a blocker is still open, say that in the revision line too:
+`— 2 of 3 resolved, B5 still open, re-check required`.
+
+**2. The report is a diff, not a plan.** Todd already read the plan; what he needs is what moved:
+
+```
+FRG-1234 — <ticket title>
+Revised: 3 blockers resolved · 0 still open · 2 anchors added · 1 scenario added
+Plan: <linear comment url>
+
+Resolved
+- [C1] `Axon.Rooms.reject_join/2` — exists at rooms.ex:181. Grounded and added to anchors.
+- [E11] Slice 2 — added @boundary scenario "a rejoin after presence expiry is allowed".
+- [B5] 4 questions → 3 answered by you and moved to Decisions.
+
+Still open
+- ❓ [B5] Whether staff-user joins are in scope — you deferred to product.
+```
+
+**3. The handoff names a fresh session**, and that word is not decoration:
+
+```
+Revised and unchecked. Run `/todd:plan-check FRG-1234` in a fresh session.
+```
+
+**Why fresh.** `/todd:plan-check` works because it has never seen the reasoning that produced the
+plan — that's the entire argument at the top of that file. You have now spent a session deciding
+that `rooms.ex:181` is the right anchor and that the new `@boundary` Scenario says what it needs to.
+You are, at this moment, the worst available reader of exactly the lines you just wrote. Running the
+check from here would produce a pass that means nothing. Don't offer to run it inline, and don't
+report the plan as ready — it's revised and unchecked until a session that wasn't in this one says
+otherwise.
+
+### Both modes
+
+**Close with the handoff.** The plan is posted but unreviewed — say so, in one line, as the last
+thing Todd reads:
+
+```
+Unreviewed. Run `/todd:plan-check FRG-1234` before impl.
+```
+
+Under `--dry-run` it's `/todd:plan-check FRG-1234 --local`. Don't soften this into "you may want
+to" — an unchecked plan that reads well is exactly the artifact this whole command exists to stop
+shipping, and the line is the only thing standing between it and an unattended `impl` run.
+
+**The loop terminates on a clean check, not on a tidy-looking plan.** plan → check → blockers →
+plan → check. Each pass should close findings and open none; if the same blocker survives two
+passes, stop looping and say what's actually stuck. A third round on the same finding means it needs
+a decision nobody in the loop can make.
 
 ---
 
@@ -600,7 +937,22 @@ enough that you stopped, that's the whole report.
   detail can be complete, not instead of it.
 - Never create a worktree or move the ticket's Linear state. Planning is read-mostly; the one write
   is the comment.
-- Never write a Scenario you can't finish the `# falsifies:` line for.
+- Never write a Scenario you can't finish the `# falsifies:` line for, or an Invariant you can't
+  finish the `Check:` line for.
+- Never post more than three `Questions / Blockers`. Four means the ticket isn't ready — say that
+  instead.
+- Never write an invariant as a Scenario to make the scenario count look better.
+- Never leave phase 2 without writing `anchors-<TICKET>.md`. A plan whose anchors weren't persisted
+  cannot be checked, only admired.
+- Never report a plan as done. It's posted and unreviewed until `/todd:plan-check` says otherwise.
+- Never re-plan a ticket whose plan carries a `❌` stamp. That's phase 0B — surgery on the named
+  blockers, with everything the check passed left alone.
+- Never write a `✅ passed` stamp. `/todd:plan-check` writes that, after running the checks. A
+  revision stamps itself as revised and unchecked.
+- Never leave a `❌` stamp on a plan you revised, and never close a blocker you had to guess the
+  meaning of. A resolved-looking blocker that was never understood is worse than an open one.
+- Never run the check yourself at the end of a phase-0B run. Fresh session, every time — you can't
+  cold-read lines you just wrote.
 - One ticket per invocation. A whole project with milestones is `/todd:linear-project-setup`.
 
 ## Failure handling
@@ -610,8 +962,14 @@ enough that you stopped, that's the whole report.
 | Ticket not found | Report the id attempted. Stop. |
 | Linear MCP blocked or truncating | Fall back to `linctl issue get $TICKET --json`. |
 | Multiple existing plan comments | Stop and report. Todd picks. |
+| Plan carries a `❌` stamp | Phase 0B. Resolve the named blockers; don't re-plan. |
+| `❌` stamp names only check ids, no blocker text and no findings file | Stop. Offer to re-run `/todd:plan-check <TICKET>` for the findings, or to re-plan from scratch. Never infer what a bare `C1` meant. |
+| A blocker Todd can't answer | It stays in `Questions / Blockers`, the revision stamp says it's still open, and the report says the plan is still blocked. Never convert it to an `(assumed)` Decision to make the count work. |
+| The same blocker survives two phase-0B passes | Stop looping. Say what's stuck and why the loop can't settle it. |
 | Ticket premise contradicted by the code | Correct it in bold in `Summary` and keep planning if the plan survives the correction; stop and report only if it doesn't. Never quietly plan around it. |
 | Can't ground more than about half the anchors | The ticket is under-specified. Post the brief and the detail block with the blockers, and say the Behavior Spec needs answers first. Don't ship a spec built on guesses. |
+| More than 3 blockers survive the phase-2 ranking | The ticket is under-specified. Post the brief and the detail block, name the three that matter most, and stop. Don't ship a twelve-question plan. |
+| Section 2 runs past ~400 lines | Post it, and say in the report that the ticket looks like two or three. Never trim the detail to hit a number. |
 | `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
 
 Now plan $ARGUMENTS.
