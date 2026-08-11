@@ -1,0 +1,337 @@
+# Manual verification — shared procedure
+
+Drive the local dscout stack in a browser, run the ticket's Manual Test Plan, and check
+items off with evidence.
+
+Two callers read this file, and they must not drift:
+
+- **`/todd:coder`** — authors the plan in Plan Mode, runs this in Impl Mode.
+- **`/todd:loop`** — runs this as its own phase, after the self-review fixes land and
+  before the PR flips to ready.
+
+Everything below was verified against the running stack on 2026-08-11. Where a command
+looks redundant, it's because the obvious shorter version fails — the notes say how.
+
+---
+
+## The rule that makes the evidence worth anything
+
+**Every worktree shares one Compose project.** `compose.yaml` pins `name: dscout`, so
+the containers that answer `localhost:5000` are bound to whichever worktree last brought
+them up — not to the one you just edited. Browse without checking, and you produce
+screenshots that "prove" code you never ran.
+
+So: **confirm the running stack is bound to the worktree holding your changes, or don't
+claim verification at all.** A wrong-worktree screenshot is worse than no screenshot,
+because it looks like proof.
+
+Record the binding and the commit SHA alongside the results. That provenance is what
+makes a reader trust the ticks.
+
+---
+
+## Step 0 — Guards. Refuse rather than fake it.
+
+Stop, and report the items as unverified with the reason, if any of these hold:
+
+| Guard | Why |
+|---|---|
+| Base URL isn't `http://localhost:5000` | This procedure signs in with shared local dev credentials. Never point it at staging or production. |
+| Docker isn't running (`docker info` fails) | Nothing to verify against. |
+| The plan carries no `### 🧪 Manual Test Plan` | Nothing to run. Say so; don't invent a checklist at verification time. |
+| Every item is marked not browser-verifiable | Report why, skip the browser entirely, don't spin the stack up for nothing. |
+
+---
+
+## Step 1 — Bring the stack up
+
+### Never call `ddu` from the Bash tool. It is guaranteed to fail.
+
+`ddu` is `alias ddu="dscout-down && dscout-up"` (`~/.dotfiles/zshrc:80`), and those
+functions live in `~/.config/zsh/dscout.zsh`. The Bash tool replays a snapshot of the
+interactive profile, and that snapshot **keeps the alias and the two public functions but
+drops every `_`-prefixed helper** plus the `_DSCOUT_APPS` array. Verified:
+
+```
+ddu                   PRESENT (alias)
+dscout-up             PRESENT (function)
+_dscout_root          MISSING
+_dscout_ensure_env    MISSING
+_dscout_running_root  MISSING
+_DSCOUT_APPS          UNSET
+```
+
+The failure is quiet and misleading rather than loud: `_dscout_root` returns empty,
+`cd ""` doesn't error in zsh, and `docker compose down` then runs **in whatever directory
+the shell happens to be in** with an empty service list — `no such service:`. Nothing is
+destroyed (no `-v`, no services matched), but nothing you wanted happened either.
+
+Inline what `ddu` expands to instead. `WT` is the absolute worktree path holding your
+changes.
+
+### 1a. Probe before you touch anything
+
+```bash
+curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:5000/auth/sign_in
+docker inspect dscout-axon-1 \
+  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+```
+
+- `200` **and** the binding equals `$WT` → **the stack is already right. Don't bounce it.**
+  Phoenix recompiles on request in dev and webpack rebuilds on change, so your edits are
+  already live. Skip to step 2 and save seven minutes.
+- Binding is some *other* worktree → you must rebind (1c). Say plainly in your report that
+  you rebound it, and from what: it interrupts whatever was running there.
+- Not serving → bring it up (1c).
+
+### 1b. The `.env` files the containers need
+
+`_dscout_ensure_env` is one of the helpers the snapshot drops, so do its job by hand.
+axon and astro won't boot without these, and a fresh worktree has neither:
+
+```bash
+for f in apps/axon/.env apps/astro/.env; do
+  [ -f "$HOME/dscout-wt/main/$f" ] && [ ! -e "$WT/$f" ] \
+    && ln -s "$HOME/dscout-wt/main/$f" "$WT/$f" && echo "symlinked $f"
+done
+```
+
+### 1c. Up, bound to your worktree
+
+Name the services explicitly. **Don't use `--profile dev`** — `contour` joined that
+profile and declares a required `env_file: ./apps/contour/.env` that mostly doesn't exist
+locally, so a bare `--profile dev up` dies at model load. Naming services activates their
+profile anyway, and `depends_on` pulls in database/redis/s3.
+
+```bash
+cd "$WT" && docker compose -f compose.yaml down dendra axon astro astro-worker 2>&1 \
+  | grep -v "has active endpoints"
+
+cd "$WT" && docker compose -f compose.yaml up -d --wait \
+  --wait-timeout "${DSCOUT_WAIT_TIMEOUT:-420}" \
+  --force-recreate dendra axon astro astro-worker
+```
+
+- `--force-recreate` is what actually rebinds the containers to `$WT`'s paths. Include it
+  whenever the binding was wrong; it's harmless when it was already right.
+- The `has active endpoints` warning on `down` is expected — Compose tries to drop the
+  network while the deps are still attached.
+- **Never** `down --all` and **never** pass `-v`. Both take the deps with them; `-v`
+  additionally destroys the database, MinIO contents, and the warm webpack/node_modules
+  caches. `down` ignores the profile you pass and removes every container in the project,
+  which is why the service list is spelled out.
+- 420s fits inside the Bash tool's 600s cap. If it times out, report
+  `docker compose -f compose.yaml logs --tail 50 axon` rather than retrying blind.
+
+### 1d. Migrations, if the work added one
+
+The code reloader covers `lib/`. It does **not** cover migrations, `config/`, `mix.exs`,
+or new deps — those need the restart above, and a migration needs running:
+
+```bash
+cd "$WT" && docker compose -f compose.yaml exec -T axon mix ecto.migrate
+```
+
+---
+
+## Step 2 — Sign in
+
+Credentials come from the environment, with a fallback to the seeded local dev user:
+
+```bash
+echo "${TEST_USER_EMAIL:-dev@dscout.com}"
+echo "${TEST_USER_PASSWORD:+set}"      # never echo the value itself
+```
+
+- `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` are the intended source. They are **not** set
+  anywhere by default — not in the repo, not in any `.env`, not in the shell.
+- Fallback is `dev@dscout.com` / `Password1234*`, the user seeded by
+  `apps/axon/lib/axon/dev_tools/seed.ex:75` and documented in the repo's own AGENTS.md as
+  local-only. **Say which pair you used** in the results.
+- These are local-only credentials. That is the entire reason step 0 refuses any host
+  other than `localhost:5000`.
+
+### The verified sequence
+
+```
+browser_navigate    http://localhost:5000/auth/sign_in
+browser_fill_form   input[type=email]     ← email
+                    input[type=password]  ← password
+browser_click       button[type=submit]
+```
+
+Then confirm the URL contains `/efflux` (observed: `/efflux/home/2`). That redirect *is*
+the success assertion — `session_controller.ex:32-36` sends a signed-in user to
+`/efflux`, and the Dendra SPA then client-navigates to `/efflux/home/<account>`.
+
+**Use the `input[type=...]` selectors, not ids.** `#session_email` / `#session_password`
+come from `main`'s HEEx template and **do not exist on every running build** — verified
+failing against a stack bound to another worktree. Type-based selectors survive that;
+role-and-name (`textbox "Email"`, as `apps/e2e/tests/auth.setup.ts:95-104` does it) is the
+other portable option. Snapshot refs (`ref=e12`) change every run — never bake one into a
+skill.
+
+### When sign-in doesn't land on `/efflux`
+
+Don't retry blind, and don't work around it. Report the items as unverified with the
+landing URL:
+
+| Landed on | Meaning |
+|---|---|
+| `/auth/two_factor` | Account requires 2FA. Needs a TOTP secret this procedure doesn't have. |
+| SSO redirect | Account is SSO-required (`required_sso`). Not scriptable here. |
+| Back on `/auth/sign_in` with "Invalid Email or password" | Credentials are wrong, or the dev user isn't seeded — check `bin/dscout_db restore` ran. |
+
+---
+
+## Step 3 — Run the checklist
+
+For each item marked browser-verifiable, in order:
+
+1. Navigate to the item's stated **Route**.
+2. Perform the item's single action.
+3. Observe whether the **Expect** clause actually holds. Read the accessibility snapshot
+   for structure — it's better than a screenshot for deciding what happened, and it's what
+   you act on. The screenshot is for the human reader, not for you.
+4. Capture evidence (step 4) **whether it passed or failed.** A failure screenshot is the
+   most valuable artifact in the run.
+5. Tick or don't, per the honesty rules below.
+
+If an item's route 404s or its control isn't on the page, that is a **finding**, not a
+tooling problem. Report it — it usually means the change isn't wired up, which is
+precisely what a manual plan exists to catch and what unit tests routinely miss.
+
+Console errors are worth a glance (`browser_console_messages`) but are not on their own a
+failure — the efflux home page throws a couple dozen on a clean load.
+
+---
+
+## Step 4 — Capture evidence
+
+### Where files may go — this is enforced, not a convention
+
+The Playwright MCP **roots every write at the session's own working directory.** Verified
+error: `File access denied: … is outside allowed roots. Allowed roots:
+/Users/toddprice/dscout-wt/main/.playwright-mcp, /Users/toddprice/dscout-wt/main`.
+
+Consequences, all verified:
+
+- **An absolute path outside the session cwd is rejected.** Including the job tmp dir.
+- **You cannot write evidence into `$WT` when `$WT` isn't the session cwd.** This is the
+  normal case for `/todd:loop`, which runs from `~/dscout-wt/main` but implements in
+  `~/dscout-wt/<ticket>`. Don't fight it — write into the session checkout.
+- **Parent directories are not created for you** — a nested filename fails `ENOENT`.
+  `mkdir -p` first, from Bash.
+- Use a **relative** filename. It resolves against the session cwd, which is always inside
+  the allowed roots, so it works no matter which worktree the code lives in.
+
+```bash
+mkdir -p .claude/tmp/manual-verification/$TICKET
+```
+
+`**/.claude/tmp/` is gitignored, so nothing lands in the working tree. A bare filename is
+**not** ignored — it drops the PNG in the repo root as untracked noise. (`.playwright-mcp/`
+is already ignored.)
+
+### Capture
+
+```
+browser_take_screenshot
+  filename: .claude/tmp/manual-verification/<TICKET>/MT<N>-<slug>.png
+  scale:    css
+```
+
+- One screenshot per item, named for the item, so evidence maps to checklist row with no
+  guessing. `fullPage: true` when the thing you're proving sits below the fold.
+- Capture the state that *demonstrates the expectation* — after the action, not before.
+
+### Screen recordings
+
+**The Playwright MCP has no video or recording tool.** Screenshots are the evidence
+format; don't promise a recording it can't produce.
+
+A GIF is possible via the Chrome MCP's `gif_creator`, but that's a **separate browser**
+with its own session — you'd have to sign in and redo the flow there from scratch. Only
+worth it for a genuinely multi-step interaction where stills don't tell the story, and
+never as a substitute for the stills.
+
+---
+
+## Step 5 — Post the results to Linear
+
+### Post a new comment. Do not rewrite the plan comment.
+
+The Manual Test Plan is *defined* in the `## 📋 Implementation Plan` comment and its
+results go in a **separate** `## 🧪 Manual Verification` comment.
+
+Rewriting the plan comment to tick its boxes is tempting and wrong: `/todd:plan-check`
+writes its stamp as the **last line** of that comment, that slot already has more than one
+writer, and a rewrite that drops the stamp silently converts a checked plan into an
+unchecked one. It also destroys the record of what was originally asked for. Re-render the
+checklist in the results comment instead — ticked, with evidence.
+
+### Attaching the screenshots
+
+Per-file, and **strictly one file at a time** — the signed URL expires in 60 seconds, so
+batching the prepare calls lets the earlier ones die:
+
+1. `mcp__claude_ai_Linear__prepare_attachment_upload` — issue, filename, `image/png`, exact
+   byte size (`wc -c`).
+2. `PUT` the raw bytes to `uploadRequest.url`, sending **every** header from
+   `uploadRequest.headers` verbatim, casing included. Any omission or edit returns 403.
+   Don't base64 or otherwise transform the file:
+   ```bash
+   curl -X PUT --data-binary @<file> -H '<each signed header>' "<uploadRequest.url>"
+   ```
+3. `mcp__claude_ai_Linear__create_attachment_from_upload` with the returned `assetUrl`.
+
+Then embed the same `assetUrl` in the comment body as `![MT1](<assetUrl>)` so the image
+renders inline. If an embed doesn't render, the attachment row from step 3 is the durable
+copy — say so rather than silently dropping the evidence.
+
+If uploading fails, **still post the comment** with the local paths and a note that the
+upload failed. Losing the results because the attachment step broke is the worse outcome.
+
+### Comment format
+
+```markdown
+## 🧪 Manual Verification
+
+**Stack:** worktree `<WT>` @ `<short-sha>` · signed in as `<email>` (`TEST_USER_EMAIL` | seeded dev fallback)
+**Verified:** <n> of <total> · **Failed:** <n> · **Not verifiable:** <n>
+
+- [x] **MT1** — <action> → **Expect:** <result>
+  - Observed: <what actually happened>
+  - ![MT1](<assetUrl>)
+- [ ] **MT2** — <action> → **Expect:** <result>
+  - ❌ **Failed.** Observed: <what happened instead>
+  - ![MT2](<assetUrl>)
+- [ ] **MT3** — <action> → **Expect:** <result>
+  - ⏭️ Not verifiable here — <reason, e.g. needs a Snowflake sync>
+
+### Notes
+- <anything a human should re-check by hand>
+```
+
+---
+
+## Honesty rules
+
+These are the whole point. A checklist that can be ticked without looking is worth less
+than no checklist, because it launders a guess as a fact.
+
+- **Tick `[x]` only for an expectation you watched hold in the browser this run.** Not
+  because the code looks right, not because a unit test covers it, not because it passed
+  last time.
+- **A failure stays unticked and gets reported**, with the screenshot and what you saw
+  instead. Never quietly reword an item so it passes.
+- **Never infer from reading code.** Manual verification exists to catch what tests can't
+  see — wiring, rendering, navigation. Inferring from source defeats it entirely.
+- **Anything you couldn't reach gets `⏭️` and a reason.** Needs prod data, needs an inbound
+  email, needs a second account, needs a scout on a phone, needs a background job that
+  isn't running locally. A named blocker is a useful result; a blank is not.
+- **Wrong-worktree evidence doesn't count.** If step 1 couldn't bind the stack to the code
+  under test, report everything unverified. Screenshots of code you didn't run are the one
+  failure mode here that actively misleads.
+- **Say what you skipped and why**, in the summary the caller reports upward. An
+  unattended run is trusted exactly as far as it is honest about its gaps.

@@ -29,10 +29,11 @@ authoring-only option, `--no-submissions`, that drops participant submissions/re
 
 > **Where the tool lives.** The scripts are in the monorepo at
 > `.claude/commands/copy-data/` (`resolve.py`, `manifest.py`, `extract.py`,
-> `transform.py`, `load.sh`, `seed_membership.sh`, `seed_template_consumers.sh`, `tests/`). As of
-> 2026-07 they're on branch **`ena-292-create-better-test-data-in-staging`** (worktree
-> `/Users/toddprice/dscout-wt/ena-292`), not yet on `main` — so run from that branch/worktree until
-> it merges. There's also a repo slash-command wrapper `.claude/commands/copy-data.md`;
+> `transform.py`, `load.sh`, `seed_membership.sh`, `seed_template_consumers.sh`, `tests/`). They
+> merged to **`main`** and are tracked there as of 2026-08 — run from any current worktree, no
+> branch switching needed. (They previously lived on
+> `ena-292-create-better-test-data-in-staging`; that worktree is gone — ignore any older
+> instruction to `cd` there.) There's also a repo slash-command wrapper `.claude/commands/copy-data.md`;
 > this skill is the portable, always-discoverable front door to the same workflow.
 
 ## Prerequisites (check first, fail loud)

@@ -26,8 +26,9 @@ export PATH="$HOME/.claude/scripts:$PATH"
 
 # omz
 export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="robbyrussell"
-plugins=(git zsh-shift-select zsh-autosuggestions)
+#ZSH_THEME="robbyrussell"
+plugins=(git zsh-shift-select zsh-autosuggestions async gh-pr-status)
+ZSH_THEME="gh-pr-status"
 source $ZSH/oh-my-zsh.sh
 
 # keybindings

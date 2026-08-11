@@ -1,5 +1,5 @@
 ---
-description: Take a planned Linear ticket all the way to a reviewed, ready-for-review PR without supervision — implement it via `/todd:coder impl --orchestrated`, open a draft PR, self-review it with `/todd:pr_review --json-only`, address its own findings, flip to ready, then wait for baz and address that too, looping until baz is quiet. Use when Todd says "run the loop on FRG-1234", "/todd:loop FRG-1234", "take this ticket to a reviewed PR", or wants a planned ticket driven end to end while he's away. Requires an existing plan (Linear comment or linked Notion doc). Takes `--baz-timeout N`, `--max-rounds N`, `--no-ready`, `--resume PHASE`.
+description: Take a planned Linear ticket all the way to a reviewed, ready-for-review PR without supervision — implement it via `/todd:coder impl --orchestrated`, open a draft PR, self-review it with `/todd:pr_review --json-only`, address its own findings, drive the ticket's Manual Test Plan through a real browser against the local stack and tick the items off with screenshot evidence, flip to ready, then wait for baz and address that too, looping until baz is quiet. Use when Todd says "run the loop on FRG-1234", "/todd:loop FRG-1234", "take this ticket to a reviewed PR", or wants a planned ticket driven end to end while he's away. Requires an existing plan (Linear comment or linked Notion doc). Takes `--baz-timeout N`, `--max-rounds N`, `--no-ready`, `--skip-manual`, `--resume PHASE`.
 ---
 
 You are running Todd's unattended ticket-to-reviewed-PR loop. One planned ticket in, one ready-for-review PR out, with as few interruptions as the work honestly allows.
@@ -8,9 +8,9 @@ You are running Todd's unattended ticket-to-reviewed-PR loop. One planned ticket
 
 ## The two rules that shape everything
 
-**1. Ask almost never — but ask properly when you do.** Phases 1–3 and 5 are fully autonomous: no prompts, safe defaults, keep going. Phases 4 and 6 stop for *judgement calls only* — a finding where fact-checking couldn't settle it, two defensible designs, or a fix that reaches past what the ticket asked for. A nit with an obvious fix is not a judgement call. Batch questions into one `AskUserQuestion` (max 4 per call; loop if there are more) rather than dribbling them out.
+**1. Ask almost never — but ask properly when you do.** Phases 1–3, 5 and 6 are fully autonomous: no prompts, safe defaults, keep going. Phases 4 and 7 stop for *judgement calls only* — a finding where fact-checking couldn't settle it, two defensible designs, or a fix that reaches past what the ticket asked for. A nit with an obvious fix is not a judgement call. Batch questions into one `AskUserQuestion` (max 4 per call; loop if there are more) rather than dribbling them out.
 
-**2. Every phase runs in a dispatched subagent.** This is what "clear context between phases" means here — a command can't call `/clear`, and a fresh subagent is the only real way to start a phase cold. The orchestrator (you) holds almost nothing: `TICKET`, `WT` (absolute worktree path), `BRANCH`, `PR`, `JSON`, and each phase's compact return. Never pull a diff, a review payload, or an implementation transcript into your own context — a subagent fetches those itself and hands back a summary. A loop that compacts halfway through phase 6 has lost the thread.
+**2. Every phase runs in a dispatched subagent.** This is what "clear context between phases" means here — a command can't call `/clear`, and a fresh subagent is the only real way to start a phase cold. The orchestrator (you) holds almost nothing: `TICKET`, `WT` (absolute worktree path), `BRANCH`, `PR`, `JSON`, `EVIDENCE` (phase 5's screenshot directory), and each phase's compact return. Never pull a diff, a review payload, an implementation transcript, or a page snapshot into your own context — a subagent fetches those itself and hands back a summary. A loop that compacts halfway through phase 7 has lost the thread.
 
 ## Arguments
 
@@ -19,9 +19,10 @@ You are running Todd's unattended ticket-to-reviewed-PR loop. One planned ticket
 | Flag | Default | Meaning |
 |---|---|---|
 | `--baz-timeout N` | `20` | Minutes to wait for baz after flipping to ready. |
-| `--max-rounds N` | `3` | Cap on baz review rounds in phase 6. |
-| `--no-ready` | off | Stop after phase 4. Leaves a self-reviewed draft; never flips it or waits for baz. |
-| `--resume PHASE` | — | Re-enter mid-flow at `impl`, `pr`, `review`, `address`, `ready`, or `baz`. |
+| `--max-rounds N` | `3` | Cap on baz review rounds in phase 7. |
+| `--no-ready` | off | Stop after phase 5. Leaves a self-reviewed, hand-verified draft; never flips it or waits for baz. |
+| `--skip-manual` | off | Skip phase 5's browser run. For a ticket with no user-observable surface, or when the local stack is a lost cause. |
+| `--resume PHASE` | — | Re-enter mid-flow at `impl`, `pr`, `review`, `address`, `manual`, `ready`, or `baz`. |
 
 No ticket id → show usage and stop.
 
@@ -52,8 +53,23 @@ Do this inline (it's small) and report a one-line summary.
 
 Then branch on what you found:
 
-- **Linear comment** → nothing more to do. `/todd:coder impl` finds it on its own. Note in your phase-0 line whether it carries a `## 🥒 Behavior Spec` and how many Scenarios — a spec'd plan gives phase 1 a hard checklist and gives you a real completion number to report at the end; a prose-only plan means "done" is the impl agent's judgement call. Worth knowing which kind of run this is before it starts.
-- **Notion doc only** → **you must carry the plan forward yourself.** `/todd:coder impl` only looks for that Linear comment; a Notion-only plan is invisible to it, and it will quietly grade the ticket "straightforward" and improvise. Extract the plan text and paste it into the phase 1 subagent prompt.
+- **Linear comment** → `/todd:coder impl` finds it on its own. Note in your phase-0 line whether it carries a `## 🥒 Behavior Spec` and how many Scenarios — a spec'd plan gives phase 1 a hard checklist and gives you a real completion number to report at the end; a prose-only plan means "done" is the impl agent's judgement call. Worth knowing which kind of run this is before it starts.
+
+  **Note whether it carries a `### 🧪 Manual Test Plan`, and how many `MT` items.** That decides phase 5: a checklist to run, a Behavior Spec to derive one from, or nothing to hand-verify. Same phase-0 line.
+
+  **Then read its plan-check stamp.** `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
+
+  - `❌` → **failed**. The trailing `see C1, E11, B5` names the failing check codes.
+  - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
+  - `✅ passed` → **passed**.
+  - No `Plan check:` line anywhere → **unchecked**. Not the same as failed.
+
+  **`❌` → stop the loop.** Report the blocker codes from the stamp and tell Todd to fix the plan. Don't attempt the fix here — a blocker needs his decision, which is the whole reason it's a blocker.
+
+  **Unchecked → run `/todd:plan-check $TICKET --strict` inline**, then read the stamp it just wrote. Comes back `❌` → stop as above; passes → continue. An unstamped plan is a missing check, not a failed one, and an unattended run should cure that in one step rather than dead-stop. `/todd:coder plan` never stamps, so this is the common case.
+
+  **`⚠️` or `✅` → continue.** Either way the stamp state goes in the *same* phase-0 line as the Behavior Spec note — one summary line, not two.
+- **Notion doc only** → **you must carry the plan forward yourself.** `/todd:coder impl` only looks for that Linear comment; a Notion-only plan is invisible to it, and it will quietly grade the ticket "straightforward" and improvise. Extract the plan text and paste it into the phase 1 subagent prompt. **A Notion plan can't be stamp-checked** — `/todd:plan-check` reads the Linear comment, or a local file with `--local`, and never Notion — so this path proceeds on an unchecked plan, and the phase-0 line should say so.
 - **Neither** → stop. Say the loop needs a plan and to run `/todd:plan $TICKET` first — an unattended run is exactly the case its Behavior Spec is for, since there's nobody around to resolve an ambiguous "handle the edge case". `/todd:coder plan $TICKET` or a linked Notion doc also work. Don't offer to plan it here — planning wants Todd's eyes, and that's the whole reason this command takes a *planned* ticket.
 
 **Find or make the worktree.** `WT_ROOT=$HOME/dscout-wt`, and the conventional path is `$WT_ROOT/<ticket-lowercased>`.
@@ -152,7 +168,37 @@ If any check comes back red, **stop before pushing** and report it. A red loop i
 
 ---
 
-## Phase 5 — Ready for review
+## Phase 5 — Manual verification in a browser
+
+Run the ticket's Manual Test Plan against the local stack and tick the items off with evidence. Autonomous — no questions here.
+
+**Why it sits at exactly this point.** Phase 4 changes the code. Evidence captured before it is evidence of code that no longer exists, and a screenshot of a superseded build is worse than no screenshot because it reads as proof. This is also why phase 1's `/todd:coder impl --orchestrated` deliberately *skips* its own browser step and reports `MANUAL: deferred (orchestrated)` — the last edit has to land first, and only you know when that is.
+
+**Dispatch one subagent.** It needs the Playwright MCP tools plus Bash, so use a general-purpose agent, not a read-only one. Browser snapshots are bulky — that's exactly what you're keeping out of your own context.
+
+Its prompt needs to work cold:
+
+- **"Read `~/.claude/skills/_shared/manual-verification.md` and follow it."** That file is the procedure and it carries the verified commands. Tell it not to improvise a browser recipe — several obvious shortcuts are known-broken (`ddu` from a non-interactive shell, `#session_email` as a selector, an absolute screenshot path).
+- `TICKET`, the absolute `WT` path, and the branch-tip SHA — the results comment records provenance, and provenance is what makes the ticks trustworthy.
+- The Manual Test Plan items, lifted verbatim from the plan comment.
+- The cwd-resets warning, and: **write evidence to a path relative to the session's cwd**, because the Playwright MCP roots every write at the session directory and will refuse a path inside `$WT` when `$WT` isn't it. That's the normal case here.
+
+**The one thing that invalidates the whole phase.** Every worktree shares one Compose project (`compose.yaml` pins `name: dscout`), so the containers answering `localhost:5000` may be serving a *different* worktree's code. The subagent must confirm the binding matches `$WT` before believing anything it sees, and rebind if not. If it can't, everything comes back unverified — never tick against code you didn't run.
+
+**When the plan has no `### 🧪 Manual Test Plan`:**
+
+- **It has a `## 🥒 Behavior Spec`** → derive the checklist from the Scenarios that are UI-observable, and label it `_Derived from the Behavior Spec._` This is legitimate because those Scenarios were authored *before* the code, so they're a pre-existing contract you're translating into UI steps. Skip Scenarios with no visible surface rather than inventing one.
+- **Neither** → skip the phase and say so. `/todd:coder plan` emits a Manual Test Plan; `/todd:plan` currently does not. Don't write a checklist from the diff you just built — a test authored after the code tests what you wrote, not what was asked for, and it will pass by construction.
+
+`--skip-manual` skips this phase outright. Say that it was skipped by flag.
+
+**What comes back:** verified / failed / not-verifiable counts, the evidence directory, and the `## 🧪 Manual Verification` comment it posted. Keep the counts; leave the screenshots where they are.
+
+**A failed item stops the loop before phase 6.** An item that was *observed* behaving wrongly is the same class of signal as a red test — report it with the screenshot and stop rather than flipping a known-broken feature to ready. An item that merely couldn't be *reached* (needs a Snowflake sync, an inbound email, a scout device, 2FA) does not stop anything; carry it forward as unverifiable and name the reason.
+
+---
+
+## Phase 6 — Ready for review
 
 ```bash
 git -C "$WT" push
@@ -161,11 +207,13 @@ gh pr ready -R dscout/dscout <PR>
 
 This is the outward-facing step — the PR becomes visible work and starts pinging reviewers. It's authorized as part of the loop, so don't stop to re-confirm, but do announce it plainly with the URL.
 
-`--no-ready` stops here with a self-reviewed draft.
+Add a line to the PR body pointing at the manual verification results — counts plus a link to the Linear comment. A reviewer who can see the feature was exercised by hand reviews differently than one who can't.
+
+`--no-ready` stops here with a self-reviewed, hand-verified draft.
 
 ---
 
-## Phase 6 — baz rounds (up to `--max-rounds`, default 3)
+## Phase 7 — baz rounds (up to `--max-rounds`, default 3)
 
 **Poll.** baz is `baz-reviewer[bot]` (a GitHub App, `type: Bot`). Take a baseline count right before flipping to ready — it should be 0, since baz skips drafts.
 
@@ -192,7 +240,8 @@ Keep it short:
 
 - Ticket, PR URL, current state (ready / draft), and whether CI is green.
 - One line per phase: what changed. Self-review findings fixed vs dropped, baz rounds run, threads addressed vs declined.
-- **Anything still open** — unanswered threads, skipped findings, skipped Behavior Spec scenarios and why, a red check, the round cap. This is the part Todd actually reads.
+- **Manual verification**: verified / failed / not-verifiable counts, and where the evidence lives. Name the not-verifiable items and their reasons — "5/6, one needs a Snowflake sync" is a finished run; "5/6" on its own isn't.
+- **Anything still open** — unanswered threads, skipped findings, skipped Behavior Spec scenarios and why, failed or unverifiable manual items, a red check, the round cap. This is the part Todd actually reads.
 
 ---
 
@@ -200,7 +249,10 @@ Keep it short:
 
 - Never force-push, never push to `main`, never merge, never `git add -A`.
 - Never post the self-review JSON to GitHub. It's scaffolding; the fixes are the output.
-- Never flip a PR to ready with a red check.
+- Never flip a PR to ready with a red check, or with a manual item that was observed failing.
+- **Never tick a manual item you didn't watch pass.** Not from reading the code, not because a unit test covers it, not because it worked last round. An unverifiable item gets a reason; a checklist that can be ticked without looking launders a guess as a fact and is worth less than no checklist.
+- Never `docker compose down -v` or `down --all`. `-v` destroys the local database, MinIO contents, and the warm build caches; `down` ignores the profile you pass and takes the deps with it either way. Phase 5 names its services explicitly for exactly this reason.
+- Never run the manual verification against anything but `http://localhost:5000`. It signs in with shared local dev credentials.
 - One ticket per invocation. Multiple tickets with stacked PRs is `/todd:phase` — say so and stop.
 - If a phase fails twice, stop and report. Don't improvise around a broken phase.
 
@@ -215,6 +267,10 @@ Keep it short:
 | `gh pr create` fails | Stop with the error; the branch is already pushed, so `--resume pr` retries just this. |
 | pr_review returns no JSON | Re-dispatch once, then stop. |
 | Per-app check red | Stop before pushing. Report the failing command and output. |
+| Stack won't come up for phase 5 | Report the failing service and `docker compose -f compose.yaml logs --tail 50 axon`, mark every item unverified, and continue to phase 6. A browser that won't start isn't a reason to sit on reviewed, green code. |
+| Containers bound to another worktree and won't rebind | All items unverified. Continue, and say the evidence is missing rather than implying it passed. |
+| Sign-in doesn't reach `/efflux` (2FA, SSO, bad credentials) | All items unverified with the landing URL. Don't route around an account's auth requirements. |
+| A manual item fails | Stop before phase 6. Report it with the screenshot — a feature observed not working doesn't get flipped to ready. |
 | baz never appears | Report and stop after `--baz-timeout`. The PR is still ready and reviewable. |
 
 Now run the loop for $ARGUMENTS.

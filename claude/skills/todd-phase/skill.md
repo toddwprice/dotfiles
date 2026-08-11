@@ -164,7 +164,15 @@ For each ticket Tᵢ in the current wave:
 4. **Dispatch a subagent** (general-purpose) for Tᵢ. Give it a **self-contained** prompt — it must not inherit this session's history, so construct exactly the context it needs:
    - Work **only** inside `.worktrees/{TICKET_ID}` (cd there first). Never touch other worktrees; never push.
    - **Plan-staleness guard**: if a plan already exists on the ticket, verify the files/paths it names still exist before trusting it. If the plan is stale (renamed or deleted paths — a real failure mode from past runs), re-plan against current code rather than following it blindly.
-   - Run `/todd:coder plan {TICKET_ID} --orchestrated` (only if no usable plan exists), then `/todd:coder impl {TICKET_ID} --orchestrated`.
+   - Run `/todd:coder plan {TICKET_ID} --orchestrated` (only if no usable plan exists).
+   - **Check the plan before implementing it.** If `/todd:coder plan` just ran, **always** run `/todd:plan-check {TICKET_ID} --strict` — that path always leaves the plan unstamped, so it always needs checking. If you reused an existing plan instead, read its stamp: `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
+     - `❌` → **failed**. The trailing `see C1, E11, B5` names the failing check codes.
+     - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
+     - `✅ passed` → **passed**.
+     - No `Plan check:` line anywhere → **unchecked** — not the same as failed. Run `/todd:plan-check {TICKET_ID} --strict`.
+
+     `❌` → **do not dispatch impl for this ticket.** Under `--strict` that includes any open judgement call. Return `STATUS: recoverable` with the blocker codes in `BLOCKERS`, so step 5 marks the ticket failed and the phase carries on. **Not `plan-required`** — that status re-dispatches a `plan` step, which would post a second plan comment and walk straight into the duplicate case named next. Running plan-check here also catches the duplicate-plan case (its A4 check) — `/todd:coder plan` posts a new plan comment every time without looking for an existing one, and this path has produced duplicates before.
+   - Then run `/todd:coder impl {TICKET_ID} --orchestrated`.
    - Squash to one logical commit on `{BRANCH_NAME}` if impl produced several: `git reset --soft {BASE} && git commit`.
    - Return **only** the `/todd:coder` structured status block (STATUS / TICKET / COMMIT / FILES / TESTS / BLOCKERS / PR_TITLE / PR_BODY) — nothing else.
 

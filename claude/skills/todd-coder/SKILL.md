@@ -6,7 +6,7 @@ description: Use when the user runs /todd:coder with a Linear ticket ID to eithe
 # Todd Coder
 
 ## Overview
-Bridges Linear tickets with disciplined TDD implementation. Reads a ticket, creates or follows an implementation plan, and documents all work back to Linear. **Fully compatible with git worktrees** — automatically detects when running in a worktree and adjusts behavior.
+Bridges Linear tickets with disciplined TDD implementation. Reads a ticket, creates or follows an implementation plan, drives the plan's Manual Test Plan through a real browser against the local stack, and documents all work back to Linear. **Fully compatible with git worktrees** — automatically detects when running in a worktree and adjusts behavior.
 
 ## Usage
 ```
@@ -38,6 +38,8 @@ is the better door — same Linear comment, same first line, plus a Gherkin Beha
 Scenarios become the implementer's checklist and whose steps are grounded in verified symbols.
 This mode stays for the small stuff where that ceremony costs more than it saves.
 
+One asymmetry worth knowing before you pick a door: **this mode emits a `### 🧪 Manual Test Plan` (step 5) and `/todd:plan` does not yet.** On a `/todd:plan` plan, the browser checklist gets derived from the Behavior Spec's UI-observable Scenarios instead — legitimate, because those were authored before the code — or skipped with a reason. If hand-verification matters on a ticket, that's a point in this mode's favour.
+
 ### Steps
 
 1. **Detect worktree environment** (see above)
@@ -59,9 +61,24 @@ This mode stays for the small stuff where that ceremony costs more than it saves
    - **Questions/blockers**: Anything that MUST be answered before implementation (flag clearly)
    - **Estimated scope**: Small / Medium / Large
 
-5. **Post plan to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format the plan as markdown. Prefix the comment with `## 📋 Implementation Plan`.
+5. **Draft the Manual Test Plan** — the part a human (or a browser-driving agent) checks by hand once the code is in. Automated tests prove the units behave; this proves the feature is actually wired up and visible. It's where "the function is correct but nothing calls it" gets caught.
 
-6. **Report to user**: Show the plan and highlight any questions/blockers.
+   Every item is one row: a stable ID, one action, one observable expectation, and the route it happens on.
+
+   - **Stable IDs — `MT1`, `MT2`, …** Impl mode ticks these off by ID and names its evidence after them, so never renumber an existing item; append.
+   - **One assertion per item.** A padded `Expect: A and B and C` can only ever fail on A — the same failure the Behavior Spec's mutation check exists to catch. Split it.
+   - **Name the route.** `/efflux/...`, `/dscript/...`, a study builder step. An item with no route is a wish, not a test — the verifier won't know where to go.
+   - **Mark each item browser-verifiable or not, and give the reason when not.** Honest examples of *not*: needs a Snowflake sync, needs an inbound email, needs a scout on a phone, needs a second account, needs prod-scale data. A named blocker is a useful plan entry; an item that quietly can't be run is not.
+   - **Cover the refusal path, not just the happy path.** What the change should *prevent* — the locked field, the rejected input, the button that stays disabled — is usually where the real bug hides.
+   - **Say what state the item needs** and how to reach it. The local dump is a known dataset, so name the study/account/template rather than "a study with quotas".
+   - **Don't restate the unit tests.** If a test already proves it, it doesn't belong here.
+   - **Aim for 3–8 items.** A thirty-item manual plan doesn't get run, which makes it worse than a short one.
+
+   If the ticket genuinely has no user-observable surface — a refactor, a CI config change, an internal rename — say so in one line under the heading instead of padding it. `_No user-observable surface; nothing to verify by hand._` is a legitimate manual test plan.
+
+6. **Post plan to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format the plan as markdown. Prefix the comment with `## 📋 Implementation Plan`.
+
+7. **Report to user**: Show the plan and highlight any questions/blockers.
 
 ## Impl Mode
 
@@ -74,6 +91,16 @@ This mode stays for the small stuff where that ceremony costs more than it saves
 3. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
 4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`. If that comment also carries a `## 🥒 Behavior Spec` section — written by `/todd:plan` — then **the Scenarios are the acceptance criteria**: the prose above them is context, the Gherkin is the contract. Say which kind of plan you found when you report.
+
+   **Note whether it carries a `### 🧪 Manual Test Plan`** and how many `MT` items. That's what step 7 drives in a browser. A plan without one means nothing gets hand-verified — say so plainly rather than letting it pass unremarked, and don't invent a checklist now to cover the gap (a plan authored after the code is written tests what you built, not what was asked for).
+
+   **Read its plan-check stamp too.** `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
+   - `❌` → **failed**. The trailing `see C1, E11, B5` names the failing check codes.
+   - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
+   - `✅ passed` → **passed**.
+   - No `Plan check:` line anywhere → **unchecked**. Not the same as failed.
+
+   Report the stamp state in the same breath as which kind of plan you found: `❌` → say so plainly and name the blocker codes, since the plan is known-wrong and whatever it says about those codes shouldn't be trusted; unchecked → say the plan was never checked; `⚠️` → say it passed but grounding went unchecked; `✅` → say it passed. **This gate surfaces, it doesn't refuse** — a failed or unchecked plan neither stops you nor earns a new status code (`plan-required` and the rest are what orchestrators parse). You may proceed on a bad plan; you may never proceed *silently* on one.
 
 5. **Assess readiness**:
    - If plan found: proceed to implementation using the plan as guide.
@@ -116,21 +143,35 @@ This mode stays for the small stuff where that ceremony costs more than it saves
    - **Red flags** — stop and slice smaller: more than ~100 lines before a test, unrelated changes mixed into one slice, "let me just quickly add this too," a broken build between slices.
    - **Definition of done** (final gate, after the last slice): the full per-app Pre-Push Checklist in CLAUDE.md passes, the feature works end-to-end, and no uncommitted changes remain.
 
-7. **Summarize work**: After implementation is complete, compile:
+7. **Run the Manual Test Plan in a browser**: Once the tree is green and every slice is committed, execute the ticket's `### 🧪 Manual Test Plan` against the local stack and check the items off with evidence.
+
+   **Read `~/.claude/skills/_shared/manual-verification.md` and follow it.** That file is the procedure — stack readiness, the sign-in sequence, where evidence may be written, and how the results get posted. It's shared with `/todd:loop` so the two can't drift, and it carries the verified commands. Don't improvise a browser recipe from memory; several of the obvious shortcuts are known-broken (`ddu` from a non-interactive shell, `#session_email`, an absolute screenshot path).
+
+   The short version of what it makes you do: confirm the running containers are bound to **this** worktree before believing anything you see, sign in at `/auth/sign_in` with `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` (falling back to the seeded dev user), run each browser-verifiable item, screenshot pass *and* fail alike, and post a separate `## 🧪 Manual Verification` comment — never rewriting the plan comment, whose last line is `/todd:plan-check`'s stamp.
+
+   **Skip this step entirely in `--orchestrated` mode** — see "Orchestrated Mode" for why — and report `MANUAL: deferred (orchestrated)`.
+
+   Skip it, saying which applies, when: the plan has no Manual Test Plan; every item is marked not browser-verifiable; Docker isn't running. A skip is reported, never silent.
+
+   **A failed item is a result, not an error.** Don't loop back into implementation to chase it unless it's plainly a bug in what you just wrote — and if you do fix it, re-run the item and say you re-ran it. What you must not do is tick a box you didn't watch pass.
+
+8. **Summarize work**: After implementation is complete, compile:
    - **What was done**: Files created/modified, features implemented
    - **Decisions made**: Any choices or tradeoffs during implementation, and why
    - **Test plan**: List of test cases written, what they cover, how to run them
    - **Scenario coverage** (only if the plan had a Behavior Spec): every Scenario, the test it became, and whether it's green and mutation-checked. Skipped ones get a reason, not a blank.
+   - **Manual verification**: the counts from step 7 — verified / failed / not verifiable — and a pointer to the `## 🧪 Manual Verification` comment holding the evidence. If step 7 was skipped, why.
    - **Remaining work**: Anything deferred or out of scope
 
-8. **Post summary to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
+9. **Post summary to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
 
-9. **Report to user**: Show the summary and test plan. **In `--orchestrated` mode, skip the chatty report** — the orchestrator reads the structured status block instead (see "Structured Return").
+10. **Report to user**: Show the summary and test plan. **In `--orchestrated` mode, skip the chatty report** — the orchestrator reads the structured status block instead (see "Structured Return").
 
-10. **Commits (worktree only; never push — that's the orchestrator's job)**:
+11. **Commits (worktree only; never push — that's the orchestrator's job)**:
     - **Incremental path**: each verified slice is committed inside step 6, in both interactive and `--orchestrated` mode — no "offer to commit" prompt. The orchestrator squashes/rebases and pushes later.
     - **Straightforward fast path**: one commit after the implementation succeeds.
     - Put the branch-tip SHA in the structured return's `COMMIT` field.
+    - Evidence PNGs live under a gitignored `.claude/tmp/` path, so they never enter a commit. Don't add them.
 
 ## Orchestrated Mode (`--orchestrated`)
 
@@ -138,7 +179,8 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 
 - **Never block on a question.** Every interactive prompt gets a safe default (see the impl steps). If you genuinely can't proceed, stop with a `fatal` status rather than waiting on input that will never come.
 - **Still post to Linear.** The plan and summary comments are the durable record the orchestrator (and Todd) rely on — keep posting them exactly as in normal mode. This is why the orchestrator dispatches *this skill* rather than running raw TDD: the Linear paper trail comes for free.
-- **Commit automatically** — per slice on the incremental path, once on the fast path (see step 10); never push.
+- **Commit automatically** — per slice on the incremental path, once on the fast path (see step 11); never push.
+- **Skip the manual verification browser run (step 7).** Report `MANUAL: deferred (orchestrated)` and let the orchestrator own it. Two reasons, both real: `compose.yaml` pins `name: dscout`, so **every worktree shares one stack** — `/todd:phase` running four tickets in parallel would have four agents `--force-recreate`-ing that single stack at each other, and none of them could trust what it saw. And `/todd:loop` changes the code *after* impl returns, in its address-the-self-review phase, so evidence captured here would be of code that no longer exists by the time the PR opens. Verification belongs after the last edit, which only the orchestrator knows.
 - **End with the structured status block** (below) as your final message — that's what the orchestrator parses.
 
 ## Comment Format Templates
@@ -162,6 +204,19 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 
 ### Risks & Considerations
 - [Risk 1]
+
+### 🧪 Manual Test Plan
+<!-- Stable IDs. One action, one expectation, one route per item. Impl mode ticks these. -->
+
+- [ ] **MT1** — [action a signed-in researcher takes] → **Expect:** [one observable result]
+  - Route: `/efflux/...`
+  - Setup: [what state this needs, named concretely]
+  - Browser-verifiable: yes
+- [ ] **MT2** — [the refusal path: what should NOT happen] → **Expect:** [what blocks it]
+  - Route: `/efflux/...`
+  - Browser-verifiable: yes
+- [ ] **MT3** — [action] → **Expect:** [result]
+  - Browser-verifiable: no — [reason, e.g. needs a Snowflake sync]
 
 ### Questions / Blockers
 - ❓ [Question that must be answered before impl]
@@ -193,6 +248,10 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 | [scenario name] | `path/to/test.exs:42` | ✅ green, mutation-checked |
 | [scenario name] | — | ⏭️ skipped — [why] |
 
+### Manual Verification
+[n] of [total] verified · [n] failed · [n] not verifiable — evidence in the `## 🧪 Manual Verification` comment.
+<!-- Or, when step 7 didn't run: "Skipped — [no Manual Test Plan | deferred (orchestrated) | Docker not running]". -->
+
 ### How to Verify
 1. [Step-by-step verification]
 
@@ -207,6 +266,9 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 - **No plan for complex ticket**: Suggest running plan mode first, explain why
 - **Worktree has uncommitted changes**: Ask user whether to stash, commit, or abort
 - **Dirty worktree from previous work**: Offer to clean up or continue
+- **Stack won't come up for step 7**: Report the failing service and `docker compose -f compose.yaml logs --tail 50 axon`. The implementation still stands — mark the manual items unverified and carry on to the summary. A browser that won't start is not a reason to throw away green code.
+- **Sign-in lands somewhere other than `/efflux`** (2FA, SSO, bad credentials): mark every item unverified with the landing URL. Don't try to route around an account's auth requirements.
+- **Containers bound to another worktree and can't be rebound**: report all items unverified. Never tick against a stack running code you didn't write — that's the one failure here that actively misleads.
 
 ## Worktree-Specific Behavior
 
@@ -235,6 +297,7 @@ COMMIT: {branch-tip sha, or "none"}
 FILES: {count} changed
 TESTS: {e.g. "42 passed" or "3 failed: <names>"}
 SCENARIOS: {e.g. "11/11 green" or "9/11 green, 2 skipped", or "none" if the plan had no Behavior Spec}
+MANUAL: {"deferred (orchestrated)" — the normal value here; or "5/6 verified, 1 not verifiable"; or "none" if the plan had no Manual Test Plan}
 BLOCKERS: {one line, or "none"}
 PR_TITLE: {suggested PR title}
 PR_BODY: |
