@@ -1,5 +1,5 @@
 ---
-description: Plan a Linear ticket into ONE Linear comment carrying the human implementation plan, a Gherkin Behavior Spec whose Scenarios are the implementer's TDD checklist, and EARS invariants for the requirements that aren't behavior. Use when Todd says "/todd:plan FRG-1234", "plan this ticket", "write the spec for this ticket", or wants a plan an implementing agent can't misread. Richer sibling of `/todd:coder plan` — same Linear contract, plus grounded behavior scenarios. Pairs with `/todd:plan-check`, which reviews the posted plan cold; this command posts, that one passes it. Also where a failed check comes back — use when Todd says "resolve the blockers on FRG-1234", "fix what plan-check found", or re-runs this on a plan stamped `❌`. Takes `--dry-run`, `--no-gherkin`.
+description: Plan a Linear ticket into ONE Linear comment carrying the human implementation plan, a Gherkin Behavior Spec whose Scenarios are the implementer's TDD checklist, and EARS invariants for the requirements that aren't behavior. Use when Todd says "/todd:plan FRG-1234", "plan this ticket", "write the spec for this ticket", or wants a plan an implementing agent can't misread. Richer sibling of `/todd:coder plan` — same Linear contract, plus grounded behavior scenarios. Then dispatches `/todd:plan-check` to a cold subagent and reports its verdict, so the plan arrives checked and stamped rather than waiting on Todd to run the check himself. Also where a failed check comes back — use when Todd says "resolve the blockers on FRG-1234", "fix what plan-check found", or re-runs this on a plan stamped `❌`. Takes `--dry-run`, `--no-gherkin`, `--no-check`.
 ---
 
 You are writing Todd's implementation plan for one Linear ticket. Two audiences, one artifact: a
@@ -38,7 +38,8 @@ more than it saves. Use this for anything an agent will implement unattended.
 | Flag | Default | Meaning |
 |---|---|---|
 | `--dry-run` | off | Print the full plan in chat. Post nothing to Linear. Still writes the local copy. |
-| `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail, `### Invariants`, and `### Not covered`, and drops the coverage table and the Gherkin block. Every phase still runs, including Phase 6, so the plan still gets posted. Escape hatch for a trivial ticket. |
+| `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail, `### Invariants`, and `### Not covered`, and drops the coverage table and the Gherkin block. Every phase still runs, including phases 6 and 7, so the plan still gets posted and checked. Escape hatch for a trivial ticket. |
+| `--no-check` | off | Skip phase 7 — post the plan and don't dispatch the cold check. The plan stays unstamped, so `/todd:loop` and `/todd:phase` will each run the check themselves before they'll touch it. For a caller whose own next step tests every claim the plan makes; see "Callers that pass `--no-check`" in phase 7. |
 
 `--no-gherkin` used to drop `Not covered` too. It no longer does. Scope boundaries are the
 instruction an unattended run most needs and the cheapest one to write — a trivial ticket is
@@ -296,8 +297,12 @@ because the stamp will say it was addressed.
 
 ### Step 7 — Rejoin
 
-Go to **phase 5** (the contract gate), then **phase 6** (post and report). Phase 6 has a report and
-a handoff specific to this mode; use those, not the fresh-plan ones.
+Go to **phase 5** (the contract gate), then **phase 6** (post and report), then **phase 7** (dispatch
+the cold check). Phase 6 has a report specific to this mode; use that, not the fresh-plan one.
+
+Phase 7 is identical on both paths, and this is the path that needs it most: every line you touched,
+you touched because a checker said it was wrong, which makes you the reader least able to tell whether
+it's now right. The dispatch replaces the "re-check required" stamp phase 6 wrote with a real verdict.
 
 ---
 
@@ -892,37 +897,181 @@ Still open
 - ❓ [B5] Whether staff-user joins are in scope — you deferred to product.
 ```
 
-**3. The handoff names a fresh session**, and that word is not decoration:
+**3. The revision is unchecked, and the stamp you just wrote says so.** Don't close the report here —
+phase 7 dispatches the check and its verdict is the last thing Todd reads. A revision is *more* in
+need of a cold read than a fresh plan, not less: every line you touched, you touched because a
+checker told you it was wrong, and you are now the person most convinced those lines are fixed.
 
-```
-Revised and unchecked. Run `/todd:plan-check FRG-1234` in a fresh session.
-```
+**Why the check cannot run in this session.** `/todd:plan-check` works because it has never seen the
+reasoning that produced the plan — that's the entire argument at the top of that file. You have now
+spent a session deciding that `rooms.ex:181` is the right anchor and that the new `@boundary`
+Scenario says what it needs to. You are, at this moment, the worst available reader of exactly the
+lines you just wrote. A check run from here would produce a pass that means nothing.
 
-**Why fresh.** `/todd:plan-check` works because it has never seen the reasoning that produced the
-plan — that's the entire argument at the top of that file. You have now spent a session deciding
-that `rooms.ex:181` is the right anchor and that the new `@boundary` Scenario says what it needs to.
-You are, at this moment, the worst available reader of exactly the lines you just wrote. Running the
-check from here would produce a pass that means nothing. Don't offer to run it inline, and don't
-report the plan as ready — it's revised and unchecked until a session that wasn't in this one says
-otherwise.
+That's an argument against *this context*, not against automation — which is what phase 7 is for. A
+dispatched subagent starts with no transcript: it gets the prompt you write and nothing else. Give it
+a bare invocation and it is a genuinely cold reader. Paste your reasoning in and you have rebuilt this
+session inside it and thrown the check away.
 
 ### Both modes
 
-**Close with the handoff.** The plan is posted but unreviewed — say so, in one line, as the last
-thing Todd reads:
+**Don't close the report yet.** The plan is posted and unchecked. Go to phase 7, which dispatches the
+check and writes the closing line from its verdict. Under `--no-check` — and only then — close it
+here, in one line, as the last thing Todd reads:
 
 ```
-Unreviewed. Run `/todd:plan-check FRG-1234` before impl.
+Unchecked (--no-check). Run `/todd:plan-check FRG-1234` before impl.
 ```
 
-Under `--dry-run` it's `/todd:plan-check FRG-1234 --local`. Don't soften this into "you may want
+Under `--dry-run` that's `/todd:plan-check FRG-1234 --local`. Don't soften it into "you may want
 to" — an unchecked plan that reads well is exactly the artifact this whole command exists to stop
-shipping, and the line is the only thing standing between it and an unattended `impl` run.
+shipping.
 
-**The loop terminates on a clean check, not on a tidy-looking plan.** plan → check → blockers →
-plan → check. Each pass should close findings and open none; if the same blocker survives two
-passes, stop looping and say what's actually stuck. A third round on the same finding means it needs
-a decision nobody in the loop can make.
+---
+
+## Phase 7 — Dispatch the cold check
+
+Runs in both modes and on both paths — a fresh plan and a phase-0B revision. Skipped only under
+`--no-check`.
+
+A plan nobody checked is the artifact this command exists to stop shipping, and the old ending — a
+line telling Todd to go run the check himself — put the one step that catches things behind a manual
+action, in a flow whose whole point is unattended `impl`. So run it. Just not from here.
+
+**A subagent is the cold session.** It starts with no transcript: it gets the prompt you write and
+nothing else. That's the same qualification the check has always needed and the reason it can now be
+automatic — the objection in phase 6 was to *this context*, never to automation. A second benefit
+falls out: the check is 47 checks over a ticket, a plan, an anchor file and a handful of greps, and
+none of it lands in your window.
+
+### The dispatch
+
+Foreground, and wait for it. There is nothing useful to do until the verdict arrives, and the closing
+line is written from it.
+
+```
+Agent(
+  subagent_type="general-purpose",
+  description="Cold plan check <TICKET>",
+  prompt=<the four blocks below, verbatim>
+)
+```
+
+`general-purpose` because the check **writes**: it fixes 🟡 findings in place, writes
+`plan-check-<TICKET>-findings.md`, and stamps the Linear comment. The read-only agents (`Explore`,
+`Plan`) can't do any of that and would come back with a report and no stamp — which reads as a check
+that ran.
+
+**The prompt is exactly these four blocks.** Fill in the ticket id, the flags, and the absolute path.
+Change nothing else, and add nothing else:
+
+````
+Read ~/.claude/commands/todd/plan-check.md and follow it exactly.
+
+Its $ARGUMENTS: <TICKET>
+
+Resolve every `.claude/tmp/<branch-or-ticket>/…` path in that file against this absolute directory:
+<ABSOLUTE TMP DIR>
+
+The Linear MCP tools may be deferred in your session — load them with ToolSearch before its phase 0.
+`save_comment` is how the stamp gets written and it has no fallback.
+
+Return its phase-6 report verbatim, plus the stamp text you wrote.
+````
+
+Read-the-file rather than `Skill(skill="todd:plan-check")` for one reason: `Read` is available to
+every agent and the `Skill` tool may not be. Following the file is what invoking it does anyway.
+
+### Why the prompt has no fifth block
+
+Everything the checker needs about this plan is in the plan. It fetches the comment itself (its phase
+0), reads the ticket itself (coverage can only be checked against the original requirements), and
+traces every noun to the anchor file you wrote (its phase 3). It needs no help from you, and the help
+is the damage: which anchors you felt sure of, which Scenario you rewrote after the last check, why
+the brief is the length it is — that is precisely the reasoning that makes the author blind, and
+handing it over reconstructs this session inside the one place that was supposed to be free of it.
+A prompt that carries the invocation and the paths is a cold read. A prompt that carries context is
+this session wearing a subagent costume, and it will agree with you.
+
+Don't paste the plan body either. The comment is the artifact every downstream reader gets; a pasted
+copy can differ from it, and then the check passed something nobody will read.
+
+### The paths, and the silent failure they cause
+
+`/todd:plan-check` reads `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md` — **a relative path**,
+resolved against the subagent's cwd. Phase 0 may well have sent you to read code from the ticket's
+worktree while the session cwd stayed `main`, so the anchor file you wrote in phase 2 and the path a
+subagent resolves are routinely two different places.
+
+Get this wrong and nothing errors. The checker finds no anchor file, enters **degraded mode**, and
+comes back `⚠️ passed (ungrounded)` — a pass with grounding unchecked, which is the one check that
+matters most and the reason phase 2 exists. So pass the absolute directory, and read the verdict with
+this in mind: **a degraded verdict on a plan whose phase 2 ran means you passed the wrong path, not
+that the anchors are missing.** Fix the path and re-dispatch once before reporting it as degraded.
+
+Under `--dry-run` the plan isn't on Linear, so `$ARGUMENTS` is `<TICKET> --local` and the check reads
+the local copy phase 6 wrote. Nothing is written to Linear on either side of the dispatch, which is
+what `--dry-run` promised.
+
+### Reading the verdict
+
+Relay it. You don't get a vote — you are the author, the finding is about your lines, and "actually
+that noun is fine" from you is the exact move the separation exists to prevent. Report its blockers,
+fixes and flags in its words, then close with the line its verdict dictates:
+
+| Verdict returned | Closing line |
+|---|---|
+| `✅ passed` | ``Plan checked. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
+| `⚠️ passed (ungrounded)` | Re-dispatch once with the path corrected. Still degraded → ``Plan checked, grounding unchecked — no anchor file found at <path>. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
+| `❌ N blockers` | ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
+| nothing usable — the dispatch failed | ``Posted and unchecked — the check didn't run. Run `/todd:plan-check <TICKET>`.`` |
+
+**On a pass, the next step is `/clear` and `/todd:loop <TICKET>` — and the `/clear` is half the
+instruction, not politeness.** `/todd:loop` runs a ticket to a reviewed PR across eight phases, and
+its own architecture note says why it can't do this for itself: a command cannot call `/clear`, so
+every phase runs in a dispatched subagent and the orchestrator deliberately holds almost nothing but
+the ticket id, the worktree path and each phase's one-line return. Start that orchestrator in the tail
+of this session and it inherits a window already full of anchors, Scenario drafts and search-agent
+findings — the one command most likely to compact mid-flow, handed the fullest possible starting
+context. A loop that compacts during its baz round has lost the thread. Todd pressing `/clear` is the
+only thing that actually empties the window, which is why the closing line asks for it by name rather
+than just naming the command.
+
+`/todd:loop` is the destination rather than `/todd:coder impl` because its phase 0 gates on the stamp
+you just earned: `✅` and `⚠️` proceed, `❌` stops, and an unstamped plan makes it run the check
+itself. Sending Todd to `impl` skips the PR, the self-review, the manual test plan and the baz round —
+all work he'd then do by hand. `impl` stays the right call when he wants to drive it himself; it just
+isn't the default worth printing.
+
+A degraded pass goes to the same place. `⚠️` means grounding went unchecked, not that a check failed,
+and `/todd:loop` accepts it explicitly — so the handoff names the loop and the missing anchor file in
+the same breath, and Todd decides whether unchecked grounding is worth a re-plan before an unattended
+run.
+
+**On `❌`, stop.** Don't resolve the blockers in this session even though you could — phase 0B is
+right there and you have the anchors loaded. Three reasons: the checker's own handoff sends them to
+`/todd:plan`, which reaches phase 0B through the `❌` stamp on the next run, so a fresh session does
+this properly; a good share of blockers (B5, a scope question, an ungrounded noun that turns out not
+to exist) need Todd's answer and not yours; and closing a finding about lines you wrote, in the
+session that wrote them, is the same blindness one layer down. Report the blockers and let him re-run.
+
+**The loop terminates on a clean check, not on a tidy-looking plan.** plan → check → blockers → plan
+→ check, one dispatch per lap. Each pass should close findings and open none; if the same blocker
+survives two passes, stop looping and say what's actually stuck. A third round on the same finding
+means it needs a decision nobody in the loop can make.
+
+### Callers that pass `--no-check`
+
+Two commands invoke this one through `Skill(skill="todd:plan")` and then say, in their own text, not
+to run the check — so they pass `--no-check` and phase 7 doesn't fire:
+
+| Caller | Why |
+|---|---|
+| `/todd:bug-next` step 9 | Plans the bug **before** the root cause is known, so ungrounded anchors are the expected output, not a defect. Its debugging step tests every claim the plan makes. A `❌` here would be noise, and it would sit on the ticket blocking `/todd:loop` and `/todd:phase` later. |
+| `/todd:devops-next` step 11 | Same shape, same reason. |
+
+That's the flag's whole job: a caller whose next step *is* the check. It is not a way to skip the
+check because the plan looks fine — that judgement is the thing you are worst at making.
 
 ---
 
@@ -944,15 +1093,25 @@ a decision nobody in the loop can make.
 - Never write an invariant as a Scenario to make the scenario count look better.
 - Never leave phase 2 without writing `anchors-<TICKET>.md`. A plan whose anchors weren't persisted
   cannot be checked, only admired.
-- Never report a plan as done. It's posted and unreviewed until `/todd:plan-check` says otherwise.
+- Never report a plan as done on your own authority. It's posted and unchecked until phase 7's
+  dispatch comes back with a verdict, and the verdict is the checker's to give.
 - Never re-plan a ticket whose plan carries a `❌` stamp. That's phase 0B — surgery on the named
   blockers, with everything the check passed left alone.
 - Never write a `✅ passed` stamp. `/todd:plan-check` writes that, after running the checks. A
   revision stamps itself as revised and unchecked.
 - Never leave a `❌` stamp on a plan you revised, and never close a blocker you had to guess the
   meaning of. A resolved-looking blocker that was never understood is worse than an open one.
-- Never run the check yourself at the end of a phase-0B run. Fresh session, every time — you can't
-  cold-read lines you just wrote.
+- Never run the check inside this session — not after a fresh plan, not after a phase-0B revision.
+  You can't cold-read lines you just wrote. Phase 7 dispatches it to a subagent, which is a session
+  that wasn't in this one.
+- Never add context to the dispatch prompt. Four blocks, the ticket id, the flags, the absolute path.
+  Every sentence of yours that reaches the checker is a sentence it was supposed not to have.
+- Never write, replace, or summarize the checker's stamp. It writes its own, and a stamp you wrote
+  from a report is a claim about checks you didn't run.
+- Never report a pass the dispatch didn't return. A subagent that errored, returned nothing, or came
+  back without a stamp is an unchecked plan — say that, and give Todd the command.
+- Never argue with a finding, and never resolve one in this session. Relay it. A `❌` goes back to a
+  fresh `/todd:plan` run, which reaches phase 0B through the stamp.
 - One ticket per invocation. A whole project with milestones is `/todd:linear-project-setup`.
 
 ## Failure handling
@@ -971,5 +1130,9 @@ a decision nobody in the loop can make.
 | More than 3 blockers survive the phase-2 ranking | The ticket is under-specified. Post the brief and the detail block, name the three that matter most, and stop. Don't ship a twelve-question plan. |
 | Section 2 runs past ~400 lines | Post it, and say in the report that the ticket looks like two or three. Never trim the detail to hit a number. |
 | `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
+| Phase 7's subagent errors, times out, or returns no verdict | The plan is posted and unchecked. Say exactly that and give Todd `/todd:plan-check <TICKET>`. Never infer the verdict from your own read of the plan. |
+| The check comes back `⚠️ passed (ungrounded)` | You probably passed the wrong tmp directory — phase 2 always writes the anchor file. Re-dispatch once with the absolute path corrected. Still degraded → report it as degraded, and say grounding went unchecked. |
+| The check comes back `❌` | Relay the blockers verbatim and close with `/todd:plan <TICKET>`. Don't resolve them here; a fresh run reaches phase 0B through the stamp. |
+| The same blocker comes back from two dispatches | Stop. That's the two-pass rule in phase 7 — say what's stuck rather than starting a third lap. |
 
 Now plan $ARGUMENTS.

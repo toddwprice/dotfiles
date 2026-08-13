@@ -55,6 +55,53 @@ a missing one because it looks checked. That's a BLOCKER.
 none of those get resolved by removing the line. Removing it makes the check pass and the plan
 worse. Relocate, or report.
 
+## Two rules that decide how many laps this costs
+
+These were learned from the run history, not reasoned from first principles. Audited 2026-08-13
+over 41 runs of this command: 6 tickets passed, 6 failed, and one — ENA-443 — took **nine checks
+without ever passing**, its blocker count going *up* twice. Both rules below exist because of what
+that history showed, and ignoring either one is how a plan takes nine laps instead of two.
+
+### 1. Report the whole class, never the first instance
+
+**When a check fires, sweep every instance of it in the plan before you write it up.** E9 fired on
+FRG-1240 three passes running — Scenario 4, then the single-toast Scenario, then another — because
+each report named one Scenario and the next pass found the next one. Three laps for one defect.
+
+So: E9 fires → check the `# target:`/`# falsifies:` on *every* Scenario. C1 fires → trace *every*
+noun. C4 fires → read *every* `INV-N` `Check:`. D4 fires → walk *every* surface in
+`Files to Modify`. Report them as one finding with every instance listed:
+
+```
+- **[E9]** Three Scenarios have no `# falsifies:`: "a rejoin after presence expiry" (slice 1),
+  "the refused tab explains itself" (slice 2), "an expired token is rejected" (slice 3).
+```
+
+A finding that names one instance of a class you didn't sweep is a finding that will come back.
+This is the single cheapest thing you can do to shorten the loop.
+
+### 2. An advisory is not a blocker
+
+A plan can be thinner than ideal without being wrong, and the run history says four of the six
+failures were **a single blocker** — one missing `# falsifies:`, one uncovered requirement, one
+duplicate comment. A single-instance gap costing a full lap (fresh session, re-read the ticket, the
+plan and the anchors, re-run every check) is the loop's biggest avoidable cost.
+
+So some 🔴s are **advisory-eligible**: they ride along as impl-time notes instead of failing the
+plan. A finding is advisory-eligible only when **all** of these hold:
+
+- It's in this set: **E9, E14, D5, B7, D2, E6, C1-that-verifies** (see C1).
+- After the class sweep, it has **≤2 instances**.
+- Total advisories across the whole check is **≤3**.
+
+Anything else is a blocker. In particular these are **never** advisory-eligible, because each one
+means the plan is *wrong* rather than *thin*: **A1–A4** (nobody can find the plan), **B5** (the
+ticket wasn't ready), **B9** (a disproved claim gets re-trusted), **C2, C4, C5** (a cited thing
+doesn't exist), **D3, D4, E1, E2, E7, E10, E11, E15** (a requirement or a surface has no coverage —
+DEVOPS-2259's D3 would have shipped a service booting healthy on a database it couldn't serve).
+
+Under `--strict`, nothing is advisory-eligible. Advisories become blockers, same as 🔵 flags do.
+
 ---
 
 ## Phase 0 — Load the plan and its evidence
@@ -73,6 +120,55 @@ line is `## 📋 Implementation Plan`.
 
 Under `--local`, read `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` instead and skip the
 comment-count logic entirely.
+
+**The existing stamp tells you which run this is.** Read it before you check anything — it carries
+three things you need, and skipping it is how this command re-does work it already did.
+
+| Stamp you find | This run is | Scope |
+|---|---|---|
+| none | **pass 1** | Every check. |
+| `*Plan revised … — re-check required*` | **a re-check** of a phase-0B revision | Delta — see below. |
+| `Plan check: ✅ / ⚠️ / ❌ …` with no revision line after it | **a re-run** on an unchanged plan | Every check. Say so in the report; nothing changed, so the verdict shouldn't either. |
+
+**Delta mode, on a re-check.** A phase-0B revision is surgery on named findings, and re-running all
+43 checks over the untouched majority is what turns a two-lap fix into a nine-lap one — every pass
+is a fresh chance to raise a *new* finding on a line nobody edited. So on a re-check, run:
+
+1. **All of group A.** Cheap, and a revision can break a heading.
+2. **Every check id the previous stamp named**, swept across the whole plan per rule 1 above. These
+   are the ones most likely to be half-fixed.
+3. **The coverage table** (E1–E6). Cheap, and it's where a revision silently drops a row.
+4. **Every line `### Changed since the last plan` names**, plus the Scenarios and Invariants the
+   revision touched.
+
+Do **not** re-audit Scenarios the last pass accepted and this revision didn't touch. If you can't
+tell what it touched — `### Changed since the last plan` is missing or vague — that's B9, and B9 is
+a blocker precisely because it makes a delta check impossible. Fall back to the full check and say
+you had to.
+
+**Count the pass.** Take the previous stamp's `pass N` and add one; absent, this is pass 1. The
+stamp you write carries it. Two things read it:
+
+- **At pass 3, stop checking and escalate.** Report what's still open, say plainly that three passes
+  have not settled it, and hand it to Todd as a scoping question rather than a fourth lap. The old
+  guard — "the same blocker survives two passes" — keyed on blocker *identity*, so a loop that found
+  a different instance each lap never tripped it. ENA-443 reached nine. A pass counter can't be
+  fooled that way.
+- **A check id that fired on the previous pass and fires again** is a resolution that didn't take,
+  not a fresh finding. Say that in the report, in those words. On ENA-443 the closure *moved* the
+  problem one layer down each time — the re-aimed `# falsifies:` landed on a mutation the target
+  still couldn't observe — and nothing in the report ever said so, so the next pass treated it as
+  new.
+
+**Read the rulings block.** If the plan carries a `**⚖️ Held by decision**` block in its stamp,
+those findings are **closed by Todd** and you do not raise them again. List them in one line —
+`⚖️ Held by decision: B1 (brief length, pass 2), D7 (section 2 length, pass 2)` — and move on.
+
+This exists because the history says these never close on their own: **B1 was flagged 10 times**
+across the audited runs and fixed zero times; ENA-443's ninth findings file reads *"Section 1 is
+2270 words against a ~250 budget — 9th run… Same conclusion as the last seven runs"* and *"[D7] Held
+by decision since pass 7."* Re-raising a call Todd already made is noise that makes a passing plan
+look like a failing one.
 
 **The ticket.** `mcp__claude_ai_Linear__get_issue`, falling back to `linctl issue get $TICKET
 --json` if the MCP truncates. You need the original requirements to check coverage — a plan can't
@@ -97,9 +193,10 @@ decide whether that's worth the tokens.
 | `## 🔧 Implementation Detail` | `--no-gherkin` — skip group E |
 | anything else | 🔴 BLOCKER. Report and stop; downstream readers can't find section 2. |
 
-**Match the Gherkin heading on its prefix, not the whole string.** `plan.md:70` writes the contract
-as "Section 2's heading **starts with** the literal `## 🥒 Behavior Spec` whenever there is
-Gherkin", and `plan.md:496` says that prefix "is what impl and loop look for" — confirmed at
+**Match the Gherkin heading on its prefix, not the whole string.** `plan.md`'s "The contract you must
+not break" writes it as "Section 2's heading **starts with** the literal `## 🥒 Behavior Spec`
+whenever there is Gherkin", and its phase 4 heading table says that prefix "is what impl and loop
+look for" — confirmed at
 `todd-coder` SKILL.md:76 and `loop.md:55`, which both match `## 🥒 Behavior Spec`. So the full
 `## 🥒 Behavior Spec & Implementation Detail` matches, and so does a bare `## 🥒 Behavior Spec`.
 Demanding the long form would fail plans their actual consumers read fine — and because A2 stops
@@ -109,15 +206,26 @@ the check, it would fail them before anything else got looked at.
 
 ## Phase 1 — Group A: the cross-file contract
 
-These break the chain. All 🔴 BLOCKER, no exceptions, and if any fails, report and stop — the rest
-of the check is moot on a plan nobody can find.
+These break the chain: get one wrong and the plan is invisible to `impl`, `loop` and `phase`. But
+three of the four are **literal strings with exactly one right answer**, which by this command's own
+FIX/BLOCKER test makes them fixes, not blockers. Failing a plan over a heading typo costs a full lap
+to correct a string you could have corrected here — DEVOPS-2244 spent one that way.
 
-| # | Check |
-|---|---|
-| A1 | First line is exactly `## 📋 Implementation Plan`. Not "Plan", not "📋 Plan", no preamble above it. |
-| A2 | Section 2's heading either starts with `## 🥒 Behavior Spec` or is `## 🔧 Implementation Detail` — one of the two, not both. Prefix match on the first; see the mode table above. |
-| A3 | `### Verification` exists somewhere in the plan. `todd-coder` Impl step 6 sends the implementer to "the plan's `### Verification` block" for any surface outside axon/dendra/astro, and doesn't care which section it sits in — renamed or missing, non-app work has no verify path. |
-| A4 | Exactly one plan comment on the ticket (resolved in phase 0). |
+| # | Check | Level |
+|---|---|---|
+| A1 | First line is exactly `## 📋 Implementation Plan`. Not "Plan", not "📋 Plan", no preamble above it. | 🟡 rewrite the line; the body below it doesn't change |
+| A2 | Section 2's heading either starts with `## 🥒 Behavior Spec` or is `## 🔧 Implementation Detail` — one of the two, not both. Prefix match on the first; see the mode table above. | 🟡 **only if you can tell which mode it is** from the body — Gherkin present → the 🥒 form, no Gherkin → the 🔧 form. Both present, or ambiguous → 🔴 and stop |
+| A3 | `### Verification` exists somewhere in the plan. `todd-coder` Impl step 6 sends the implementer to "the plan's `### Verification` block" for any surface outside axon/dendra/astro, and doesn't care which section it sits in — renamed or missing, non-app work has no verify path. | 🟡 if a block of verify commands is sitting under a different heading — rename it. 🔴 if there's no such block at all; that's D4's missing content, and you'd be inventing commands |
+| A4 | Exactly one plan comment on the ticket (resolved in phase 0). | 🔴 and stop. Which duplicate survives is Todd's call, and picking one could discard the plan he wants |
+
+**Fixing A1–A3 does not make them silent.** Report each one in the 🟡 section, and say in the
+report that the contract was broken — `/todd:plan` phase 5 is supposed to gate exactly these four
+before posting, so an A-group fix here means that gate didn't run. That's worth Todd knowing even
+though it cost him nothing this time.
+
+**Stop only on an A you couldn't fix.** The rest of the check is moot on a plan nobody can find, but
+a plan you just made findable is worth checking — the old "any A fails → report and stop" meant a
+one-character heading error hid every real finding until the next lap.
 
 ---
 
@@ -128,7 +236,7 @@ whether it can do that job in one screen.
 
 | # | Check | Level |
 |---|---|---|
-| B1 | Section 1 is under ~250 words. | 🟡 relocate the detail to section 2 — never delete |
+| B1 | Section 1 is under ~250 words. | **≤500 words → 🟡: actually do the relocation.** Over 500 → 🔵 once, and it stays ruled — see below |
 | B2 | Headings are exactly `Summary`, `Changed since the last plan` (conditional), `Decisions`, `Approach`, `Risks`, `Questions / Blockers`, `Scope`, in that order. | 🟡 reorder; 🔵 if there's an extra heading, since where it belongs is a judgement |
 | B3 | `Summary` ≤3 sentences; each `Approach` slice one line; `Risks` ≤3 bullets; `Scope` one line. | 🟡 |
 | B4 | `Scope`'s file count equals the number of entries in section 2's `Files to Modify`, and its apps match those paths. | 🟡 correct the count to match the file list |
@@ -141,6 +249,22 @@ whether it can do that job in one screen.
 **On B1:** count the words. Don't estimate. The budget exists because an architect who has to scroll
 stops reading, and every plan drifts over it by accretion, one reasonable-looking line at a time.
 
+**Then act on the count, because the old instruction never got executed.** B1 was raised **10 times**
+across the audited runs and the relocation happened **zero** times — the 🟡 said "relocate" and every
+run reported it instead. Two bands, and they need different things:
+
+- **Under ~500 words** — do it. Take the file paths, commands and restated Scenarios out of section 1
+  and put each one where phase 4 of `plan.md` says it belongs. This is mechanical, it has one right
+  answer, and it's a 🟡 like any other. Report what you moved.
+- **Over ~500 words** — don't. ENA-443's brief was **2270 words**, and relocating 2000 words is not a
+  fix, it's a rewrite of both sections, which is re-planning and not yours to do. Raise it **once**,
+  as a 🔵, phrased as what it actually indicates: *"Section 1 is 2270 words against a ~250 budget —
+  this is a brief for more than one ticket."* Then let Todd rule, and once he has, it goes in the
+  `⚖️ Held by decision` block and **you never raise it again**.
+
+The same two-band logic applies to **D7** (section 2 length), for the same reason and with the same
+history: flagged four times on one ticket, held by decision from pass 7 onward.
+
 ---
 
 ## Phase 3 — Group C: grounding
@@ -151,18 +275,51 @@ the one most likely to find something real.
 Walk every concrete noun the plan names — module, function, file path, factory, fixture, config
 key, error atom, GraphQL field, feature flag — and trace it to a row in `anchors-<TICKET>.md`.
 
+**This group is where the loop lives.** In the audited history, group C produced **23 of roughly 50
+blockers — 46% of everything this command has ever raised.** C1 alone fired **10 times and was fixed
+zero times**; C2 fired 8. Everything below is written to keep the real findings and drop the ones
+that were costing a lap without telling anyone anything.
+
 | # | Check | Level |
 |---|---|---|
-| C1 | Every concrete noun in section 2 appears in the anchor file. | 🔴 for each one that doesn't |
-| C2 | Every anchor's `Verified at` is a real `file:line` that still resolves. Spot-check the ones the plan leans on hardest — the ones in a `Given`, a `# target:`, or an `INV-N` `Check:`. | 🔴 if a cited location doesn't exist |
+| C1 | Every concrete noun in section 2 appears in the anchor file. | Tiered — see below. Not a flat 🔴 |
+| C2 | Every anchor's **symbol** is still present in the file its `Verified at` names. Spot-check the ones the plan leans on hardest — the ones in a `Given`, a `# target:`, or an `INV-N` `Check:`. | 🔴 if the file is gone or the symbol isn't in it. **🟡 if the symbol is there and only the line number is off** — correct the number |
 | C3 | Every `# target:` path is a real test file, or a plausible new one in a directory that exists. | 🔴 if the directory doesn't exist |
 | C4 | Every `INV-N` `Check:` is a runnable command, a grep with a stated expected result, or a named existing test — never prose. | 🔴 |
 | C5 | Every command in `### Verification` is real for the surface it claims to cover. | 🔴 if a command doesn't exist |
 
-**An ungrounded noun is a BLOCKER, not a FIX.** Do not go find it yourself and add it to the anchor
-file. The finding is not "this module exists after all" — the finding is that the planning session
-asserted something it hadn't verified, which means you don't know what else it asserted that way.
-Report the noun, report where it appears, and let that inform whether Todd trusts the rest.
+**On C2, a line number is not the finding.** The check is meant to catch *a planning session citing a
+location that doesn't exist*. A `file:line` whose line has drifted — because main moved, because the
+plan sat overnight, because the planner grepped a different worktree — is not that; the anchor is
+sound and the number is stale. Demanding an exact line match failed plans whose grounding was
+genuinely done, and it made every anchor in a day-old plan a fresh blocker. So: grep the anchor's
+symbol in the cited file. Present → 🟡, correct the number, move on. Absent, or the file is gone →
+🔴, and that is a real finding.
+
+**On C1, three tiers, because "not in the anchor file" and "doesn't exist" are different findings.**
+Sweep every noun first (rule 1 above), then for each one that's missing from the anchor file, spend
+one `Grep` establishing whether it's real:
+
+| What you find | Level |
+|---|---|
+| The noun **doesn't exist** — no such module, function, factory, atom, field | 🔴. This is the finding C1 exists for: the plan asserts something nothing verified, and an implementer will go looking for it. |
+| It exists, and **≤2 nouns** are in this state | **Advisory.** Report each with the `file:line` you found, say grounding was incomplete, and let it ride. |
+| It exists, but **3 or more nouns** are in this state | 🔴, as one finding. Three misses is not an oversight — the planning session's grounding is systematically incomplete, and now you don't know what else it asserted that way. |
+
+**Still never add to the anchor file.** That rule stands and it isn't in tension with the tiers: the
+advisory *reports* what you verified without *recording* it as grounded, because grounding is
+`/todd:plan` phase 2's job and a row you wrote would claim the planning session did work it didn't.
+Phase 0B appends the row when it resolves the advisory.
+
+**Say which side of the fence a C1 came from.** "The noun exists at `rooms.ex:181`, it just wasn't
+recorded" and "there is no such function" both used to print as `[C1] ungrounded noun`, and they need
+completely different work from the planner. Name the file:line when you found one.
+
+**When every C1 is on the advisory side, name the cause.** `/todd:plan` writes `anchors-<TICKET>.md`
+in its phase 2 but authors section 2 in its phase 4, so every noun phase 4 introduces was structurally
+guaranteed to miss the anchor file — that ordering, not carelessness, is what produced ten C1s and
+zero fixes. Its phase 5 now carries a reconciliation gate. A plan still arriving with unrecorded
+nouns that all verify means that gate didn't run, and saying so is more useful than the finding.
 
 ---
 
@@ -174,7 +331,7 @@ Report the noun, report where it appears, and let that inform whether Todd trust
 | D2 | Every `### Invariants` entry is EARS-form (`SHALL`, with `WHEN`/`IF`/`WHILE`/`WHERE` where it applies) and numbered `INV-N`. | 🟡 if the numbering is off; 🔴 if a statement has no `SHALL` and no testable property |
 | D3 | If the ticket is a bug, `### Unchanged behavior` exists and every line names an existing test or a `@regression` Scenario. | 🔴 — a bug plan with no regression surface is incomplete |
 | D4 | `### Verification` names commands covering **every** surface in `Files to Modify`, not just the app surfaces. | 🔴 for each uncovered surface |
-| D5 | `### Verification` carries the `⚠️` line saying what a green run does *not* prove. | 🔵 if absent — it may be genuinely nothing, but usually isn't |
+| D5 | `### Verification` carries the `⚠️` line saying what a green run does *not* prove. | 🔵 if absent and you checked the repo for the traps below and found none. **Advisory-eligible 🔴 if one of them applies** and the line doesn't mention it |
 | D6 | `### Not covered` exists, in both modes, and every line says what's excluded *and why*. | 🟡 if it's missing the "why"; 🔴 if the section is absent |
 | D7 | Section 2 is under ~400 lines. | 🔵 — flag as "this looks like two tickets", never trim |
 
@@ -189,6 +346,12 @@ skips.
 the harness self-skip (`skip() { echo "SKIP: …"; exit 0; }` exits 0 with assertions unrun)? Does a
 pytest node id or `-k` filter with a typo pass silently? If one of these applies and the `⚠️` line
 doesn't mention it, that's a 🔴, not a 🔵 — the implementer will trust a green terminal.
+
+**D5's Level column used to say plain `🔵` while this paragraph escalated it, and the escalation is
+what actually ran: D5 came back as a blocker 4 times.** The table now says both, so the severity you
+report matches the severity you applied. And because a missing `⚠️` line makes the plan *thin* rather
+than *wrong* — the commands are still real, the coverage is still there — it's advisory-eligible: say
+what a green run won't prove, let it ride as an impl-time note, and don't spend a lap on it.
 
 ---
 
@@ -237,43 +400,93 @@ the missing one gets noticed.
 
 ```
 FRG-1234 — <ticket title>
-Plan check: ❌ FAILED · 3 blockers · 5 fixed · 2 flagged
-Checked: 47 checks across A–E · full mode · anchors present
+Plan check: ❌ FAILED · 2 blockers · 5 fixed · 1 advisory · 2 flagged
+Checked: 43 checks across A–E · full mode · anchors present · pass 2 of 3
 Plan: <linear comment url>
 
 🔴 Blockers — these need you
-- [C1] `Axon.Rooms.reject_join/2` is named in slice 1 and is not in the anchor file.
-  Nothing verified it exists.
-- [E11] Slice 2 has 4 scenarios, all happy path. No @negative or @boundary.
-- [B5] 4 entries in Questions / Blockers. The ticket wasn't ready to plan.
+- [C1] `Axon.Rooms.reject_join/2` is named in slice 1, is not in the anchor file, and
+  does not exist — no `reject_join` in `apps/axon/lib/axon/rooms.ex` at any arity.
+- [E11] Slices 2 and 3 have no @negative or @boundary scenario (swept all 3 slices;
+  slice 1 has one). 7 scenarios total, 6 happy path.
 
 🟡 Fixed
+- [A1] First line was `## 📋 Plan`. Rewrote it to `## 📋 Implementation Plan` — note that
+  /todd:plan's phase-5 contract gate should have caught this.
 - [B4] Scope said 5 files; Files to Modify lists 7. Corrected to 7.
+- [C2] `build(:mission_draft)` cited at factory.ex:203; it's at :211. Line corrected.
 - [E5] Deferred count was 1; table has 2 deferred rows. Corrected.
+- [B1] Section 1 was 340 words. Moved the 3 file paths and the verify command to section 2.
+
+⚪ Advisories — riding along as impl notes, not blocking
+- [E9] "an expired token is rejected" (slice 3) has no `# falsifies:`. The other 6
+  scenarios have one.
 
 🔵 Flagged — your call
-- [D7] Section 2 is 520 lines across 3 slices. This looks like two tickets.
 - [E13] "Rejoin after clean disconnect" and "expired presence allows rejoin" may be
   the same scenario in different words.
+- [D7] Section 2 is 520 lines across 3 slices. This looks like two tickets.
+  ⚠️ book severity 🔴 — this one fails under `--strict`, which is what `/todd:phase` runs.
 
-Blocked. Run `/todd:plan FRG-1234` to resolve the 3 blockers.
+⚠️ [E11] also fired on pass 1. The resolution didn't take — last pass it was slice 2 only,
+   and the scenario added there asserts a refusal the target can't observe.
+
+⚖️ Held by decision: B6 (the flag question, pass 1).
+
+Blocked. Run `/todd:plan FRG-1234` to resolve the 2 blockers.
 ```
 
 Under `--report-only` the 🟡 section becomes **Would fix** and nothing is written anywhere.
+
+**Five things in that template are new, and each one exists to stop a lap:**
+
+- **`⚪ Advisories`** — the advisory tier from the top of this file. Never merge these into 🔴 or 🔵;
+  they're the findings that would have failed a plan for being thin.
+- **`pass N of 3`** — from phase 0. At pass 3 you escalate instead of failing again.
+- **The `⚠️ also fired on pass 1` line** — a repeat check id, called out as a resolution that didn't
+  take. Put it *below* the finding sections so it reads as commentary on them.
+- **`⚖️ Held by decision`** — one line, findings Todd already ruled on, never re-argued.
+- **`⚠️ book severity 🔴` on a 🔵** — a flag that would fail under `--strict`. `/todd:phase` runs
+  `--strict`, so without this a plan passes here and red-lines there, and Todd finds out a lap later.
+  Seen on DEVOPS-2241: `✅ passed · 4 flagged`, two of them book-🔴.
 
 **Close with the handoff, and name the command.** The last line Todd reads is what happens next,
 and it depends only on whether there are blockers:
 
 | Outcome | Last line |
 |---|---|
-| ≥1 🔴 blocker | ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
-| 0 blockers | ``Plan checked. Ready for `/todd:coder impl <TICKET>`.`` |
+| ≥1 🔴 blocker, and this is pass 1 or 2 | ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
+| ≥1 🔴 blocker, and this is **pass 3** | ``Three passes haven't settled this. Not a fourth lap — <the one thing that's actually unresolved>, and that's a scoping call.`` |
+| 0 blockers, ≥1 advisory | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
+| 0 blockers, 0 advisories | ``Plan checked. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
+
+**Pass 3 is a stop, not a failure.** By the third check the loop has demonstrated it can't settle the
+thing on its own, and a fourth lap is the shape that took ENA-443 to nine. Name the one finding that
+keeps coming back, say what two resolutions of it would produce different plans, and hand Todd that
+question. Don't list all the blockers again — he's read them twice.
 
 `/todd:plan` is the right destination for a blocker and this command is not, for the reason the top
 of this file gives: fixing a 🔴 takes the planner's knowledge, and you don't have it. You found that
 the plan asserts an ungrounded noun; the planner is the one who can go ground it or turn it into a
 real question. Sending Todd anywhere else — or just listing the blockers and stopping — leaves a
 failed plan sitting on the ticket with nothing driving it to a fix.
+
+**On a pass, `/todd:loop` is the destination and the `/clear` is part of the instruction.** The stamp
+you just wrote is exactly what `/todd:loop` phase 0 gates on — `✅` and `⚠️` proceed, `❌` stops, and an
+unstamped plan makes it run this check itself — so a passed plan is a loop-ready ticket, not just an
+`impl`-ready one. The `/clear` matters because a loop cannot empty its own window: it holds the ticket
+id, the worktree path and one line per phase precisely so it doesn't compact mid-flow, and starting it
+in a session that has just read a plan, a ticket and an anchor file hands it the fullest possible
+context to begin from. Todd's keystroke is the only thing that fixes that, so ask for it by name.
+
+A degraded pass gets the same handoff. `⚠️ passed (ungrounded)` is a pass with grounding unchecked,
+which `/todd:loop` accepts explicitly — say both things in the one line and let him decide whether to
+re-plan first.
+
+**One exception: when a runner invoked you inline, the handoff isn't yours to write.** `/todd:loop`
+phase 0 runs this command on an unstamped plan and then reads the stamp itself; telling it to `/clear`
+and start the loop it is already running is noise. Invoked that way, end on the verdict and the stamp
+and let the caller drive.
 
 Don't soften it into "you may want to". A `❌` plan that nobody re-plans still reaches `impl`,
 because the stamp is documentation rather than a gate (see "Wiring this into the rest of the
@@ -283,21 +496,45 @@ chain").
 
 ```markdown
 ---
-*Plan check: ✅ passed — 2026-08-08 · 47 checks · full mode · 5 auto-fixed*
+*Plan check: ✅ passed — 2026-08-13 · 43 checks · full mode · pass 1 · 5 auto-fixed*
+```
+
+With advisories, the verdict says so — a pass that carried notes forward must not read like a clean
+one, and `impl` needs to see them:
+
+```markdown
+---
+*Plan check: ✅ passed with 1 advisory — 2026-08-13 · 43 checks · full mode · pass 2 · 5 auto-fixed*
+
+**⚪ Advisories** — impl-time notes, not blockers
+- **[E9]** "an expired token is rejected" (slice 3) has no `# falsifies:`. Derive one before
+  writing that test; the other 6 scenarios have theirs.
 ```
 
 or, on failure — and on failure the stamp **carries the blockers themselves**, not just their ids:
 
 ```markdown
 ---
-*Plan check: ❌ 3 blockers — 2026-08-08 · resolve with `/todd:plan FRG-1234`*
+*Plan check: ❌ 2 blockers — 2026-08-13 · pass 2 of 3 · resolve with `/todd:plan FRG-1234`*
 
 **🔴 Open blockers**
-- **[C1]** `Axon.Rooms.reject_join/2` is named in slice 1 and is not in the anchor file.
-  Nothing verified it exists.
-- **[E11]** Slice 2 has 4 scenarios, all happy path. No `@negative` or `@boundary`.
-- **[B5]** 4 entries in `Questions / Blockers`. The ticket wasn't ready to plan.
+- **[C1]** `Axon.Rooms.reject_join/2` is named in slice 1, is not in the anchor file, and does
+  not exist — no `reject_join` in `apps/axon/lib/axon/rooms.ex` at any arity.
+- **[E11]** Slices 2 and 3 have no `@negative` or `@boundary` scenario (all 3 slices swept).
+  ⚠️ Also fired on pass 1 — last pass's fix covered slice 2 only, and the scenario it added
+  asserts a refusal the target can't observe.
+
+**⚖️ Held by decision**
+- **[B6]** The flag question in `Questions / Blockers` — Todd ruled it stays as written (pass 1).
 ```
+
+**The `⚖️ Held by decision` block is Todd's, not yours.** `/todd:plan` phase 0B writes it when he
+rules on a 🔵. You **read** it (phase 0), you **carry it forward verbatim** into every stamp you
+write, and you never raise what's in it. Dropping the block is how a settled question comes back — it
+is the only reason B1 could be raised ten times.
+
+**Carry the pass counter, always, on every verdict including a pass.** It's the only lap count either
+command has, and a `✅` that loses it means the next failure starts over at pass 1.
 
 **Why the full text and not just `see C1, E11, B5`:** the session that resolves these is a fresh
 `/todd:plan` run that never saw your report. `C1` tells it a noun was ungrounded and not *which*
@@ -315,9 +552,13 @@ means. `/todd:plan` reads this block; keep it parseable by a human and an LLM, n
   phase 0. Never a new comment — a second comment on the ticket is the duplicate-plan bug you exist
   partly to catch.
 - Replace any previous stamp rather than appending a second one. One stamp, always the latest.
-- **The `🔴 Open blockers` block is part of the stamp**, so it gets replaced wholesale too — and a
-  passing run *removes* it. A plan that now passes must not still be carrying last run's blocker
-  list; `/todd:plan` would walk Todd through three issues that are already fixed.
+- **The `🔴 Open blockers` and `⚪ Advisories` blocks are part of the stamp**, so they get replaced
+  wholesale too — and a passing run *removes* the blocker list. A plan that now passes must not still
+  be carrying last run's blockers; `/todd:plan` would walk Todd through issues that are already fixed.
+- **`⚖️ Held by decision` is the one block you never replace — you append to it.** Everything else in
+  the stamp is this run's output; that block is the accumulated record of what Todd has settled, and
+  it has to survive every run or the settled thing comes back. Copy it forward verbatim, add nothing
+  to it yourself, and keep the `(pass N)` markers so its age is visible.
 - **You are not the only writer of this slot.** `/todd:plan` phase 0B, after resolving blockers,
   replaces the stamp with `*Plan revised <date> to resolve N blockers (C1, E11, B5) — re-check
   required.*`. Expect to find one and replace it like any other stamp — but **read it first**: the
@@ -332,28 +573,59 @@ means. `/todd:plan` reads this block; keep it parseable by a human and an LLM, n
 
 - `.claude/tmp/<branch-or-ticket>/plan-<TICKET>-checked-<YYYYMMDD-HHMM>.md` — the checked plan body.
 - `.claude/tmp/<branch-or-ticket>/plan-check-<TICKET>-findings.md` — the **full report**: blockers,
-  what you fixed, what you flagged. Stable filename, overwritten every run, so a later session can
-  open it without globbing for a timestamp. This is the long form of what the stamp summarizes —
+  advisories, what you fixed, what you flagged. Stable filename, so a later session can open it
+  without globbing for a timestamp. This is the long form of what the stamp summarizes —
   `/todd:plan` prefers it when it's there, because it also carries the 🔵 flags, which the stamp
   deliberately doesn't. Write it even under `--report-only`; a report-only run is exactly when Todd
   wants the findings kept without the plan being touched.
+
+  **Prepend this run, don't overwrite the file.** It used to be overwritten every run, which is why
+  the loop had no memory: at pass 9 on ENA-443 the only surviving evidence was pass 9, so every
+  earlier finding — including the ones Todd had ruled on — read as new. Newest run at the top, under
+  a header, so the file opens on the current state and the history is one scroll away:
+
+  ```markdown
+  # Plan check findings — FRG-1234
+
+  ## Pass 3 — 2026-08-13 14:02 — ❌ 2 blockers
+  …this run's report verbatim…
+
+  ## Pass 2 — 2026-08-12 09:40 — ❌ 1 blocker
+  …
+  ```
+
+  Before you write, **read the passes already in there.** A check id you're about to raise that
+  appears in an earlier pass marked resolved is the repeat case — that's where the
+  `⚠️ also fired on pass N` line comes from, and the file is the only place you can see it when the
+  stamp has already been replaced.
 
 ---
 
 ## Wiring this into the rest of the chain
 
-Three call sites need to know about the stamp. **None of them are this command's to change**, and
-you should not edit them from here — but say so in the report the first time you run on a repo
-where they haven't been updated:
+The stamp is a **live gate** in three places. Verified 2026-08-13 against the files, so don't spend a
+run re-checking the wiring and don't report it as unwired — this section used to say the opposite and
+had the checker telling Todd something false on every run.
 
-| Call site | What it should do |
+| Call site | What it does with a `❌` |
 |---|---|
-| `commands/todd/loop.md` phase 0 | Already gates on the plan comment existing. Should also refuse to start on a plan whose stamp says `❌`, or that has no stamp at all. |
-| `skills/todd-coder/SKILL.md` Impl step 4 | Reads the plan. Should surface an unchecked or failed stamp to the implementer rather than proceeding silently. |
-| `commands/todd/phase.md` | Its plan-staleness guard re-plans with `/todd:coder plan` and runs `impl` in the same subagent. That path produces an unchecked plan *and* risks a duplicate comment. It should run `/todd:plan-check --strict` between the two. |
+| `commands/todd/loop.md:67` | **Stops the loop.** An unstamped plan makes it run this command with `--strict` inline first. |
+| `skills/todd-phase/SKILL.md:174` | **Won't dispatch impl.** Returns `STATUS: recoverable` — deliberately not `plan-required`, which would re-dispatch `plan` and post a duplicate comment. It also runs this command with `--strict` after any `/todd:coder plan`, which is what catches the duplicate (A4). |
+| `skills/todd-coder/SKILL.md:103` | **Surfaces loudly but does not refuse.** "This gate surfaces, it doesn't refuse." |
 
-Until those land, the stamp is documentation rather than a gate, and an unchecked plan can still
-reach `impl`. That's worth saying out loud once rather than letting Todd assume the gate is live.
+Two consequences worth naming in a report rather than assuming Todd remembers:
+
+- **A bare `/todd:coder impl <TICKET>` is the hole.** It's the one path that will build a plan this
+  command failed. When you return a `❌`, say that `loop` and `phase` are blocked and a direct `impl`
+  is not.
+- **`/todd:phase` runs `--strict`, and `/todd:plan` phase 7 doesn't.** So a plan you pass with 🔵
+  flags or advisories can red-line the moment `/todd:phase` re-checks it — a guaranteed extra lap that
+  this run had every piece of information to prevent. That's why the report marks a flag
+  `⚠️ book severity 🔴`: it tells Todd which of today's flags are tomorrow's blockers, while he's
+  still looking at the plan.
+
+The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. There is no
+`commands/todd/phase.md`.
 
 ---
 

@@ -72,9 +72,16 @@ Map findings to the GitHub reviews schema:
 
 Rules that keep GitHub happy and the review clean:
 
-- **Severity → placement:** `blocking` / `non-blocking` / `positive` / `context` findings tied to a
-  specific file+line become inline `comments`. PR-wide observations (`file: "(general)"`) fold into
-  the `body`, not inline.
+- **Placement — the inline test.** An inline comment is a **request for a change**; it obligates the
+  author to reply *and* resolve a thread, where a body bullet obligates nothing. Decide placement by
+  *"do I want something changed here?"* — **not** by whether the finding has a file+line. Inline gets
+  a file+line *plus* something you want changed or answered; everything else goes in the `body` with a
+  `path/file.ext:L##` reference — positive callouts (all of them), PR-wide observations
+  (`file: "(general)"`), and any finding whose own conclusion is "no action needed" / "leaving this
+  as-is" / "unreachable today" / "not a bug". **Cap inline at 8**, demoting the rest — never deleting.
+  (Full rule + the measurements behind it: `_shared/review-payload.md`. This file previously carried a
+  "severity → placement" rule that routed every file-anchored non-blocking finding inline; don't
+  restore it.)
 - **Event:** derive from the artifact's verdict banner if present — blocking findings → usually
   `REQUEST_CHANGES`; otherwise `COMMENT`; clean approval → `APPROVE`. If ambiguous, ask Todd.
 - **Answer-only (default):** Todd's review comments are clean human prose — **no**

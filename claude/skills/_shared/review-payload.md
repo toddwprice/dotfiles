@@ -20,9 +20,25 @@ skills should point at this file, not re-derive it (they drifted before this exi
 
 ## Placement & anchoring
 
-- **Severity → placement:** `blocking` / `non-blocking` / `positive` / `context` findings tied to a
-  specific file+line become inline `comments`. PR-wide observations (`file: "(general)"`) fold into
-  the `body`, not inline.
+- **Placement — the inline test.** An inline comment is a **request for a change**. It obligates the
+  author to write a reply *and* resolve a thread; a body bullet obligates nothing. So placement is
+  decided by *"do I want something changed here?"* — **not** by whether the finding has a file+line.
+  - **Inline** — a specific file+line *and* something you want changed or answered.
+  - **Body**, carrying a `path/file.ext:L##` reference — everything else: positive callouts (all of
+    them, however precise the anchor), PR-wide observations (`file: "(general)"`), and any finding
+    whose own conclusion is "no action needed" / "leaving this as-is" / "just so you know" / "this is
+    correct" / "unreachable today" / "not a bug".
+  - **Budget: at most 8 inline comments.** Past 8, rank by whether a reply could plausibly change the
+    code and demote the rest into the body. **Demote, never delete** — shedding a finding to get under
+    budget is worse than a long review.
+
+  > **This replaced a "severity → placement" rule** that routed every file-anchored `non-blocking` and
+  > `positive` finding inline. Measured over 425 posted comments, that criterion produced 46%
+  > non-blocking against 2.4% blocking, 41 threads that drew a "no change needed" reply, and 23% that
+  > drew no reply at all. A later audit (2026-08-13, 80 comments) found the old rule still live *here*
+  > after being fixed in `todd:pr_review`, which is why 39% of comments were still non-blocking.
+  > **Don't restore it, and if you change the rule, change it in `commands/todd/pr_review.md` and
+  > `skills/todd-sync-review/SKILL.md` in the same edit** — those are the other two copies.
 - **`event`:** blocking findings → usually `REQUEST_CHANGES`; otherwise `COMMENT`; clean approval →
   `APPROVE`. If ambiguous, ask Todd.
 - **`side`:** `RIGHT` for added/changed (head) lines — the common case; `LEFT` for deleted lines.

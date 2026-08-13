@@ -179,7 +179,7 @@ Confirm you landed with `git -C <path> rev-parse --show-toplevel` and `git -C <p
 With the worktree in place, plan it:
 
 ```
-Skill(skill="todd:plan", args="<TICKET>")
+Skill(skill="todd:plan", args="<TICKET> --no-check")
 ```
 
 **Why here, before the debugging.** The plan comment is the artifact that outlives this session. If the debugging runs long, gets interrupted, or hands off to someone else, `## 📋 Implementation Plan` on the ticket is what the next reader picks up — and `/todd:plan` phase 4 demands two things on a **bug** ticket that a debugging session otherwise never writes down: `### Unchanged behavior` (what must keep working after the fix, with the existing test that proves it) and a `@regression` Scenario for anything that has no such test yet.
@@ -196,7 +196,9 @@ It composes with Step 7 because it does the exact complement. `/todd:plan`'s har
 
 **Re-run `/todd:plan <TICKET>` once the root cause is nailed down**, before writing the fix. It's built for this: phase 0 finds the existing comment, backs the old body up to `.claude/tmp/`, updates that same comment in place so exactly one survives, and writes a `### Changed since the last plan` section naming what the blind plan got wrong. That section is the most valuable thing this flow produces — it stops a disproved theory from being re-derived and re-trusted by whoever reads next.
 
-Don't stop to run `/todd:plan-check` here. That check exists to catch a plan an unattended `impl` would misread; in this flow Step 11's debugging *is* the check, and it's about to test every claim the plan makes.
+**`--no-check` is why the plan comes back unchecked, and it's deliberate.** `/todd:plan` phase 7 ends by dispatching `/todd:plan-check` to a cold subagent; the flag suppresses it. That check exists to catch a plan an unattended `impl` would misread, and on this flow it would do harm instead: a bug planned before the root cause is known is *expected* to carry ungrounded anchors, so the check would fail it and leave a `❌` stamp sitting on the ticket — which then blocks `/todd:loop` and `/todd:phase` for reasons that have nothing to do with the plan's quality. Step 11's debugging *is* the check, and it's about to test every claim the plan makes.
+
+Once the root cause is nailed down and you re-plan (above), drop the flag — a plan written against a known cause is exactly what the check is for.
 
 ## Step 10 — Load the ticket content
 

@@ -193,6 +193,60 @@ Translate your findings into an **ordered list of questions**. Principles:
 - **Aim for 0–3 questions** for a typical PR. More than that means you're routing things that should just be non-blocking notes through the sub-agent pipeline.
 - Each question must carry enough context that a sub-agent doing fresh research can form a defensible opinion without further input.
 
+#### The three triage gates — run these before a finding becomes a question
+
+Measured over 785 posted comments (2026-07-14 → 08-13): **21 drew genuine human pushback, and exactly
+one of those 21 was a case where Todd turned out to be right.** The other 20 were correct observations
+that should never have been posted. Each of these three gates kills a class of them. Apply all three;
+a finding that fails any one of them is at most **one line in the top-level body**, never a question
+and never an inline thread.
+
+**Gate 1 — Reachability. Ask how the caller obtains the input.**
+
+If nothing in the product can produce the state the finding needs — no UI surface writes it, no caller
+passes it, no API shape permits it — the finding is unreachable, and unreachable findings do not become
+questions. A reviewer can construct the payload by hand; a user cannot. Reachability is part of triage,
+not a caveat you append after grading something.
+
+Todd's ruling on this shape, verbatim: *"If a user can't see templates, they will never see a
+placeholder. I don't get why we're discussing it at all."*
+
+Measured leak: 15 of 83 inline comments stated **in their own text** that the finding could not
+happen — "Unreachable today", "Nothing reaches it today", "so no bug", "That route is hypothetical",
+"I can't name a producer that emits it" — and 11 of those also carried `NON-BLOCKING`. On four PRs
+(#27883, #27889, #27946, #27970) the *only* inline comment was one of these.
+
+The one exception: unreachable **only because a writer doesn't exist yet** has an expiry date. Name the
+missing writer in one body line. It still isn't an inline thread.
+
+**Gate 2 — Has it already been answered?** Search before you ask, in all four places:
+
+1. **Replies on other reviewers' threads**, not just your own. The worst measured case, #27661: the
+   author had answered the identical scope question *"By design"* **twice, 62 minutes earlier**, in
+   replies to baz. Step 1's thread grouping surfaces those — read them.
+2. **The PR body**, including any "how I verified" or "out of scope" section.
+3. **The linked Linear ticket and its planning/requirements doc.** #27900 and #27570 were both settled
+   there before review started; on #27900 the doc had explicitly considered and rejected the reuse
+   Todd proposed, and the `AGENTS.md` line Todd cited was itself the stale artifact.
+4. **Your own draft.** If your comment contains "I'd guess that's intended", "this is probably
+   deliberate", or "presumably on purpose" — you have answered it. Delete it or state the call. On
+   #27606 that hedge cost the author a 16-case verification to reply "confirmed deliberate."
+
+**Gate 3 — Is the fix inside this PR's ticket?** A correct finding on an adjacent defect is still out
+of scope. Measured: **42 replies deferred to a follow-up ticket and 34 said "by design"** — #27946
+alone drew two flat *"Won't fix in this PR"* on adjacent-defect expansions the reviewer was right
+about. Check the ticket's stated scope first. If the finding is right but outside it, that is a body
+line naming the boundary, not an inline thread asking the author to widen their PR.
+
+**One more, for prescriptions rather than questions.** If your recommendation depends on behavior you
+cannot verify in this repo — a third-party API, a provider's model contract, a CI primitive's
+semantics — either verify it against current documentation or **phrase it as a question instead of a
+fix.** Two of the 21 pushbacks were recommendations that were simply wrong: on #27448 the suggested
+`temperature` pin is deprecated-and-ignored on the target model and returns HTTP 400 on future model
+generations, so taking the advice would have planted a latent failure; on #27806 the suggested
+`use: [axon-build]` "doesn't work in practice" and the author had proven it on a live run. A wrong
+prescription costs more than a missing one.
+
 ### Step 5 — Self-Answer via Parallel Sub-Agents
 
 For each question from Step 4, dispatch a sub-agent. **Send all sub-agent calls in a single message (parallel)** unless one answer would obviously moot another.
@@ -446,6 +500,35 @@ The curated examples below (`Bug:` / `Suggestion (non-blocking):` / `Nit:` prefi
 - Suggesting `__init__.py` files in directories that aren't actual Python modules
 - Recommending custom statsd metrics (expensive) — use APM span tags instead
 
+**Added 2026-08-13 from the 21 comments that actually drew human pushback.** Every one of these was a
+*correct* observation, which is why they're worth naming — being right is not the bar, and 20 of the 21
+were cases where the reviewer was right and should still have stayed quiet. Verbatim replies in
+parentheses:
+
+- **Posting a finding whose own text says it can't happen.** (*"Leaving this one as-is per your own
+  framing"* — #27664.) Gate 1 in Step 4.
+- **Hedging the answer into the question.** Writing "I'd guess that's intended" and posting anyway
+  (#27606 — cost the author a 16-reserved-word verification to reply "confirmed deliberate").
+- **Re-raising something the author already answered on this PR.** (#27661 — answered *"By design"*
+  twice, 62 minutes earlier, in replies to baz.) Read the replies on *other* reviewers' threads.
+- **Re-opening a decision settled in the ticket's planning doc.** (*"The ticket's own requirements doc
+  explicitly considered and rejected reusing `Checkpoints.brand_new_scout?/1`"* — #27900, where the
+  `AGENTS.md` line cited as evidence was itself the stale artifact.)
+- **Asking the author to fix an adjacent defect outside the ticket.** (*"Won't fix in this PR"*, twice
+  on #27946.) 42 replies deferred to a follow-up; 34 said "by design."
+- **Prescribing a fix that depends on unverified third-party behavior.** (*"`temperature`/`top_p`/`top_k`
+  are deprecated and ignored on the newest models, and supplying them returns an HTTP 400 in future
+  model generations"* — #27448, where taking the advice would have planted a latent failure. Also
+  #27806: *"doesn't work in practice."*) Verify, or ask instead of prescribing.
+- **Hardening brand-new code against inputs nobody writes yet.** (*"Keeping as is to reduce churn, will
+  continue updating this rule as needed once we test it in the wild"* — #27737.)
+- **Doc-prose additions guarding an implausible case.** (*"Not gonna worry about it… I'm not writing a
+  warning for a collision nobody's plausibly going to hit"* — #28000.)
+- **Re-litigating a design the author already tried and backed out of.** (*"i did that at first but was
+  confused when trying to trace the response in the network tab"* — #27670.)
+- **A comment that concedes it's consistency-only.** (*"a consistency-only API expansion with no
+  correctness change"* — #27675, which drew four separate "keeping this as is" replies.)
+
 ### Propose the move, not just the problem
 
 When you flag a *structural* problem — not a nit — name the restructuring instead of just describing the smell. A review that only says "this is complex" leaves the author guessing. Reach for a concrete, named move:
@@ -631,6 +714,38 @@ with a `path/file.ext:L##` reference.
 > only to confirm something was fine ("thanks for the independent verification"). Forty-one threads, each
 > costing the author a written reply and a resolve click, for zero code change. Meanwhile **23%** of all
 > threads drew no reply at all — concentrated on exactly the PRs that got the most comments.
+>
+> Re-measured 2026-08-13 over 785 comments: **78** carry an explicit no-action phrase, **57** of those
+> also carry `NON-BLOCKING`, and **22 replies exist for no purpose but to say "no action needed" back**
+> — *"No action needed here — you'd already chased the blast radius and concluded non-blocking, and I
+> don't have anything to add"* (#27518). A further **59** open with praise or a verification record.
+> The no-reply rate over the same window is **18% and flat** — volume halved after the first fix and
+> silence did not move, so volume was never the cause. Routing is.
+
+**The self-defeat test — apply it to the draft you just wrote, not to the finding you set out to make.**
+Read your own comment to its end. If any sentence in it concedes the point — "unreachable today",
+"nothing reaches it", "not a bug", "correct today", "fine either way", "I'd guess that's intended",
+"it matters less than it looks", "this is only a consistency thing" — then **cut that sentence and see
+what's left.**
+
+- If a concrete ask survives, keep it inline and **post only the ask.** The conceding passage was the
+  part that made the comment long, and it's the part that tells the author to ignore you.
+- If nothing survives, the whole finding is one line in the body.
+
+This is the most expensive shape measured, because it reads as rigorous. #27675: *"Works today because
+the connection is process-owned either way, so it's only a consistency thing"* → author: *"a
+consistency-only API expansion with no correctness change."* #27664: *"a race this unlikely."* #27606:
+*"I'd guess that's intended"* → 16-case verification to answer yes.
+
+**On round 2 and later, prefer the body — inline anchors go stale and take the finding with them.**
+Measured: **305 of 785 comments (39%) now have `line: null`**, meaning GitHub has marked them outdated
+and collapsed them behind "Show outdated." On multi-round PRs that's most of them — #27962 17 of 24,
+#27847 6 of 8 — and #27962 ran **10 rounds**, #27946 **9**. Per-round volume looks reasonable; the
+cumulative pile on one PR does not, and the majority of it is invisible by the time anyone reads it.
+So on any round past the first: cap inline at the findings that genuinely block or change code on the
+*current* head, put the rest in the body where nothing can outdate them, and don't re-post a
+prior-round finding inline just because its old anchor went stale — if the author never saw it, a
+second buried thread doesn't fix that. Say it in the body.
 
 **Inline (`comments[]` entry)** — a specific file:line *and* something you want changed or answered:
 - Phase 2 self-answered questions where the question cites a file path + line range **and** the answer
@@ -695,6 +810,13 @@ Take-aways for every `comments[].body` this command generates:
 - **Default to Answer-only — drop "How I checked" from the posted body.** The evidence layer (file:line citations, mechanism tracing) belongs in the Phase 2 chat output — and in the HTML artifact when Step 7b runs — where it serves verification. It does not belong in the comment the PR author reads. This holds in every mode: Post mode has no HTML to hide the evidence in, and that is not license to append it to the posted comment. Cite a symbol or file name inline only when it's load-bearing for the point itself (naming the three tools, proposing `{{context_start}}`) — never as a "here's my proof" appendix.
 - **When intent is genuinely ambiguous, phrase it as a literal question** — "Should we also block X?", "Why not just...", "I don't understand the purpose of..." — rather than a declarative verdict ("Real gap, worth a beat before merge").
 - **Non-blocking status, when stated at all, goes at the end as a short plain caveat** — `NON-BLOCKING.` on its own line, followed by one of the three approved closes from "Never promise follow-up work on code Todd doesn't own" (`Keep this as is for now.` / `Just wanted to surface for feedback. Keep this as is for now.` / `Your call whether it's worth a ticket — don't block the merge on it.`). It's a trailing aside, not a bolded prefix tag before the finding. On a PR Todd didn't author the caveat never says who files a ticket, because the answer is never Todd.
+- **Say so when a comment actually blocks.** Measured across 785 posted comments, **exactly one** says
+  `BLOCKING`, while 346 say `NON-BLOCKING` and **64% carry no marker at all** — so in practice the
+  taxonomy the author sees is "non-blocking, or silence," and a live `IndexError` reads identically to
+  a naming preference. (#27722 had both, unmarked, in the same review.) The fix is not more labels
+  everywhere: it's that the *rare* blocking inline comment should be unmistakable. Open it with the
+  defect and what breaks, and don't bury it in a list of notes. Unmarked then means "a change I want,
+  not a merge gate," which is the honest default once the inline test has done its job.
 - **Propose a concrete alternative inline when you have one** ("a single variable in the template called `{{context_start}}`") — don't just name the gap.
 - **Keep it short.** None of Todd's real comments on this PR exceed ~120 words. If a draft runs longer, it's probably smuggling in evidence that belongs in the "How I checked" layer instead.
 
@@ -1040,6 +1162,21 @@ Measured over 425 real posted comments: the median was **127 words** against a s
 **56% were over it**, and **46% self-labeled `NON-BLOCKING`** against 2.4% blocking. Prose 300 lines
 up doesn't bind; a `jq` check against the payload does. So enforce them here, beside the anchor check.
 
+> **The 2026-08-13 audit found this principle is the whole story, so stop writing ungated rules.**
+> Re-measured across 785 posted comments and 43 payloads: **every rule in this file that has a `jq`
+> gate holds, and every rule that is prose-only leaks.** Gated — inline count (fell from a median of 6
+> per PR to 3, PRs over the cap from 29% to 11%), comment length (now inside the bar), anchor validity,
+> duplicate posts: all clean. Ungated, and all still leaking at the time of the audit: routing (36% of
+> comments non-blocking against **1 comment in 785** that says blocking), praise-goes-in-the-body (59
+> comments opened with praise anyway), the baz dead letter (18 comments still addressed baz after the
+> rule landed), never-promise-follow-up-work (7 comments promised Todd would file), and reachability
+> (which had no rule at all). The top-level `body` had grown to **682 words on average** for the
+> simple reason that the lint only ever read `.comments[]`.
+>
+> So: checks (d) through (g) below exist because their prose equivalents did not work. If you add a
+> comment-quality rule to this file in future, add its `jq` check here in the same edit or accept that
+> it will not take effect.
+
 ```bash
 P="$HOME/Downloads/pr-<N>-review.json"
 
@@ -1054,6 +1191,49 @@ jq -r '.comments[] | select((.body | split(" ") | length) > 120)
 #    Pattern set derived from 412 real posted comments — not guessed. See the note below.
 jq -r --arg rx '^(nice\b|worth (noting|saying|knowing|naming|flagging)|heads.?up|context for whoever|re-?confirming|verified |checked this|this is the good kind|this is genuinely right|this is the test i|keep the |leaving )|rather than a change request|for whoever reads this later|no action needed|leaving (this|it) as-?is|just so you know|nothing to (do|change)|keep (this|it) as is|not worth (code|a change)|is inert\b|harmless\b' \
   '.comments[] | select(.body | test($rx; "i")) | "RE-APPLY THE INLINE TEST: \(.path):\(.line)"' "$P"
+
+# d. The unreachable gate (Step 4, Gate 1). A comment that states the state cannot occur is not a
+#    change request. Derived from 83 posted comments; fired on 8 of them.
+#    Keep the \b on "unreachable": without it this also matches the pyright diagnostic name
+#    `reportUnreachable` and demotes a real change request. Verified both ways before shipping.
+jq -r --arg rx '\bunreachable\b|nothing reaches (it|this)|no path (through|to)\b|can.?t name a producer|no producer\b|zero callers|no consumer\b|nobody (calls|reaches)|nothing (calls|writes|emits) (it|this)|route is hypothetical|purely hypothetical|academic while|no (FE|frontend|UI) (control|surface)' \
+  '.comments[] | select(.body | test($rx; "i")) | "UNREACHABLE CLAIM: \(.path):\(.line)"' "$P"
+
+# e. The self-defeat gate. Softeners that concede the finding. These usually ride an unreachable
+#    claim, and they are what the author quotes back at you.
+jq -r --arg rx 'not a (bug|blocker)\b|isn.?t a bug|so no bug|nothing.?s broken|is correct today|correct today, so|fine either way|runtime is fine|only a consistency thing|matters less than it looks|i.?d guess (that.?s|it.?s) intended|probably deliberate|presumably on purpose|this unlikely' \
+  '.comments[] | select(.body | test($rx; "i")) | "SELF-DEFEAT — cut the conceding sentence, then re-read: \(.path):\(.line)"' "$P"
+
+# f. Follow-up promises, in the comments AND the body. Skip only when the PR author is $ME.
+#    Keep the \b on i'll — without it, "still open" matches and every "N threads still open" body
+#    reads as a promise.
+jq -r --arg rx "happy to (file|pick|take)|\\bi'?ll (file|open|take|pick)\\b|\\bi can (file|take|pick)\\b|let'?s track this|we (create|file|open) a (ticket|follow)|maybe we create a ticket" \
+  '(.comments[]?), . | select(.body | test($rx; "i"))
+   | "FOLLOW-UP PROMISE — hand the decision back: \(.path // "BODY"):\(.line // "-")"' "$P"
+
+# g. Prose aimed at baz on a channel baz cannot read.
+jq -r '.comments[] | select(.body | test("baz"; "i")) | "ADDRESSES BAZ: \(.path):\(.line)"' "$P"
+
+# h. The top-level body. Until 2026-08-13 the lint never read it, so every demoted note landed
+#    somewhere unmeasured and the body grew to 682 words on average.
+jq -r '.body | "BODY: \(split(" ") | length) words"' "$P"
+
+# h1. CI narration — the author can see their own checks. This belongs in Todd's terminal output.
+jq -r --arg rx 'CI (was|is) green|nothing red|still in progress|Baz Reviewer (pending|still)|checks (were|are) (green|passing)' \
+  'select(.body | test($rx; "i")) | "BODY CARRIES CI NARRATION — move it to the terminal output"' "$P"
+
+# h2. Bullets whose only content is that the reviewer looked.
+jq -r --arg rx 'noting it so you know|was looked at|rather than missed|no change wanted|for the record\b|independent(ly)? verif|so you know it was' \
+  'select(.body | test($rx; "i")) | "BODY CARRIES REVIEWER-EFFORT BULLETS — cut them"' "$P"
+
+# h3. Positive callouts: at most 3, one to two sentences each (Phase 3 already says so; nothing
+#     enforced it, and the audit found 112 callout bullets totalling 4,769 words across 43 reviews).
+jq -r '(.body | split("### Positive callouts")) as $s
+       | (if ($s | length) > 1
+          then ($s[1] | split("\n###")[0] | [splits("\n- ")] | length - 1)
+          else 0 end)
+       | if . > 3 then "TOO MANY POSITIVE CALLOUTS (\(.)) — keep the 3 that carry information"
+         else empty end' "$P"
 ```
 
 | Check | Threshold | Action |
@@ -1061,6 +1241,14 @@ jq -r --arg rx '^(nice\b|worth (noting|saying|knowing|naming|flagging)|heads.?up
 | **(a) count** | `> 8` | Rank the comments by whether a reply could plausibly change the code, keep the top 8 inline, demote the rest into the body. Re-lint. |
 | **(b) length** | any output | Rewrite those bodies down. An over-length comment is almost always smuggling in the "How I checked" evidence layer — cut that, not the point. Re-lint. |
 | **(c) not a request** | any output | Re-read that comment and apply the inline test honestly. If it's praise, a confirmation, or a heads-up, move it into the body verbatim with a `path/file.ext:L##` reference. If it genuinely asks for a change, keep it inline. Re-lint. |
+| **(d) unreachable claim** | any output | **Cut the unreachable passage from the comment.** Then decide on what's left: a surviving concrete ask stays inline (shorter, and better for it); nothing surviving means the whole finding is one body line. Do not post a comment that proves its own finding can't happen. |
+| **(e) self-defeat** | any output | Same surgery as (d) on the conceding sentence. This is a prompt, not a hard gate — a non-blocking *change request* is legitimate ("I want this changed, don't block on it"). What isn't legitimate is a comment that talks the author out of the finding it just made. |
+| **(f) follow-up promise** | any output, and PR author `!= $ME` | Rewrite the close to one of the three approved fills. Never say Todd will file, take, or own it. On Todd's own PR (`author.login == $ME`) this check is informational — his code, his backlog. |
+| **(g) addresses baz** | any output | baz cannot read prose: 12 of 13 replies to it were the canned *"I can only save feedback to memory for specific code review findings."* Keep any in-thread reply to **one line** for the human author, and move the reasoning into the body under "Existing thread replies." |
+| **(h) body length** | `> 600` words | Not a hard cap, but past 600 the body has become the dumping ground the routing rule created. Cut in this order: CI narration, reviewer-effort bullets, surplus praise, then anything restating a finding already stated inline. |
+| **(h1) CI narration** | any output | Delete from the posted body. It goes in Todd's terminal output (7d) — the author already sees their own checks. |
+| **(h2) reviewer-effort bullets** | any output | Delete. "Noting it so you know it was looked at rather than missed" is a claim about the reviewer, not about the code. |
+| **(h3) praise count** | `> 3` | Keep the three that tell the author something they didn't already know. Praise that restates what the diff obviously does is filler. |
 
 Same contract as the anchor check: **demote, never delete.** Shedding a finding to get the payload
 under budget is worse than a long review. And re-lint after each pass — demoting for (c) can bring
