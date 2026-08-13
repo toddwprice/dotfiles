@@ -95,12 +95,22 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
    **Note whether it carries a `### 🧪 Manual Test Plan`** and how many `MT` items. That's what step 7 drives in a browser. A plan without one means nothing gets hand-verified — say so plainly rather than letting it pass unremarked, and don't invent a checklist now to cover the gap (a plan authored after the code is written tests what you built, not what was asked for).
 
    **Read its plan-check stamp too.** `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
-   - `❌` → **failed**. The trailing `see C1, E11, B5` names the failing check codes.
+   - `❌` → **failed**. A `**🔴 Open blockers**` block below the stamp line carries each finding in full prose — read those, not a code list. (Stamps written before 2026-08-13 may instead end in a bare `see C1, E11, B5`, and those codes are all there is.)
    - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
+   - `✅ passed with N advisories` → **passed**, and there is work in the stamp for you. See below.
    - `✅ passed` → **passed**.
    - No `Plan check:` line anywhere → **unchecked**. Not the same as failed.
 
-   Report the stamp state in the same breath as which kind of plan you found: `❌` → say so plainly and name the blocker codes, since the plan is known-wrong and whatever it says about those codes shouldn't be trusted; unchecked → say the plan was never checked; `⚠️` → say it passed but grounding went unchecked; `✅` → say it passed. **This gate surfaces, it doesn't refuse** — a failed or unchecked plan neither stops you nor earns a new status code (`plan-required` and the rest are what orchestrators parse). You may proceed on a bad plan; you may never proceed *silently* on one.
+   Report the stamp state in the same breath as which kind of plan you found: `❌` → say so plainly and name the blockers, since the plan is known-wrong and whatever it says about them shouldn't be trusted; unchecked → say the plan was never checked; `⚠️` → say it passed but grounding went unchecked; `✅` → say it passed. **This gate surfaces, it doesn't refuse** — a failed or unchecked plan neither stops you nor earns a new status code (`plan-required` and the rest are what orchestrators parse). You may proceed on a bad plan; you may never proceed *silently* on one.
+
+   **Advisories are instructions to you, and the stamp is the only place they exist.** A `**⚪ Advisories**` block lists gaps `/todd:plan-check` judged too thin to fail the plan over — most often a Scenario with no `# falsifies:`, or a `### Verification` block that never says what a green run won't prove. The plan passed *on the understanding that you'd close them*, so read the block before you write a test and treat each item as part of the work:
+
+   - **`[E9]` — a Scenario with no `# falsifies:`.** Derive it before you write that test: name the implementation line you'd break and the assertion that goes red. If you can't, the Scenario asserts nothing testable — say so in your summary rather than writing a test that passes either way.
+   - **`[E14]` — a measured constant with no provenance.** Derive the number at runtime from the same source instead of hard-coding it, or the test rots on the next dump restore.
+   - **`[D5]` — no `⚠️` line on `Verification`.** Don't trust a green run at face value; say in your summary what it didn't cover.
+   - **`[C1]` — a noun the plan named that grounding never recorded.** The stamp gives the `file:line` the checker found. Verify it's still right before you build on it.
+
+   Carrying an advisory into the code silently is the one failure that makes the advisory tier worse than a blocker would have been.
 
 5. **Assess readiness**:
    - If plan found: proceed to implementation using the plan as guide.

@@ -21,6 +21,29 @@ same scaffolding every time — which project, which team, attach the PR, includ
 captures that into one move. It always **shows the draft and waits** before creating, because a
 ticket is a side effect.
 
+## Step 0 — Does this actually deserve a ticket?
+
+A follow-up ticket is reserved for **true scope creep**. Todd's standing preference is to widen the
+current PR slightly rather than leave work in a backlog, so run this before drafting anything. The
+thing earns a ticket only if at least one holds:
+
+- it needs a product or design decision that isn't the author's alone to make
+- it touches an app or subsystem the current diff doesn't already touch
+- it needs its own migration, backfill, feature flag, rollout, or eval
+- the branch's existing test surface can't cover it — new fixtures or a new harness required
+- it's big enough to change how the PR gets reviewed: a new file, or well past a few dozen lines
+
+**None of them hold?** Say so in one line and name the better disposition instead of filing:
+
+- The fix is small and lands in code the open branch already touches → **do it in the PR.** Offer
+  that, and hand off to `todd:address-comments` if the work came from review threads.
+- Nothing breaks if it's never done — you can't finish *"if this isn't changed, ___ breaks"* → it's a
+  nit. **Drop it.** A ticket is not a polite way to decline something; it's a promise with a due date
+  nobody set.
+
+This is a **recommendation, not a veto.** If Todd says file it anyway, file it — it's his backlog.
+Say your piece in one sentence and proceed; don't argue twice.
+
 ## Step 1 — Gather context
 
 Pull the follow-up material from the conversation and surroundings:

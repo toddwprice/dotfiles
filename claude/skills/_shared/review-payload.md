@@ -28,9 +28,29 @@ skills should point at this file, not re-derive it (they drifted before this exi
     them, however precise the anchor), PR-wide observations (`file: "(general)"`), and any finding
     whose own conclusion is "no action needed" / "leaving this as-is" / "just so you know" / "this is
     correct" / "unreachable today" / "not a bug".
+  - **Dropped** — a preference with no failure mode. Finish the sentence *"if this isn't changed,
+    ___ breaks / misleads a reader into believing ___ / costs ___."* If the honest completion is
+    "nothing, it would just be nicer," it goes nowhere: not inline, not the body, not a ticket. The
+    tell is the vocabulary of gratuitous improvement — *free, strictly cheaper, free precision,
+    nicer, tidier, saves the next reader, for symmetry, no functional change*. (Measured: **none**
+    of these comments used the word "nit," so don't screen for it.)
   - **Budget: at most 8 inline comments.** Past 8, rank by whether a reply could plausibly change the
     code and demote the rest into the body. **Demote, never delete** — shedding a finding to get under
-    budget is worse than a long review.
+    budget is worse than a long review. *The one exception is the Dropped branch above:* demotion
+    protects a finding that has a failure mode but lost the budget race, and a nit never had one, so
+    relocating it to the body just moves the noise (the body reached 682 words average that way).
+- **Scope — prefer widening the PR slightly over routing work to a ticket.** When the fix is small
+  and lands in code the diff already touches, ask for it in this PR. A ticket is for **true scope
+  creep** only: it needs a product/design decision that isn't the author's alone, or touches an app
+  the diff doesn't, or needs its own migration/backfill/flag/rollout/eval, or can't be covered by the
+  PR's existing test surface, or is big enough to change how the PR gets reviewed. Trips none of
+  those → ask here, or drop it. For genuine scope creep, name the boundary in one body line and leave
+  the ticket decision unstated — it's the author's.
+
+  > **Measured, 42 payloads / 83 inline comments:** 15 closed with `Your call whether it's worth a
+  > ticket — don't block the merge on it.` because `pr_review.md` listed that as an approved close.
+  > Not one of the 15 named a real scope boundary; each was either a small fix to ask for or a nit to
+  > drop. That close is **retired** — don't reintroduce it here or anywhere else.
 
   > **This replaced a "severity → placement" rule** that routed every file-anchored `non-blocking` and
   > `positive` finding inline. Measured over 425 posted comments, that criterion produced 46%
@@ -39,6 +59,13 @@ skills should point at this file, not re-derive it (they drifted before this exi
   > after being fixed in `todd:pr_review`, which is why 39% of comments were still non-blocking.
   > **Don't restore it, and if you change the rule, change it in `commands/todd/pr_review.md` and
   > `skills/todd-sync-review/SKILL.md` in the same edit** — those are the other two copies.
+  >
+  > This applies to the Dropped and Scope rules below just as much. `pr_review.md` states them
+  > **twice** (the Step 4 triage gates *and* the Step 7a comment-structure list), `todd-sync-review`
+  > restates placement, and `todd-address-comments` applies the inbound half. A prose rule in this
+  > family has never held on its own: the only reason routing improved was the `jq` gate in
+  > `pr_review.md` Step 7c, so a change here without a matching check there will not take effect.
+  > Checks **(i)** ticket-deferral and **(j)** no-failure-mode are the gates for these two rules.
 - **`event`:** blocking findings → usually `REQUEST_CHANGES`; otherwise `COMMENT`; clean approval →
   `APPROVE`. If ambiguous, ask Todd.
 - **`side`:** `RIGHT` for added/changed (head) lines — the common case; `LEFT` for deleted lines.

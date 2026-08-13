@@ -8,7 +8,7 @@ You are running Todd's unattended ticket-to-reviewed-PR loop. One planned ticket
 
 ## The two rules that shape everything
 
-**1. Ask almost never — but ask properly when you do.** Phases 1–3, 5 and 6 are fully autonomous: no prompts, safe defaults, keep going. Phases 4 and 7 stop for *judgement calls only* — a finding where fact-checking couldn't settle it, two defensible designs, or a fix that reaches past what the ticket asked for. A nit with an obvious fix is not a judgement call. Batch questions into one `AskUserQuestion` (max 4 per call; loop if there are more) rather than dribbling them out.
+**1. Ask almost never — but ask properly when you do.** Phases 1–3, 5 and 6 are fully autonomous: no prompts, safe defaults, keep going. Phases 4 and 7 stop for *judgement calls only* — a finding where fact-checking couldn't settle it, two defensible designs, or a fix big enough to trip one of the five scope-creep conditions in `todd-address-comments`' Disposition section. A *small* fix reaching past what the ticket asked for is not a judgement call: just do it in the PR rather than leaving a ticket behind. A nit isn't one either — drop it. Batch questions into one `AskUserQuestion` (max 4 per call; loop if there are more) rather than dribbling them out.
 
 **2. Every phase runs in a dispatched subagent.** This is what "clear context between phases" means here — a command can't call `/clear`, and a fresh subagent is the only real way to start a phase cold. The orchestrator (you) holds almost nothing: `TICKET`, `WT` (absolute worktree path), `BRANCH`, `PR`, `JSON`, `EVIDENCE` (phase 5's screenshot directory), and each phase's compact return. Never pull a diff, a review payload, an implementation transcript, or a page snapshot into your own context — a subagent fetches those itself and hands back a summary. A loop that compacts halfway through phase 7 has lost the thread.
 
@@ -59,16 +59,21 @@ Then branch on what you found:
 
   **Then read its plan-check stamp.** `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
 
-  - `❌` → **failed**. The trailing `see C1, E11, B5` names the failing check codes.
+  - `❌` → **failed**. A `**🔴 Open blockers**` block below the stamp line carries each finding in full prose — that's what you report, not a code list. (Stamps written before 2026-08-13 may instead end in a bare `see C1, E11, B5`; those codes are all you get, and say so.)
   - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
+  - `✅ passed with N advisories` → **passed.** A `**⚪ Advisories**` block carries N impl-time notes — gaps the checker judged too thin to fail the plan over, like a Scenario with no `# falsifies:`. Proceed, and see below.
   - `✅ passed` → **passed**.
   - No `Plan check:` line anywhere → **unchecked**. Not the same as failed.
 
-  **`❌` → stop the loop.** Report the blocker codes from the stamp and tell Todd to fix the plan. Don't attempt the fix here — a blocker needs his decision, which is the whole reason it's a blocker.
+  The stamp also carries `pass N` and may carry a `**⚖️ Held by decision**` block — findings Todd has already ruled on. Neither changes what you do; don't re-raise anything in the rulings block if you end up reporting on the plan.
 
-  **Unchecked → run `/todd:plan-check $TICKET --strict` inline**, then read the stamp it just wrote. Comes back `❌` → stop as above; passes → continue. An unstamped plan is a missing check, not a failed one, and an unattended run should cure that in one step rather than dead-stop. `/todd:coder plan` never stamps, so this is the common case.
+  **`❌` → stop the loop.** Report the blockers from the stamp — the prose, not the codes — and tell Todd to run `/todd:plan $TICKET`, which reaches its phase 0B through the stamp. Don't attempt the fix here. That's not because every blocker needs Todd (most are the planner's mechanical work, and `/todd:plan` phase 7 now closes those itself); it's because *this* command is an unattended implementation runner with no planning context loaded, and a plan is the one input it must not improvise.
+
+  **Unchecked → run `/todd:plan-check $TICKET --strict` inline**, then read the stamp it just wrote. Comes back `❌` → stop as above; passes → continue. An unstamped plan is a missing check, not a failed one, and an unattended run should cure that in one step rather than dead-stop. `/todd:coder plan` never stamps, so this is the common case. Note `--strict` admits no advisories, so this path yields a plain `✅ passed` or a `❌`.
 
   **`⚠️` or `✅` → continue.** Either way the stamp state goes in the *same* phase-0 line as the Behavior Spec note — one summary line, not two.
+
+  **Carry any advisories into the phase-1 prompt, verbatim.** They're the one part of the stamp the implementing agent needs and `/todd:coder impl` will never look for: it reads the plan body, and an advisory lives in the stamp. A `[E9]` advisory means the plan has a Scenario whose falsification nobody worked out — the implementer has to derive it before writing that test, and if they can't, the Scenario needs saying so rather than a test that asserts nothing. Passing them along costs one line each and is the whole reason a thin plan was allowed through instead of costing a re-plan.
 - **Notion doc only** → **you must carry the plan forward yourself.** `/todd:coder impl` only looks for that Linear comment; a Notion-only plan is invisible to it, and it will quietly grade the ticket "straightforward" and improvise. Extract the plan text and paste it into the phase 1 subagent prompt. **A Notion plan can't be stamp-checked** — `/todd:plan-check` reads the Linear comment, or a local file with `--local`, and never Notion — so this path proceeds on an unchecked plan, and the phase-0 line should say so.
 - **Neither** → stop. Say the loop needs a plan and to run `/todd:plan $TICKET` first — an unattended run is exactly the case its Behavior Spec is for, since there's nobody around to resolve an ambiguous "handle the edge case". `/todd:coder plan $TICKET` or a linked Notion doc also work. Don't offer to plan it here — planning wants Todd's eyes, and that's the whole reason this command takes a *planned* ticket.
 

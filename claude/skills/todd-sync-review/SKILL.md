@@ -82,6 +82,14 @@ Rules that keep GitHub happy and the review clean:
   (Full rule + the measurements behind it: `_shared/review-payload.md`. This file previously carried a
   "severity → placement" rule that routed every file-anchored non-blocking finding inline; don't
   restore it.)
+- **A nit is dropped, not demoted, and a small fix isn't a ticket.** If you can't finish *"if this
+  isn't changed, ___ breaks"* about a finding, it goes nowhere — not inline, not the body. That's the
+  one carve-out from never-deleting: demotion protects a finding with a failure mode that lost the
+  budget race, and a nit never had one. And when a fix is small and sits in code the diff already
+  touches, the artifact should ask for it in this PR rather than defer it; a ticket is for true scope
+  creep only (five conditions in `_shared/review-payload.md`). The close `Your call whether it's worth
+  a ticket — don't block the merge on it.` is **retired** — if the edited HTML still carries it, that's
+  a stale artifact, and the finding needs re-routing rather than syncing through verbatim.
 - **Event:** derive from the artifact's verdict banner if present — blocking findings → usually
   `REQUEST_CHANGES`; otherwise `COMMENT`; clean approval → `APPROVE`. If ambiguous, ask Todd.
 - **Answer-only (default):** Todd's review comments are clean human prose — **no**

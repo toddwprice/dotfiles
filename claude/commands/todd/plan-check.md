@@ -34,17 +34,18 @@ finding, not a rewrite.
 |---|---|---|
 | `--local` | off | Read `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` instead of Linear. For checking a `--dry-run` plan before it's posted. Writes fixes back to the local file only. |
 | `--report-only` | off | Change nothing. Report every finding, including the ones you would have fixed. Use when Todd wants to see what the plan got wrong, not a corrected plan. |
-| `--strict` | off | `FLAG` findings are treated as `BLOCKER`. Nothing passes with an open judgement call. For a plan about to go into an unattended `/todd:phase` run. |
+| `--strict` | off | `FLAG` findings **and advisories** are treated as `BLOCKER`. Nothing passes with an open judgement call or a carried-forward note. This is what `/todd:phase` runs, so it's the regime a plan headed for an unattended phase run has to survive. |
 
 No ticket id → show usage and stop.
 
-## Severity — three levels, and they behave differently
+## Severity — three levels and one disposition, and they behave differently
 
 | Level | Means | You do |
 |---|---|---|
 | 🔴 **BLOCKER** | The plan is unusable or will be silently misread. A broken contract string, an ungrounded anchor asserted as fact, a requirement with no coverage. | **Do not fix. Report, fail the check, and hand it back to `/todd:plan`.** These need a decision, and a checker that quietly rewrites them hides the fact that the plan was wrong. |
 | 🟡 **FIX** | Mechanically wrong with exactly one correct answer. A miscounted `Scope`, a missing `@slice-N` tag on a scenario that obviously belongs to slice 2, a heading out of order. | **Fix it in place, silently.** List what you fixed in the report; don't ask. |
 | 🔵 **FLAG** | Judgement. Two scenarios that might be duplicates, a `Risks` entry that reads like a gotcha, a section 2 that's long enough to suggest the ticket should split. | **Report it. Change nothing.** Todd decides. Under `--strict` these become BLOCKERs. |
+| ⚪ **ADVISORY** | Not a fourth severity — a **disposition of a 🔴** that makes the plan thin rather than wrong, within the limits in "An advisory is not a blocker" below. | **Report it, change nothing, and don't fail the plan.** It goes in the stamp so `impl` picks it up as a note. Under `--strict` these become BLOCKERs too. |
 
 **The line between FIX and BLOCKER is whether there's one right answer.** A `Scope` line claiming
 5 files over a `Files to Modify` listing 7 has one right answer: 7. A Scenario with no
@@ -488,9 +489,9 @@ phase 0 runs this command on an unstamped plan and then reads the stamp itself; 
 and start the loop it is already running is noise. Invoked that way, end on the verdict and the stamp
 and let the caller drive.
 
-Don't soften it into "you may want to". A `❌` plan that nobody re-plans still reaches `impl`,
-because the stamp is documentation rather than a gate (see "Wiring this into the rest of the
-chain").
+Don't soften it into "you may want to". A `❌` blocks `loop` and `phase`, but a bare
+`/todd:coder impl` will still build it (see "Wiring this into the rest of the chain"), so a failed
+plan nobody re-plans is a plan that can still ship.
 
 **Then write the stamp**, unless `--report-only`. The last line of the plan comment, after a `---`:
 
@@ -632,17 +633,31 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
 ## Hard rules
 
 - Never re-plan. You check the plan that exists; you don't write a better one.
-- Never fix a 🔴. Fixing it hides that the plan was wrong, and your fix is a guess.
+- Never fix a 🔴. Fixing it hides that the plan was wrong, and your fix is a guess. (A1–A3 are not
+  exceptions to this — they're 🟡 now, because a heading is a string with one right answer.)
 - Never fix by deleting. Relocate, or report.
 - Never add to the anchor file. Grounding is phase 2 of `/todd:plan`'s job, and re-grounding here
-  would report as checked something that was never verified during planning.
+  would report as checked something that was never verified during planning. Reporting a C1 advisory
+  with the `file:line` you found is not adding to it.
+- **Never report one instance of a class you didn't sweep.** If E9 fires, every Scenario gets checked;
+  if C1 fires, every noun does. A finding that names the first instance and stops is a finding that
+  comes back next pass, and that is the loop.
+- **Never re-raise anything in the `⚖️ Held by decision` block**, and never drop that block from a
+  stamp you write. Todd ruled; re-arguing it is how B1 got raised ten times.
+- **Never fail a plan for being thin when the finding is advisory-eligible** and inside its limits.
+  One missing `# falsifies:` out of seven Scenarios is a note for the implementer, not a lap.
+- **Never lose the pass counter.** It's the only lap count in the chain, and at pass 3 it's what stops
+  a fourth.
 - Never post a second comment. One plan comment, one stamp, inside it.
 - Never report a pass in degraded mode without saying grounding went unchecked.
 - Never change the first line of the plan comment, or either section heading.
 - Never end a failed check without sending Todd to `/todd:plan <TICKET>`. A blocker list with no
-  next command is where the loop stops.
+  next command is where the loop stops. The one exception is pass 3, where the next step is a scoping
+  question and not another lap.
 - Never record a blocker as a bare check id. The stamp carries the finding in words, or the session
   that has to resolve it is guessing at what you meant.
+- Never report the wiring as unwired, or the check count as 47. There are **43** checks, and all three
+  stamp consumers are live.
 
 ## Failure handling
 
@@ -650,8 +665,13 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
 |---|---|
 | No plan comment | Report it, say which command should have written one, stop. |
 | Multiple plan comments | 🔴 Report both ids and timestamps, name the one `impl` would read, stop. Todd picks. |
-| Section 2 heading matches neither literal | 🔴 Report and stop. Everything downstream branches on it. |
+| Section 2 heading matches neither literal | 🟡 if the body tells you which mode it is — rewrite the heading and report it. 🔴 and stop only if it's ambiguous. |
+| First line isn't `## 📋 Implementation Plan` | 🟡 rewrite that one line and keep checking. Say the phase-5 contract gate didn't run. |
 | Anchor file missing | Degraded mode. Run every other group, say so in bold at the top of the report and in the stamp. |
+| This is pass 3 and there are still blockers | Stop the loop. Name the one unresolved thing as a scoping question for Todd. Never start a fourth lap. |
+| A check id fires that an earlier pass recorded as resolved | Report it as a resolution that didn't take, with what changed and why it didn't hold. Never file it as a fresh finding. |
+| The stamp carries a `⚖️ Held by decision` block | Read it, carry it forward verbatim, and raise nothing in it. |
+| An anchor's line number is off but the symbol is in the file | 🟡. Correct the number. Not a blocker — the grounding was done. |
 | Ticket not found or MCP truncating | Fall back to `linctl issue get $TICKET --json`. If that also fails, run groups A–D and skip E1 — you can't check coverage against a ticket you can't read. Say which group you skipped. |
 | Plan contradicted by the code | 🔴 Report it as a finding. Don't correct the plan; the correction may change the approach, which is Todd's call. |
 | `save_comment` fails | The checked local copy is on disk — report its path. |

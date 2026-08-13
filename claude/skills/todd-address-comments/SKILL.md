@@ -33,6 +33,47 @@ If Todd's request clearly says "just do it" / "resolve them for me and push" / "
 run straight through — but still show the triage table first so he can abort, then proceed without a
 second prompt.
 
+## Disposition — fix it here, push back, or (rarely) file a ticket
+
+Every comment resolves to one of three dispositions. **A follow-up ticket is the last resort, not
+the polite default.**
+
+1. **Fix it in this PR.** The default. Todd owns this branch, so a slightly wider PR is nearly
+   always cheaper than a ticket that sits in a backlog. Small fix, in code the diff already
+   touches → just do it.
+2. **Push back.** The comment is a nit, is wrong about the code, or asks for something the repo
+   already accepts elsewhere. One-line reply with the reason. No fix, no ticket.
+3. **File a ticket.** For **true scope creep** only — one of these five must hold:
+   - it needs a product or design decision that isn't Todd's alone to make
+   - it touches an app or subsystem this diff doesn't already touch
+   - it needs its own migration, backfill, feature flag, rollout, or eval
+   - the branch's existing test surface can't cover it — new fixtures or a new harness required
+   - it's big enough to change how the PR gets reviewed: a new file, or well past a few dozen lines
+
+Trips none of the five? Then it isn't a ticket. Fix it, or push back.
+
+### Pushing back on a nit is the expected behavior, not rudeness
+
+A nit is a comment whose fix changes no behavior and no failure mode: naming, ordering, a style the
+linter doesn't enforce, a preference between two working forms, "this reads nicer". Test it by
+finishing *"if I don't change this, ___ breaks / misleads a reader into believing ___ / costs ___."*
+If the honest completion is "nothing," say so in one line and move on:
+
+> Leaving this — both forms behave identically here, and `<file>` already does it this way.
+
+Two things that reply must **not** do: comply anyway to be agreeable, or convert the nit into a
+ticket. Those are how a nit ends up costing more than the code it was about. baz's low-severity
+comments are the common case, and a human's nit gets the same one-line decline — just warmer.
+
+Guard against the inverse too. "Nit" is not a label for anything inconvenient: a comment about a
+docstring or comment that states something **false** has a real failure mode (the wrong belief it
+plants in the next reader), and so does anything naming a reachable crash, a wrong result, or a
+contract mismatch. Those get fixed.
+
+**The asymmetry with `todd:pr_review` is deliberate.** There, Todd is reviewing *someone else's* PR,
+where "won't fix in this PR" is the author's call and he accepts it in one round. Here the PR is his,
+so no one else's scope is at stake and the ticket has nothing to hide behind.
+
 ## Step 1 — Identify the PR and pick a mode
 
 `$ARGUMENTS` may contain a PR number, reviewer name(s), a path to a review JSON, or be empty.
@@ -137,10 +178,12 @@ revisit them. Report how many you skipped and why.
 
 - **baz** is the AI reviewer (a GitHub App) and is the dominant commenter on Todd's PRs. Its
   comments often carry a severity and an embedded `<details>Instructions for AI Agents</details>`
-  block. Weight baz comments by their stated severity; low-severity baz nits can be acknowledged and
-  declined with a one-line rationale rather than always actioned.
+  block. Weight baz comments by their stated severity, and **decline low-severity baz nits by
+  default** — a one-line rationale, no fix and no ticket. "It's only one line, may as well" is how a
+  review of 12 nits becomes 12 commits; run the Gate 4 sentence from Disposition on each one.
 - **Humans** (e.g. `sam`, `mbrashid62`, `snkutkoski`) are authoritative — fact-check, but lean
-  toward addressing or explicitly explaining.
+  toward addressing or explicitly explaining. A human nit still gets declined, just warmer; what
+  changes is the tone and the amount of evidence you show, not the disposition.
 
 ## Step 3 — Fact-check each comment against the code
 
@@ -155,23 +198,36 @@ Don't take any comment at face value, including baz's. For each unaddressed thre
    repo already accept the flagged pattern elsewhere? Run these in parallel across independent
    threads.
 4. Assess each as one of:
-   - **Accurate & actionable** — correct and aligns with conventions → fix it.
+   - **Accurate & actionable** — correct and aligns with conventions → fix it, here, in this PR.
+   - **Accurate but a nit** — correct, and nothing breaks either way → **one-line decline**. Not a
+     fix, not a ticket. Run the Gate 4 sentence from Disposition before anything lands in this
+     bucket, and again before anything lands in *Accurate & actionable* that only sounds substantive.
    - **Accurate but non-actionable** — correct but the repo already accepts this pattern → reply
      explaining why we're keeping it.
    - **Partially accurate** — has a real kernel but overreaches → fix the real part, clarify the rest.
    - **Inaccurate** — wrong about the code → reply with the evidence that refutes it.
+   - **True scope creep** — correct, worth doing, and trips one of Disposition's five conditions →
+     this is the only bucket that earns `todd:followup-ticket`. Name which of the five it trips in the
+     triage table; if you can't name one, it belongs in a bucket above.
 
 ## Step 4 — Present the triage table and WAIT
 
 Show Todd a compact table, then the draft replies and the fix plan. Stop here in propose-first mode.
 
 ```
-| # | Thread (file:line)        | Reviewer | Severity | Verdict            | Plan        |
-|---|---------------------------|----------|----------|--------------------|-------------|
-| 1 | errorhandling.ts:42       | baz      | medium   | Accurate&actionable| fix + reply |
-| 2 | study_setup.py:1283       | baz      | low      | Accurate non-act.  | reply only  |
-| 3 | screener_pair.ex:88       | sam      | —        | Partially accurate | fix part    |
+| # | Thread (file:line)        | Reviewer | Severity | Verdict            | Disposition          |
+|---|---------------------------|----------|----------|--------------------|----------------------|
+| 1 | errorhandling.ts:42       | baz      | medium   | Accurate&actionable| fix here + reply     |
+| 2 | study_setup.py:1283       | baz      | low      | Accurate but a nit | decline (1-line)     |
+| 3 | screener_pair.ex:88       | sam      | —        | Partially accurate | fix part             |
+| 4 | quota_config.ex:210       | sam      | —        | True scope creep   | ticket (needs a flag)|
 ```
+
+The **Disposition** column takes exactly one of: `fix here`, `decline`, `ticket`. A `ticket` row must
+name the scope-creep condition it trips, in parentheses, like row 4 — an unnamed one is a `fix here`
+you haven't admitted to yet. Report the counts in one line under the table (`4 threads: 2 fix here,
+1 decline, 1 ticket`) so the balance is visible; mostly-`ticket` is the shape this skill exists to
+prevent.
 
 Under the table, for each thread give: the **draft reply** (Todd's voice — clear, terse, kind; lead
 with the answer; cite `file:line` evidence) and, for the ones you'll fix, a one-line **what you'll
@@ -184,10 +240,14 @@ and costs ~6x the tokens for material a PR reply never uses.
 **In Local findings mode** the Reviewer column reads `self-review` and there are no draft replies to
 write — nothing was ever posted, so there's nothing to reply to. Show the table, the one-line *what
 you'll change* per fix, and the rationale for anything you're declining. Then call out **judgement
-calls separately**: a finding is a judgement call when fact-checking couldn't settle it (two
-defensible designs, a scope question, a fix that reaches past what the ticket asked for). List those
-explicitly and ask about them before implementing — they're the reason this mode stops here rather
-than running straight through.
+calls separately**: a finding is a judgement call when fact-checking couldn't settle it — two
+defensible designs, or a fix big enough to trip one of Disposition's five scope-creep conditions.
+List those explicitly and ask about them before implementing — they're the reason this mode stops
+here rather than running straight through.
+
+A *small* fix reaching past what the ticket asked for is **not** a judgement call and doesn't earn a
+prompt: do it. Neither is a nit — drop it. Asking Todd about either is how this mode turns a clean
+run into a questionnaire.
 
 ## Step 5 — Implement (after approval)
 
@@ -197,7 +257,10 @@ CWD is often a *different* branch's tree. Before editing: confirm you're on the 
 (`git worktree list` to find it) or check it out. Never edit/commit against the wrong tree.
 
 - Make the agreed code changes. If the change has behavioral surface, follow the repo's TDD norm
-  (write/extend the failing test first). Keep edits scoped to what the comments asked for.
+  (write/extend the failing test first). Keep edits scoped to the comments **plus any small fix you'd
+  otherwise have left behind as a ticket** — widening the PR slightly is the point, per Disposition.
+  What stays out is work that trips one of the five scope-creep conditions; that's a ticket, and
+  everything short of it belongs in this commit.
 - Commit with a clear message. End commit messages with the repo trailer:
   `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 - **Checks are mandatory before pushing** — this is a hard rule for Todd's branches. There is **no
@@ -244,5 +307,8 @@ gh api repos/{owner}/{repo}/pulls/<N>/comments -f body="<reply>" -F in_reply_to=
   `todd:sync-review` is the right skill; say so and hand off. His own PR plus a `.json` means it's a
   self-review to act on — Local findings mode, stay here. An `.html`/`.md` artifact is outbound
   either way; those are hand-edited for publishing, not machine-generated for consumption.
-- If a comment says "filed for later" or implies a follow-up ticket, check whether one actually
-  exists and offer `todd:followup-ticket` to create it.
+- If a comment says "filed for later" or implies a follow-up ticket, **first check whether it's small
+  enough to just do here** — that's the default now (Disposition). Only when it trips one of the five
+  scope-creep conditions do you check whether a ticket already exists and offer
+  `todd:followup-ticket`. A ticket that duplicates a ten-line fix in an open branch is worse than
+  either doing it or dropping it.

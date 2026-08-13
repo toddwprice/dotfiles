@@ -202,6 +202,19 @@ Two sources, in this order:
    also carries the 🔵 flags the stamp leaves out. Prefer it when it exists; a flag next to a
    blocker is often the same underlying problem and Todd can settle both in one answer.
 
+**Read every pass in that file, not just the top one.** It's prepended per run — newest first, under
+a `## Pass N` header — so it's the only place the loop's history survives, and the history is what
+tells you which kind of pass this is:
+
+- **A check id in this pass that an earlier pass recorded as resolved** is a resolution that didn't
+  take. Don't fix it harder — work out why the last fix didn't cover it. On ENA-443 the same finding
+  came back nine times because each closure moved the problem one layer down instead of ending it.
+- **A 🔵 Todd already ruled on** shouldn't be in this pass at all. If it is, the `⚖️ Held by decision`
+  block was dropped from a stamp somewhere. Don't re-ask him; restore the block.
+
+**Also take the `pass N` off the stamp.** You carry it forward when you rewrite the stamp in phase 6,
+and at pass 3 the loop is done — that's step 6's stop, not another revision.
+
 **A stamp that names only check ids (`see C1, E11, B5`) and no findings file → stop and say so.**
 That's a stamp from before the blocker text was recorded. Do **not** infer what `C1` meant and do
 not re-derive it: your re-derivation may land on a different noun than the checker's did, and you
@@ -253,11 +266,47 @@ If he answers something you can turn into a **grounded default** rather than an 
 a `Decisions` entry marked `(Todd, YYYY-MM-DD)`, not a `Questions / Blockers` entry. The whole point
 is that the revised plan carries fewer open questions than the one that failed.
 
+**Bring him the 🔵 flags too, and when he rules "leave it", record the ruling.** The flags are in the
+findings file, they cost him one line each, and unrecorded they come back every single pass — B1, the
+brief-length flag, was raised **ten times across the audited runs** and ENA-443's ninth report says so
+in as many words: *"Same conclusion as the last seven runs."* That's not the checker being stubborn.
+It reads the plan cold; if the ruling isn't written down, it has no way to know one was made.
+
+So a "leave it as written" goes into a `⚖️ Held by decision` block in the stamp you write in phase 6:
+
+```markdown
+**⚖️ Held by decision**
+- **[B1]** Section 1 is 2270 words. Todd ruled the brief stays long for this ticket (pass 2).
+- **[D7]** Section 2 is 526 lines. Ruled not a split (pass 2).
+```
+
+`/todd:plan-check` reads that block, carries it forward verbatim into every later stamp, and raises
+nothing in it. **Prioritise the flags that carry `⚠️ book severity 🔴`** — those are the ones that will
+fail the plan the moment `/todd:phase` re-checks it under `--strict`, so a ruling now saves a lap
+later.
+
 ### Step 5 — Apply each resolution to the plan, surgically
 
 Edit the parts the blockers touch. Do not rewrite sections that passed — a rewritten Scenario the
 checker already accepted has to be re-checked for no reason, and drift is how a passing plan quietly
 regresses.
+
+**Fix the class, not the instance the checker named.** This is the difference between a two-lap fix
+and a nine-lap one, and it's the single most expensive mistake this phase can make. `/todd:plan-check`
+now sweeps every instance before it reports, but a stamp written by an older run — or a finding you
+resolve narrowly — leaves the rest in place, and the next check finds the next one. That is literally
+what happened: FRG-1240 failed on E9 three passes running, on a different Scenario each time.
+
+So when a blocker names a Scenario, check every Scenario. When it names a noun, check every noun.
+When it names an `INV-N`, read every `Check:`. Then say in `### Changed since the last plan` how many
+instances you found and fixed — "3 Scenarios were missing `# falsifies:`, not the 1 the check named"
+is the line that tells the next checker the sweep happened.
+
+**And when you resolve a `# falsifies:` or a `Check:`, re-derive it from the code — don't re-aim it.**
+On ENA-443 the closure moved the problem instead of ending it nine times over: each pass re-pointed a
+mutation at a new target, and each new target still couldn't observe it. If you can't state which line
+of the implementation you'd break and which assertion goes red, you haven't resolved it — you've
+relocated it, and it will come back as a blocker one layer down.
 
 | Blocker | What resolving it actually changes |
 |---|---|
@@ -376,6 +425,19 @@ noun in the plan back to this file; without it, it can only check that a noun *l
 which is precisely the failure grounding exists to prevent. It costs you three lines and it is the
 difference between a check and a vibe. Write it even under `--dry-run` — especially under
 `--dry-run`, since that's when the plan is most likely to be revised before posting.
+
+**What you write here is provisional, and phase 5 reconciles it.** This matters more than it sounds:
+in 41 audited `/todd:plan-check` runs, C1 — "a concrete noun in section 2 isn't in the anchor file" —
+came back **10 times and was fixed zero times**, making grounding 46% of every blocker the checker has
+ever raised. The cause wasn't carelessness. It was this ordering: you finalize the anchor list *here*,
+in phase 2, and you don't write section 2 until *phase 4*. Every noun phase 4 introduces — a factory
+you didn't know you'd name, the module the `Verification` command touches, an error atom that turned
+up while drafting a Scenario — was structurally guaranteed to miss this file.
+
+So don't try to predict phase 4 from here. Ground what the approach needs, write the file, and
+**ground-as-you-go in phase 4**: the moment you name a concrete noun in section 2 that isn't already a
+row, verify it with one `Grep` and append the row then. Phase 5's gate is the backstop that catches
+what you still missed.
 
 ### Blockers have a budget: three
 
@@ -787,7 +849,7 @@ often missing from a plan and the reason unattended runs wander.
 
 ## Phase 5 — The pre-post gate
 
-**This is not the plan review.** The full review — 23 checks across contract, brief, detail,
+**This is not the plan review.** The full review — 43 checks across contract, brief, detail,
 invariants, and Gherkin — moved to `/todd:plan-check`, which reads the posted plan cold, the way
 the implementing agent will. Two reasons it belongs there and not here:
 
@@ -816,8 +878,26 @@ wrong, so there's no point posting it. Fix inline; don't report them, just fix t
    rather than posted — go back, don't paper over it here. (Coming from phase 0B there is no phase 2
    to go back to; that's step 6's stop, and the answer is the same — say the ticket is
    under-specified rather than trimming the list to fit.)
+6. **Every concrete noun in section 2 has a row in `anchors-<TICKET>.md`.** Sweep the section you
+   just wrote — module names, function names with arity, factories, fixtures, config keys, error
+   atoms, GraphQL fields, feature flags, and the files named in `# target:` and `Verification` — and
+   for each one that isn't already a row, verify it with one `Grep` and add the row. If it doesn't
+   verify, it doesn't stay in the plan: it becomes a `Questions / Blockers` entry, subject to item 5.
 
-Everything else — word counts, heading order, count reconciliation, anchor tracing, coverage-table
+**Item 6 is the newest of the five and the one that pays.** It exists because grounding is where the
+loop actually came from: C1 was **46% of all blockers raised in 41 checked runs, and never once got
+fixed** — the checker would name one unrecorded noun, you'd get a `❌`, and the lap would cost a fresh
+session to add a table row. Phase 2 can't prevent that on its own, because it runs two phases before
+the text it's grounding exists. This is the sweep that closes it.
+
+Do the sweep mechanically, not from memory — read section 2 back and pull the backticked identifiers
+out of it. The nouns that get missed are exactly the ones you were most confident about while writing.
+
+**Reconciling is not checking.** `/todd:plan-check` still traces every noun independently; you are not
+doing its job twice. It verifies the anchors are *true*; you're making sure the list is *complete*. A
+complete list of verified anchors is what turns its group C from a lap into a formality.
+
+Everything else — word counts, heading order, count reconciliation, coverage-table
 completeness, tag and comment presence, EARS form, scenario anti-patterns — is `/todd:plan-check`'s
 job. Don't do it twice.
 
@@ -872,8 +952,22 @@ still failing on findings you just closed. Replace the whole stamp, blocker bloc
 
 ```markdown
 ---
-*Plan revised 2026-08-11 to resolve 3 blockers (C1, E11, B5) — re-check required.*
+*Plan revised 2026-08-13 to resolve 3 blockers (C1, E11, B5) — pass 2 · re-check required.*
+
+**⚖️ Held by decision**
+- **[B1]** Section 1 is 2270 words. Todd ruled the brief stays long for this ticket (pass 2).
 ```
+
+**Two parts of that are not decoration.**
+
+**Carry the pass number forward.** Take it from the stamp you're replacing and add nothing — the
+checker increments it. It's the only lap count the chain has, and at pass 3 it's what makes
+`/todd:plan-check` stop instead of failing the plan a fourth time. A revision that drops the counter
+restarts the loop at pass 1 with none of its history, which is how ENA-443 reached nine.
+
+**Carry the `⚖️ Held by decision` block forward verbatim, and append to it** any ruling Todd made in
+step 4. It's the only part of the stamp that accumulates rather than being replaced. Drop it and every
+flag he has already settled comes back on the next check.
 
 🛑 **Never write a `✅ passed` stamp.** That stamp is `/todd:plan-check`'s to write and only after it
 has actually run the checks. Stamping your own revision as passed is precisely the laundering the
@@ -941,7 +1035,7 @@ action, in a flow whose whole point is unattended `impl`. So run it. Just not fr
 **A subagent is the cold session.** It starts with no transcript: it gets the prompt you write and
 nothing else. That's the same qualification the check has always needed and the reason it can now be
 automatic — the objection in phase 6 was to *this context*, never to automation. A second benefit
-falls out: the check is 47 checks over a ticket, a plan, an anchor file and a handful of greps, and
+falls out: the check is 43 checks over a ticket, a plan, an anchor file and a handful of greps, and
 none of it lands in your window.
 
 ### The dispatch
@@ -1022,9 +1116,15 @@ fixes and flags in its words, then close with the line its verdict dictates:
 | Verdict returned | Closing line |
 |---|---|
 | `✅ passed` | ``Plan checked. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
+| `✅ passed with N advisories` | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd:loop <TICKET>`.`` — and list them, one line each. They're notes for the implementer, not open questions for Todd |
 | `⚠️ passed (ungrounded)` | Re-dispatch once with the path corrected. Still degraded → ``Plan checked, grounding unchecked — no anchor file found at <path>. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
-| `❌ N blockers` | ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
+| `❌ N blockers` | Triage first — see below. Either you resolve them here and re-dispatch, or ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
+| `❌` at **pass 3** | Don't resolve, don't re-dispatch. ``Three passes haven't settled this.`` Then the one scoping question, and stop |
 | nothing usable — the dispatch failed | ``Posted and unchecked — the check didn't run. Run `/todd:plan-check <TICKET>`.`` |
+
+**Report the `⚠️ book severity 🔴` flags whatever the verdict.** A 🔵 marked that way passes here and
+fails the moment `/todd:phase` re-checks the plan under `--strict`. Todd is looking at the plan right
+now; a lap from now he isn't. One line each.
 
 **On a pass, the next step is `/clear` and `/todd:loop <TICKET>` — and the `/clear` is half the
 instruction, not politeness.** `/todd:loop` runs a ticket to a reviewed PR across eight phases, and
@@ -1048,17 +1148,38 @@ and `/todd:loop` accepts it explicitly — so the handoff names the loop and the
 the same breath, and Todd decides whether unchecked grounding is worth a re-plan before an unattended
 run.
 
-**On `❌`, stop.** Don't resolve the blockers in this session even though you could — phase 0B is
-right there and you have the anchors loaded. Three reasons: the checker's own handoff sends them to
-`/todd:plan`, which reaches phase 0B through the `❌` stamp on the next run, so a fresh session does
-this properly; a good share of blockers (B5, a scope question, an ungrounded noun that turns out not
-to exist) need Todd's answer and not yours; and closing a finding about lines you wrote, in the
-session that wrote them, is the same blindness one layer down. Report the blockers and let him re-run.
+### On `❌` — triage, then either fix it here or hand it back
 
-**The loop terminates on a clean check, not on a tidy-looking plan.** plan → check → blockers → plan
-→ check, one dispatch per lap. Each pass should close findings and open none; if the same blocker
-survives two passes, stop looping and say what's actually stuck. A third round on the same finding
-means it needs a decision nobody in the loop can make.
+This used to be an unconditional stop: report the blockers, tell Todd to re-run `/todd:plan`, and let
+a fresh session reach phase 0B through the stamp. **That cost a manual keystroke per lap** — 52
+invocations for 24 tickets in the audited history — and it spent a full session rebuild (re-read the
+ticket, the plan, the anchors) on work this file already classifies as mechanical.
+
+**Run phase 0B step 3's triage on every blocker returned.** Its test is *would two reasonable planners
+resolve this the same way?* Then:
+
+| Every blocker is **yours to fix** | Any blocker is **Todd's to answer** |
+|---|---|
+| Go to **phase 0B step 5** in this session. Fix them, sweep each class, update the anchor file, write `### Changed since the last plan`, replace the stamp, then **re-dispatch phase 7 once**. Report both verdicts — the first `❌` and what came back. | **Stop.** Report the blockers and close with ``Blocked. Run `/todd:plan <TICKET>`.`` Don't fix the mechanical ones on the way past either: he may answer the open one in a way that changes them. |
+
+**Why this doesn't break the cold read.** The old rule conflated two things. "Don't *check* your own
+work" is right, and nothing here changes it — the check is a dispatched subagent both times, with no
+transcript, exactly as before. "Don't *fix* your own work" was never the same claim: fixing is what a
+planner does, and this file's phase 0B already spells out how, with a triage test for what to escalate.
+Grounding `Axon.Rooms.reject_join/2` at `rooms.ex:181` has one answer. Making Todd type a command so a
+new session can look it up gets the same row in the anchor file a session later.
+
+**One in-session lap, and only one.** Fix → re-dispatch → report whatever comes back. If the second
+check still fails, stop and hand it over; do not fix-and-re-dispatch again. Two dispatches per session
+is the cap, and the pass counter in the stamp enforces the rest.
+
+**The loop terminates on a clean check, on an advisory pass, or at pass 3 — whichever comes first.**
+The old guard was "if the same blocker survives two passes, stop", and it could not fire: the checker
+kept finding the same *class* on a fresh *instance*, so no two passes ever named the same blocker.
+FRG-1240 went three laps on E9 that way; ENA-443 went nine. Two changes fix it, and both live in
+`/todd:plan-check` — it sweeps every instance of a class before reporting, and the stamp carries a pass
+counter that stops the loop at three regardless of what the findings say. Your job here is to **not
+drop the counter** when you rewrite the stamp.
 
 ### Callers that pass `--no-check`
 
@@ -1110,8 +1231,19 @@ check because the plan looks fine — that judgement is the thing you are worst 
   from a report is a claim about checks you didn't run.
 - Never report a pass the dispatch didn't return. A subagent that errored, returned nothing, or came
   back without a stamp is an unchecked plan — say that, and give Todd the command.
-- Never argue with a finding, and never resolve one in this session. Relay it. A `❌` goes back to a
-  fresh `/todd:plan` run, which reaches phase 0B through the stamp.
+- Never argue with a finding. You may **resolve** one in this session when phase 0B step 3's triage
+  says every returned blocker is yours to fix — then re-dispatch the check once and report what comes
+  back. What you may never do is overrule one, or resolve a blocker that needs Todd's answer.
+- **Never fix one instance of a class.** A blocker naming one Scenario means you check every Scenario.
+  A narrow fix is how the same finding comes back on a different line next pass — three laps on
+  FRG-1240, nine on ENA-443.
+- **Never re-aim a `# falsifies:` or a `Check:` instead of re-deriving it.** If you can't name the
+  implementation line you'd break and the assertion that goes red, the finding is relocated, not
+  resolved.
+- **Never drop the pass counter or the `⚖️ Held by decision` block** when you rewrite the stamp. The
+  counter is the only lap count in the chain; the block is the only record that Todd already ruled.
+- **Never re-raise a flag that's in the `⚖️ Held by decision` block**, and never talk Todd through one
+  again. He settled it.
 - One ticket per invocation. A whole project with milestones is `/todd:linear-project-setup`.
 
 ## Failure handling
@@ -1124,7 +1256,8 @@ check because the plan looks fine — that judgement is the thing you are worst 
 | Plan carries a `❌` stamp | Phase 0B. Resolve the named blockers; don't re-plan. |
 | `❌` stamp names only check ids, no blocker text and no findings file | Stop. Offer to re-run `/todd:plan-check <TICKET>` for the findings, or to re-plan from scratch. Never infer what a bare `C1` meant. |
 | A blocker Todd can't answer | It stays in `Questions / Blockers`, the revision stamp says it's still open, and the report says the plan is still blocked. Never convert it to an `(assumed)` Decision to make the count work. |
-| The same blocker survives two phase-0B passes | Stop looping. Say what's stuck and why the loop can't settle it. |
+| The same **check id** fires on two consecutive passes | The resolution didn't take, or you fixed one instance of a class. Sweep the class, and say in the report that this is round two on the same finding. Keyed on the check id, not the blocker text — a class that resurfaces on a new line is the case the old identity-keyed guard missed entirely. |
+| Three passes and it still won't settle | Stop. The pass counter in the stamp is the cap; name the one unresolved thing as a scoping question for Todd. |
 | Ticket premise contradicted by the code | Correct it in bold in `Summary` and keep planning if the plan survives the correction; stop and report only if it doesn't. Never quietly plan around it. |
 | Can't ground more than about half the anchors | The ticket is under-specified. Post the brief and the detail block with the blockers, and say the Behavior Spec needs answers first. Don't ship a spec built on guesses. |
 | More than 3 blockers survive the phase-2 ranking | The ticket is under-specified. Post the brief and the detail block, name the three that matter most, and stop. Don't ship a twelve-question plan. |
@@ -1132,7 +1265,12 @@ check because the plan looks fine — that judgement is the thing you are worst 
 | `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
 | Phase 7's subagent errors, times out, or returns no verdict | The plan is posted and unchecked. Say exactly that and give Todd `/todd:plan-check <TICKET>`. Never infer the verdict from your own read of the plan. |
 | The check comes back `⚠️ passed (ungrounded)` | You probably passed the wrong tmp directory — phase 2 always writes the anchor file. Re-dispatch once with the absolute path corrected. Still degraded → report it as degraded, and say grounding went unchecked. |
-| The check comes back `❌` | Relay the blockers verbatim and close with `/todd:plan <TICKET>`. Don't resolve them here; a fresh run reaches phase 0B through the stamp. |
-| The same blocker comes back from two dispatches | Stop. That's the two-pass rule in phase 7 — say what's stuck rather than starting a third lap. |
+| The check comes back `❌`, every blocker mechanical | Resolve them here via phase 0B step 5, sweeping each class, then re-dispatch once. Report both verdicts. |
+| The check comes back `❌`, any blocker needs Todd | Relay the blockers verbatim and close with `/todd:plan <TICKET>`. Don't fix the mechanical ones on the way past — his answer may change them. |
+| The check comes back `✅ passed with N advisories` | A pass. Report the advisories as impl notes, one line each, and hand off to `/todd:loop`. Don't re-plan to clear them. |
+| The second dispatch in this session also fails | Stop. One in-session fix-and-re-check, then it's Todd's. |
+| The stamp says pass 3 and it still failed | Stop looping. Name the one thing that won't settle as a scoping question. Never a fourth lap. |
+| A check id comes back that an earlier pass recorded as resolved | The resolution didn't take. Say which instance you fixed, which one it found, and why the fix didn't cover it — don't just fix it harder. |
+| A flag is marked `⚠️ book severity 🔴` | Report it even on a pass, and get Todd's ruling now. It fails under `--strict`, which is what `/todd:phase` runs. |
 
 Now plan $ARGUMENTS.
