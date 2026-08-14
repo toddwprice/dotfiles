@@ -162,14 +162,15 @@ stamp you write carries it. Two things read it:
   new.
 
 **Read the rulings block.** If the plan carries a `**⚖️ Held by decision**` block in its stamp,
-those findings are **closed by Todd** and you do not raise them again. List them in one line —
-`⚖️ Held by decision: B1 (brief length, pass 2), D7 (section 2 length, pass 2)` — and move on.
+those findings are **closed** — by Todd, or by a previous run of this command where the entry is
+marked `(auto, …)` — and you do not raise them again. Either kind. List them in one line —
+`⚖️ Held by decision: B1 (brief length, auto, pass 1), D7 (section 2 length, pass 2)` — and move on.
 
 This exists because the history says these never close on their own: **B1 was flagged 10 times**
 across the audited runs and fixed zero times; ENA-443's ninth findings file reads *"Section 1 is
-2270 words against a ~250 budget — 9th run… Same conclusion as the last seven runs"* and *"[D7] Held
-by decision since pass 7."* Re-raising a call Todd already made is noise that makes a passing plan
-look like a failing one.
+2270 words against budget — 9th run… Same conclusion as the last seven runs"* and *"[D7] Held
+by decision since pass 7."* Re-raising a settled call is noise that makes a passing plan look like a
+failing one.
 
 **The ticket.** `mcp__claude_ai_Linear__get_issue`, falling back to `linctl issue get $TICKET
 --json` if the MCP truncates. You need the original requirements to check coverage — a plan can't
@@ -237,7 +238,7 @@ whether it can do that job in one screen.
 
 | # | Check | Level |
 |---|---|---|
-| B1 | Section 1 is under ~250 words. | **≤500 words → 🟡: actually do the relocation.** Over 500 → 🔵 once, and it stays ruled — see below |
+| B1 | Section 1 is under ~300 words. | **≤500 words → 🟡: actually do the relocation.** Over 500 → **decide it yourself and record it. Never a 🔵, never a question for Todd** — see below |
 | B2 | Headings are exactly `Summary`, `Changed since the last plan` (conditional), `Decisions`, `Approach`, `Risks`, `Questions / Blockers`, `Scope`, in that order. | 🟡 reorder; 🔵 if there's an extra heading, since where it belongs is a judgement |
 | B3 | `Summary` ≤3 sentences; each `Approach` slice one line; `Risks` ≤3 bullets; `Scope` one line. | 🟡 |
 | B4 | `Scope`'s file count equals the number of entries in section 2's `Files to Modify`, and its apps match those paths. | 🟡 correct the count to match the file list |
@@ -257,14 +258,29 @@ run reported it instead. Two bands, and they need different things:
 - **Under ~500 words** — do it. Take the file paths, commands and restated Scenarios out of section 1
   and put each one where phase 4 of `plan.md` says it belongs. This is mechanical, it has one right
   answer, and it's a 🟡 like any other. Report what you moved.
-- **Over ~500 words** — don't. ENA-443's brief was **2270 words**, and relocating 2000 words is not a
-  fix, it's a rewrite of both sections, which is re-planning and not yours to do. Raise it **once**,
-  as a 🔵, phrased as what it actually indicates: *"Section 1 is 2270 words against a ~250 budget —
-  this is a brief for more than one ticket."* Then let Todd rule, and once he has, it goes in the
-  `⚖️ Held by decision` block and **you never raise it again**.
+- **Over ~500 words** — don't relocate, and **don't ask.** ENA-443's brief was **2270 words**, and
+  relocating 2000 words is not a fix, it's a rewrite of both sections, which is re-planning and not
+  yours to do. So take the only other call available: **the brief stays as written.** Record it as an
+  auto-held entry (below), say once in the report what the length actually indicates — *"Section 1 is
+  2270 words against a ~300 budget; this reads like a brief for more than one ticket"* — and never
+  raise it again.
 
-The same two-band logic applies to **D7** (section 2 length), for the same reason and with the same
-history: flagged four times on one ticket, held by decision from pass 7 onward.
+**Neither band is Todd's call.** The over-ceiling case used to raise a 🔵 and wait for him to rule.
+It doesn't now, because there were only ever two answers — relocate, or leave it — and which one
+applies is decided entirely by the word count you already have. Asking him to pick between them
+taught him nothing and spent a line in every report until someone wrote the ruling down.
+
+**Write the auto-held entry into `⚖️ Held by decision`, marked `(auto, pass N)`.** That block is
+otherwise Todd's, and a length call is the one thing you may add to it yourself — see the stamp rules
+in phase 6. It has to be durable precisely because you read the plan cold: with no record, the next
+pass measures the same 640-word brief, reaches the same conclusion, and the report grows another line
+for a call that was already made. That is the mechanism that let B1 be raised **10 times**.
+
+**D7 (section 2 length) keeps its 🔵 and stays Todd's.** It shares B1's history — flagged four times
+on one ticket, held by decision from pass 7 onward — but not its arithmetic. A long section 2 has no
+relocation available at any length, so there is no count-driven answer to fall back on, and what it
+actually asks is whether this is one ticket. That's a scoping call and it's his. Don't extend B1's
+auto-decide to it.
 
 ---
 
@@ -432,7 +448,7 @@ Plan: <linear comment url>
 ⚠️ [E11] also fired on pass 1. The resolution didn't take — last pass it was slice 2 only,
    and the scenario added there asserts a refusal the target can't observe.
 
-⚖️ Held by decision: B6 (the flag question, pass 1).
+⚖️ Held by decision: B6 (the flag question, pass 1), B1 (brief length, auto, pass 1).
 
 Blocked. Run `/todd:plan FRG-1234` to resolve the 2 blockers.
 ```
@@ -446,7 +462,8 @@ Under `--report-only` the 🟡 section becomes **Would fix** and nothing is writ
 - **`pass N of 3`** — from phase 0. At pass 3 you escalate instead of failing again.
 - **The `⚠️ also fired on pass 1` line** — a repeat check id, called out as a resolution that didn't
   take. Put it *below* the finding sections so it reads as commentary on them.
-- **`⚖️ Held by decision`** — one line, findings Todd already ruled on, never re-argued.
+- **`⚖️ Held by decision`** — one line, findings already settled and never re-argued: Todd's rulings,
+  plus any over-ceiling B1 you decided yourself, marked `(auto, …)`.
 - **`⚠️ book severity 🔴` on a 🔵** — a flag that would fail under `--strict`. `/todd:phase` runs
   `--strict`, so without this a plan passes here and red-lines there, and Todd finds out a lap later.
   Seen on DEVOPS-2241: `✅ passed · 4 flagged`, two of them book-🔴.
@@ -529,10 +546,24 @@ or, on failure — and on failure the stamp **carries the blockers themselves**,
 - **[B6]** The flag question in `Questions / Blockers` — Todd ruled it stays as written (pass 1).
 ```
 
-**The `⚖️ Held by decision` block is Todd's, not yours.** `/todd:plan` phase 0B writes it when he
-rules on a 🔵. You **read** it (phase 0), you **carry it forward verbatim** into every stamp you
-write, and you never raise what's in it. Dropping the block is how a settled question comes back — it
-is the only reason B1 could be raised ten times.
+**The `⚖️ Held by decision` block is Todd's, with one exception.** `/todd:plan` phase 0B writes it
+when he rules on a 🔵. You **read** it (phase 0), you **carry it forward verbatim** into every stamp
+you write, and you never raise what's in it. Dropping the block is how a settled question comes
+back — it is the only reason B1 could be raised ten times.
+
+The exception is **B1 over the ceiling**, which phase 2 tells you to decide yourself. Append that one
+marked `(auto, pass N)`, so the block stays honest about who settled what:
+
+```markdown
+**⚖️ Held by decision**
+- **[B1]** Section 1 is 640 words. Relocating it would be a re-plan, so the brief stays as
+  written (auto, pass 1).
+- **[D7]** Section 2 is 526 lines — Todd ruled it isn't a split (pass 2).
+```
+
+`(auto, …)` and Todd's rulings are read the same way by everything downstream: never re-raised, never
+re-argued, carried forward verbatim. The marker exists so that a human reading the stamp can tell a
+call Todd made from one you made for him.
 
 **Carry the pass counter, always, on every verdict including a pass.** It's the only lap count either
 command has, and a `✅` that loses it means the next failure starts over at pass 1.
@@ -557,9 +588,10 @@ means. `/todd:plan` reads this block; keep it parseable by a human and an LLM, n
   wholesale too — and a passing run *removes* the blocker list. A plan that now passes must not still
   be carrying last run's blockers; `/todd:plan` would walk Todd through issues that are already fixed.
 - **`⚖️ Held by decision` is the one block you never replace — you append to it.** Everything else in
-  the stamp is this run's output; that block is the accumulated record of what Todd has settled, and
-  it has to survive every run or the settled thing comes back. Copy it forward verbatim, add nothing
-  to it yourself, and keep the `(pass N)` markers so its age is visible.
+  the stamp is this run's output; that block is the accumulated record of what has been settled, and
+  it has to survive every run or the settled thing comes back. Copy it forward verbatim and keep the
+  `(pass N)` markers so its age is visible. The **only** entry you add yourself is an over-ceiling B1,
+  marked `(auto, pass N)`; everything else in there is Todd's and arrives via `/todd:plan` phase 0B.
 - **You are not the only writer of this slot.** `/todd:plan` phase 0B, after resolving blockers,
   replaces the stamp with `*Plan revised <date> to resolve N blockers (C1, E11, B5) — re-check
   required.*`. Expect to find one and replace it like any other stamp — but **read it first**: the
@@ -643,7 +675,10 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
   if C1 fires, every noun does. A finding that names the first instance and stops is a finding that
   comes back next pass, and that is the loop.
 - **Never re-raise anything in the `⚖️ Held by decision` block**, and never drop that block from a
-  stamp you write. Todd ruled; re-arguing it is how B1 got raised ten times.
+  stamp you write. It's settled — by Todd, or by an `(auto, …)` call a previous run made. Re-arguing
+  it is how B1 got raised ten times.
+- **Never send brief length to Todd.** B1 resolves here in both bands: relocate under ~500 words,
+  auto-hold over it. He gets told what you did, not asked what to do.
 - **Never fail a plan for being thin when the finding is advisory-eligible** and inside its limits.
   One missing `# falsifies:` out of seven Scenarios is a note for the implementer, not a lap.
 - **Never lose the pass counter.** It's the only lap count in the chain, and at pass 3 it's what stops
@@ -670,7 +705,8 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
 | Anchor file missing | Degraded mode. Run every other group, say so in bold at the top of the report and in the stamp. |
 | This is pass 3 and there are still blockers | Stop the loop. Name the one unresolved thing as a scoping question for Todd. Never start a fourth lap. |
 | A check id fires that an earlier pass recorded as resolved | Report it as a resolution that didn't take, with what changed and why it didn't hold. Never file it as a fresh finding. |
-| The stamp carries a `⚖️ Held by decision` block | Read it, carry it forward verbatim, and raise nothing in it. |
+| The stamp carries a `⚖️ Held by decision` block | Read it, carry it forward verbatim, and raise nothing in it — Todd's rulings and `(auto, …)` entries alike. |
+| Section 1 runs past ~500 words | Your call, not Todd's. The brief stays as written; append the `(auto, pass N)` entry to `⚖️ Held by decision` and say once in the report that it reads like a brief for more than one ticket. |
 | An anchor's line number is off but the symbol is in the file | 🟡. Correct the number. Not a blocker — the grounding was done. |
 | Ticket not found or MCP truncating | Fall back to `linctl issue get $TICKET --json`. If that also fails, run groups A–D and skip E1 — you can't check coverage against a ticket you can't read. Say which group you skipped. |
 | Plan contradicted by the code | 🔴 Report it as a finding. Don't correct the plan; the correction may change the approach, which is Todd's call. |

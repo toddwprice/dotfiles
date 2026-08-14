@@ -95,7 +95,7 @@ One comment, two audiences, and they want opposite things.
 
 | Section | Reader | Job | Budget |
 |---|---|---|---|
-| `## 📋 Implementation Plan` | an architect, reviewing | Decide whether the approach is right | **~200 words. One screen.** |
+| `## 📋 Implementation Plan` | an architect, reviewing | Decide whether the approach is right | **~300 words. One screen.** |
 | `## 🥒 Behavior Spec & Implementation Detail` | the implementing agent | Build it without guessing | None. Let it be long. |
 
 Section 1 is a **brief, not a document**. Someone reviewing the approach needs six things: what
@@ -209,8 +209,9 @@ tells you which kind of pass this is:
 - **A check id in this pass that an earlier pass recorded as resolved** is a resolution that didn't
   take. Don't fix it harder — work out why the last fix didn't cover it. On ENA-443 the same finding
   came back nine times because each closure moved the problem one layer down instead of ending it.
-- **A 🔵 Todd already ruled on** shouldn't be in this pass at all. If it is, the `⚖️ Held by decision`
-  block was dropped from a stamp somewhere. Don't re-ask him; restore the block.
+- **A 🔵 already settled** — ruled by Todd, or auto-held on a previous pass — shouldn't be in this pass
+  at all. If it is, the `⚖️ Held by decision` block was dropped from a stamp somewhere. Don't re-ask
+  him; restore the block.
 
 **Also take the `pass N` off the stamp.** You carry it forward when you rewrite the stamp in phase 6,
 and at pass 3 the loop is done — that's step 6's stop, not another revision.
@@ -267,18 +268,28 @@ a `Decisions` entry marked `(Todd, YYYY-MM-DD)`, not a `Questions / Blockers` en
 is that the revised plan carries fewer open questions than the one that failed.
 
 **Bring him the 🔵 flags too, and when he rules "leave it", record the ruling.** The flags are in the
-findings file, they cost him one line each, and unrecorded they come back every single pass — B1, the
-brief-length flag, was raised **ten times across the audited runs** and ENA-443's ninth report says so
-in as many words: *"Same conclusion as the last seven runs."* That's not the checker being stubborn.
-It reads the plan cold; if the ruling isn't written down, it has no way to know one was made.
+findings file, they cost him one line each, and unrecorded they come back every single pass. The
+brief-length flag is what taught this: it was raised **ten times across the audited runs**, and
+ENA-443's ninth report says so in as many words — *"Same conclusion as the last seven runs."* That's
+not the checker being stubborn. It reads the plan cold; if the ruling isn't written down, it has no
+way to know one was made.
 
 So a "leave it as written" goes into a `⚖️ Held by decision` block in the stamp you write in phase 6:
 
 ```markdown
 **⚖️ Held by decision**
-- **[B1]** Section 1 is 2270 words. Todd ruled the brief stays long for this ticket (pass 2).
-- **[D7]** Section 2 is 526 lines. Ruled not a split (pass 2).
+- **[B1]** Section 1 is 2270 words. Relocating it would be a re-plan, so the brief stays as
+  written (auto, pass 2).
+- **[D7]** Section 2 is 526 lines. Todd ruled it isn't a split (pass 2).
 ```
+
+**One flag never reaches him: B1.** Brief length now resolves inside `/todd:plan-check` — it relocates
+under ~500 words and auto-holds over it, marking the entry `(auto, pass N)`. That's why the B1 line
+above has no name against it. Two answers existed and the word count picks between them, so asking him
+was a line in every report for a call nobody had to make. If B1 *does* arrive as a 🔵 — an older stamp,
+written before that changed — **decide it the same way and record it `(auto, …)`. Don't walk him
+through it.** D7 is not the same and still is his: a long section 2 has no relocation available at any
+length, and what it asks is whether this is one ticket.
 
 `/todd:plan-check` reads that block, carries it forward verbatim into every later stamp, and raises
 nothing in it. **Prioritise the flags that carry `⚠️ book severity 🔴`** — those are the ones that will
@@ -471,8 +482,9 @@ block, say the Behavior Spec needs answers first, and stop. Don't ship a twelve-
 
 Section 1. This is what gets read to decide whether the approach is right, so it carries the
 *judgement* and nothing else — phase 4 carries the detail, the Behavior Spec carries the
-expectations. Six headings, **~200 words all in**. Same in both modes; `--no-gherkin` changes
-nothing here.
+expectations. Six headings, **~300 words all in** — the same number `/todd:plan-check` B1 measures
+against, so aim at it rather than at a tighter target of your own. Same in both modes;
+`--no-gherkin` changes nothing here.
 
 ````markdown
 ## 📋 Implementation Plan
@@ -855,7 +867,7 @@ the implementing agent will. Two reasons it belongs there and not here:
 
 - **It was a second copy of the rules.** Nearly every item in the old phase 5 restated something
   phases 3 and 4 already say at the point where you're writing it — one `When` per Scenario, a
-  `# falsifies:` on every Scenario, `Verification` required, the ~200-word brief. The guidance
+  `# falsifies:` on every Scenario, `Verification` required, the ~300-word brief. The guidance
   stays where it's actionable. The duplicate checklist is what made this command a laundry list,
   and a laundry list is the shape that degrades the reasoning of the session carrying it.
 - **You are the worst reader of your own plan.** You know what you meant by "the guard", so you
@@ -955,7 +967,9 @@ still failing on findings you just closed. Replace the whole stamp, blocker bloc
 *Plan revised 2026-08-13 to resolve 3 blockers (C1, E11, B5) — pass 2 · re-check required.*
 
 **⚖️ Held by decision**
-- **[B1]** Section 1 is 2270 words. Todd ruled the brief stays long for this ticket (pass 2).
+- **[B1]** Section 1 is 2270 words. Relocating it would be a re-plan, so the brief stays as
+  written (auto, pass 2).
+- **[D7]** Section 2 is 526 lines. Todd ruled it isn't a split (pass 2).
 ```
 
 **Two parts of that are not decoration.**
@@ -966,8 +980,9 @@ checker increments it. It's the only lap count the chain has, and at pass 3 it's
 restarts the loop at pass 1 with none of its history, which is how ENA-443 reached nine.
 
 **Carry the `⚖️ Held by decision` block forward verbatim, and append to it** any ruling Todd made in
-step 4. It's the only part of the stamp that accumulates rather than being replaced. Drop it and every
-flag he has already settled comes back on the next check.
+step 4, plus any B1 you decided for him there — that one marked `(auto, …)`. It's the only part of the
+stamp that accumulates rather than being replaced. Drop it and every flag already settled comes back
+on the next check.
 
 🛑 **Never write a `✅ passed` stamp.** That stamp is `/todd:plan-check`'s to write and only after it
 has actually run the checks. Stamping your own revision as passed is precisely the laundering the
@@ -1241,9 +1256,12 @@ check because the plan looks fine — that judgement is the thing you are worst 
   implementation line you'd break and the assertion that goes red, the finding is relocated, not
   resolved.
 - **Never drop the pass counter or the `⚖️ Held by decision` block** when you rewrite the stamp. The
-  counter is the only lap count in the chain; the block is the only record that Todd already ruled.
+  counter is the only lap count in the chain; the block is the only record of what's already settled —
+  Todd's rulings, and the `(auto, …)` length calls made on his behalf.
 - **Never re-raise a flag that's in the `⚖️ Held by decision` block**, and never talk Todd through one
-  again. He settled it.
+  again. It's settled, whoever settled it.
+- **Never ask Todd how long the brief should be.** B1 resolves without him: relocate under ~500 words,
+  auto-hold over it, record it `(auto, …)`. Two answers, and the word count picks between them.
 - One ticket per invocation. A whole project with milestones is `/todd:linear-project-setup`.
 
 ## Failure handling
@@ -1262,6 +1280,7 @@ check because the plan looks fine — that judgement is the thing you are worst 
 | Can't ground more than about half the anchors | The ticket is under-specified. Post the brief and the detail block with the blockers, and say the Behavior Spec needs answers first. Don't ship a spec built on guesses. |
 | More than 3 blockers survive the phase-2 ranking | The ticket is under-specified. Post the brief and the detail block, name the three that matter most, and stop. Don't ship a twelve-question plan. |
 | Section 2 runs past ~400 lines | Post it, and say in the report that the ticket looks like two or three. Never trim the detail to hit a number. |
+| Section 1 runs past ~300 words | Relocate the detail into section 2 — that's the fix, at any length up to ~500 words. Past ~500, relocating is a re-plan: post the brief as written, and don't ask Todd which he'd prefer. `/todd:plan-check` records it `(auto, …)` so it's settled once. |
 | `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
 | Phase 7's subagent errors, times out, or returns no verdict | The plan is posted and unchecked. Say exactly that and give Todd `/todd:plan-check <TICKET>`. Never infer the verdict from your own read of the plan. |
 | The check comes back `⚠️ passed (ungrounded)` | You probably passed the wrong tmp directory — phase 2 always writes the anchor file. Re-dispatch once with the absolute path corrected. Still degraded → report it as degraded, and say grounding went unchecked. |

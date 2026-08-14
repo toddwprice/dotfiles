@@ -38,6 +38,8 @@ gather for one branch, so let it own that and just fan it over my active branche
 > the standup form (two date headers, ALL-CAPS area labels incl. `REVIEWS`, link-dense one-clause
 > bullets, no greeting/sign-off). Follow it; the rules below are the standup-command specifics
 > (workstream ordering, brevity ceilings) that layer on top — don't re-litigate the voice here.
+> One carve-out: the **TL;DR** section below is this command's own addition. `speak-as-todd` doesn't
+> describe it, and that absence is not a reason to drop it.
 
 Two top-level sections, **Yesterday** and **Today**. Under each, group by **workstream** (Linear team / prefix): `FRG-*` → **FORGE**, `DEVOPS-*` → **DEVOPS**, any other prefix → that team's short name. Order **FORGE first, DEVOPS last**, others between — same order in both sections. Skip a workstream with nothing that day.
 
@@ -52,6 +54,44 @@ Brevity rules — this is the point:
 
 Tone: terse, first-person, plain — how I'd say it out loud. No corporate-speak, no rationale padding. If `speak-as-todd` is available, defer to its voice.
 
+## TL;DR (experimental)
+
+Last section, after `Today`, in **both** the HTML and the Slack post. Mark it experimental so it reads
+as a trial: drop the tag if it graduates, delete this section if it doesn't.
+
+What it's for: someone who doesn't know my tickets reads only this and comes away knowing what I did
+and what I'm doing. Two sentences, no bookkeeping.
+
+**Build it from the bullets already written above — don't re-research anything.** Take each line, keep
+the behavior clause, drop the parenthetical, then merge everything sharing a theme into one sentence:
+
+> `FRG-1240` (`#28026`, merged) — an over-length scale anchor refuses before it 400s the DYS export
+> → *an over-length scale anchor now refuses instead of failing the export*
+
+The shape:
+
+- Two labels, `Yesterday` and `Today`, in that order.
+- **One sentence each, three clauses at most, ~30 words.** Bullets only when a day genuinely splits into
+  unrelated threads — **3 max**, and 3 should be rare.
+- **Select, don't concatenate.** Name the two or three threads that actually mattered and let the rest
+  go — every workstream is already itemized directly above, so a TL;DR that lists all of them is just
+  the standup again with the links removed. Dropping a real workstream from this section is correct.
+- **Name things in words, not identifiers**: "the DYS export", "the astro workers", "the shared dev env
+  lock". No ticket IDs, no PR numbers, no links, no status parens. The traceable version is the section
+  directly above this one — dropping the identifiers here is the entire point, and the deliberate
+  exception to my usual "carry the ID along in parens" rule.
+- Reviews collapse into one clause of the `Yesterday` sentence — area or count, never names and PRs. Use
+  a count only if you actually counted the lines above.
+- Past tense for `Yesterday`, plain intent for `Today`. Same voice, just zoomed out.
+
+Worked example — a real five-workstream day with eleven reviews, compressed:
+
+> **TL;DR** *(experimental)*
+> **Yesterday** — Landed export and validation fixes so agent-authored studies survive export, gated the
+> template picker to paid seats, and reviewed eleven PRs across the front-end, dscript and infra pods.
+> **Today** — Carry the scale-length fix into the remaining export paths, land the approved question
+> guard, and get the dev-env lock, bulk transport and worker-memory branches out of draft.
+
 ## Render as HTML
 
 Write to `.claude/tmp/standup-YYYY-MM-DD.html` (today's date). The base typography + palette come from
@@ -60,6 +100,8 @@ look) — the standup-specific bits below (narrower `max-width`, muted `h1`, upp
 top of those tokens; keep them in sync with the shell rather than re-inventing colors. Structure:
 `Yesterday`/`Today` as `h2`; each workstream an `h3` (uppercased via CSS) with lines in a `<ul>`. Link
 Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PRs (`https://github.com/dscout/dscout/pull/<num>` — infer repo from `gh`). FORGE first, DEVOPS last.
+The `TL;DR` is the last `h2`, with its own `Yesterday`/`Today` `h3`s and plain unlinked text — it's the
+one part of the page with no anchors in it.
 
 ```html
 <!doctype html>
@@ -78,6 +120,11 @@ Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PRs (`https://github.com
     ul { margin: 0 0 0.5rem; padding-left: 1.25rem; }
     li { margin: 0 0 0.4rem; }
     a  { color: #0969da; text-decoration: none; }
+    /* TL;DR (experimental) — muted gray matches h1/h3 rather than adding a color */
+    .tldr { margin-top: 2.5rem; }
+    .tldr p { margin: 0 0 0.6rem; }
+    .tag { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+           color: #57606a; font-weight: 500; }
     a:hover { text-decoration: underline; }
   </style>
 </head>
@@ -109,6 +156,14 @@ Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PRs (`https://github.com
   <ul>
     <li><!-- line --></li>
   </ul>
+
+  <section class="tldr">
+    <h2>TL;DR <span class="tag">experimental</span></h2>
+    <h3>Yesterday</h3>
+    <p><!-- one sentence, no IDs, no links --></p>
+    <h3>Today</h3>
+    <p><!-- one sentence, no IDs, no links --></p>
+  </section>
 </body>
 </html>
 ```
@@ -124,6 +179,9 @@ After opening the HTML, **always** post the same standup as a Slack DM via `mcp_
 - Workstream labels: `_italic_` on their own line (`_Forge_`, `_DevOps_`) — not bold. Under *Yesterday*, add a `_Reviews_` label after the workstreams when I reviewed anything (same content as the HTML Reviews subsection); omit it when there were none.
 - Lines: `-` bullets. Same ordering as the HTML.
 - Links: `[FRG-957](https://linear.app/dscout/issue/FRG-957)`, `[#26887](https://github.com/dscout/dscout/pull/26887)`.
+- **TL;DR last**, after `Today`: `**TL;DR** _(experimental)_` on its own line, then `**Yesterday** — …`
+  and `**Today** — …`, one sentence each, as plain text. No bullets, no links, no IDs — same words as
+  the HTML section.
 
 **Spacing guard:** keep a real space on both sides of every link and inline-`code` token so nothing glues together when flattened (`Shipped [FRG-957](…) (…)`, not `Shipped[FRG-957](…)`).
 
