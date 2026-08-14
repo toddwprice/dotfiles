@@ -64,25 +64,25 @@ line_no_of() { grep -n -- "$1" <<<"$output" | head -1 | cut -d: -f1; }
 
 @test "a live interactive session is reported with its branch and newest PR" {
   local t
-  t="$(transcript_for /w/devops-2241 22faf95f-7441-46b0-8f15-6fde2c70f092)"
-  # 28038 FIRST, 28035 later: the row must name the newest, not the first one
-  # it happens to see. Ordered against life on purpose — in the real transcript
-  # 28035 is also first, which would make this mutation invisible.
+  t="$(transcript_for /w/abc-101 22faf95f-7441-46b0-8f15-6fde2c70f092)"
+  # 208 FIRST, 205 later: the row must name the newest, not the first one it
+  # happens to see. Ordered against life on purpose — in the real transcript the
+  # winning PR is also first, which would make this mutation invisible.
   cat > "$t" <<EOF
-{"type":"attachment","gitBranch":"devops-2241-share-prefork-spacy-pipeline","timestamp":"$(iso_ago 120)"}
-{"type":"pr-link","prNumber":28038,"prUrl":"https://github.com/dscout/dscout/pull/28038","timestamp":"$(iso_ago 110)"}
-{"type":"pr-link","prNumber":28035,"prUrl":"https://github.com/dscout/dscout/pull/28035","timestamp":"$(iso_ago 100)"}
+{"type":"attachment","gitBranch":"abc-101-share-worker-pool","timestamp":"$(iso_ago 120)"}
+{"type":"pr-link","prNumber":208,"prUrl":"https://github.com/example/example/pull/208","timestamp":"$(iso_ago 110)"}
+{"type":"pr-link","prNumber":205,"prUrl":"https://github.com/example/example/pull/205","timestamp":"$(iso_ago 100)"}
 EOF
   cat > "$AGENTS" <<EOF
-[{"pid":1,"cwd":"/w/devops-2241","kind":"interactive","status":"busy",
+[{"pid":1,"cwd":"/w/abc-101","kind":"interactive","status":"busy",
   "startedAt":$(ms_ago 300),"sessionId":"22faf95f-7441-46b0-8f15-6fde2c70f092",
-  "name":"devops-2241-5e"}]
+  "name":"abc-101-5e"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"devops-2241-share-prefork-spacy-pipeline"* ]]
-  [[ "$output" == *"28035"* ]]
-  [[ "$output" != *"28038"* ]]
+  [[ "$output" == *"abc-101-share-worker-pool"* ]]
+  [[ "$output" == *"205"* ]]
+  [[ "$output" != *"208"* ]]
 }
 
 @test "a sibling transcript in the same project dir is not read into the row" {
@@ -148,25 +148,25 @@ EOF
 
 @test "an interactive row's absent state does not blank its status" {
   cat > "$AGENTS" <<EOF
-[{"pid":2,"cwd":"/w/frg-1234","kind":"interactive","status":"waiting",
+[{"pid":2,"cwd":"/w/xyz-4242","kind":"interactive","status":"waiting",
   "waitingFor":"input needed","startedAt":$(ms_ago 900),
-  "sessionId":"aaaaaaaa-0000-0000-0000-000000000001","name":"frg-1234-12"}]
+  "sessionId":"aaaaaaaa-0000-0000-0000-000000000001","name":"xyz-4242-12"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   # State is the first column of the session's own line.
-  [[ "$(row_for frg-1234-12)" =~ ^[[:space:]]*waiting[[:space:]] ]]
+  [[ "$(row_for xyz-4242-12)" =~ ^[[:space:]]*waiting[[:space:]] ]]
 }
 
 @test "a session whose transcript is missing is still listed" {
   cat > "$AGENTS" <<EOF
-[{"pid":3,"cwd":"/w/frg-1105","kind":"interactive","status":"busy",
+[{"pid":3,"cwd":"/w/wug-77","kind":"interactive","status":"busy",
   "startedAt":$(ms_ago 300),"sessionId":"deadbeef-0000-0000-0000-000000000002",
-  "name":"frg-1105-50"}]
+  "name":"wug-77-50"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"frg-1105-50"* ]]
+  [[ "$output" == *"wug-77-50"* ]]
   [[ "$output" == *"branch unavailable"* ]]
   [[ "$output" == *"PR unavailable"* ]]
 }
@@ -177,16 +177,16 @@ EOF
   # transcript that was never actually read. Keeping the row is INV-2; the cells
   # are what degrade.
   local t
-  t="$(transcript_for /w/frg-1300 abcdef00-0000-0000-0000-000000000010)"
+  t="$(transcript_for /w/qip-88 abcdef00-0000-0000-0000-000000000010)"
   printf 'this is not json\nneither is this\n' > "$t"
   cat > "$AGENTS" <<EOF
-[{"pid":17,"cwd":"/w/frg-1300","kind":"interactive","status":"busy",
+[{"pid":17,"cwd":"/w/qip-88","kind":"interactive","status":"busy",
   "startedAt":$(ms_ago 300),"sessionId":"abcdef00-0000-0000-0000-000000000010",
-  "name":"frg-1300-3b"}]
+  "name":"qip-88-3b"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"frg-1300-3b"* ]]
+  [[ "$output" == *"qip-88-3b"* ]]
   [[ "$output" == *"branch unavailable"* ]]
   [[ "$output" == *"PR unavailable"* ]]
   [[ "$output" != *"no PR"* ]]
@@ -198,14 +198,14 @@ EOF
 
 @test "a cwd containing a dot still resolves to its transcript" {
   local t
-  t="$(transcript_for /Users/toddprice/.claude bbbbbbbb-0000-0000-0000-000000000003)"
+  t="$(transcript_for /Users/dev/.claude bbbbbbbb-0000-0000-0000-000000000003)"
   # Belt check on the fixture itself: the dot must have become a second dash.
-  [[ "$t" == *"/-Users-toddprice--claude/"* ]]
+  [[ "$t" == *"/-Users-dev--claude/"* ]]
   cat > "$t" <<EOF
 {"type":"attachment","gitBranch":"dotfiles-tod-6","timestamp":"$(iso_ago 60)"}
 EOF
   cat > "$AGENTS" <<EOF
-[{"pid":4,"cwd":"/Users/toddprice/.claude","kind":"interactive","status":"idle",
+[{"pid":4,"cwd":"/Users/dev/.claude","kind":"interactive","status":"idle",
   "startedAt":$(ms_ago 300),"sessionId":"bbbbbbbb-0000-0000-0000-000000000003",
   "name":"claude-cfg-01"}]
 EOF
@@ -217,49 +217,49 @@ EOF
 
 @test "a transcript with no ai-title falls back rather than printing blank" {
   local t
-  t="$(transcript_for /w/ena-443 cccccccc-0000-0000-0000-000000000004)"
+  t="$(transcript_for /w/zed-512 cccccccc-0000-0000-0000-000000000004)"
   cat > "$t" <<EOF
-{"type":"attachment","gitBranch":"ena-443-copy-data-manifest","timestamp":"$(iso_ago 60)"}
+{"type":"attachment","gitBranch":"zed-512-manifest-loader","timestamp":"$(iso_ago 60)"}
 EOF
   cat > "$AGENTS" <<EOF
-[{"pid":5,"cwd":"/w/ena-443","kind":"interactive","status":"idle",
+[{"pid":5,"cwd":"/w/zed-512","kind":"interactive","status":"idle",
   "startedAt":$(ms_ago 300),"sessionId":"cccccccc-0000-0000-0000-000000000004",
-  "name":"ena-443-9c"}]
+  "name":"zed-512-9c"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   # The title line is the branch, and it is not empty.
-  [[ "$output" == *"ena-443-copy-data-manifest"* ]]
+  [[ "$output" == *"zed-512-manifest-loader"* ]]
   run "$SCRIPT" --json
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.[0].title' <<<"$output")" = "ena-443-copy-data-manifest" ]
+  [ "$(jq -r '.[0].title' <<<"$output")" = "zed-512-manifest-loader" ]
 }
 
 @test "a suffixed worktree cwd still yields its ticket id" {
   cat > "$AGENTS" <<EOF
-[{"pid":6,"cwd":"/Users/toddprice/dscout-wt/devops-2241-slice2","kind":"interactive",
+[{"pid":6,"cwd":"/Users/dev/wt/pol-909-retry","kind":"interactive",
   "status":"idle","startedAt":$(ms_ago 300),
-  "sessionId":"dddddddd-0000-0000-0000-000000000005","name":"devops-2241-slice2-aa"}]
+  "sessionId":"dddddddd-0000-0000-0000-000000000005","name":"pol-909-retry-aa"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"DEVOPS-2241"* ]]
+  [[ "$output" == *"POL-909"* ]]
 }
 
 @test "a worktree with no ticket in its name shows no ticket rather than a wrong one" {
   cat > "$AGENTS" <<EOF
-[{"pid":7,"cwd":"/Users/toddprice/dscout-wt/docker-dev-loop-speedup","kind":"interactive",
+[{"pid":7,"cwd":"/Users/dev/wt/build-cache-speedup","kind":"interactive",
   "status":"idle","startedAt":$(ms_ago 300),
-  "sessionId":"eeeeeeee-0000-0000-0000-000000000006","name":"docker-dev-loop-99"}]
+  "sessionId":"eeeeeeee-0000-0000-0000-000000000006","name":"build-cache-99"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"DOCKER"* ]]
-  [[ "$output" == *"docker-dev-loop-speedup"* ]]
+  [[ "$output" != *"BUILD"* ]]
+  [[ "$output" == *"build-cache-speedup"* ]]
   run "$SCRIPT" --json
   [ "$status" -eq 0 ]
   [ "$(jq -r '.[0].ticket' <<<"$output")" = "" ]
-  [ "$(jq -r '.[0].title' <<<"$output")" = "docker-dev-loop-speedup" ]
+  [ "$(jq -r '.[0].title' <<<"$output")" = "build-cache-speedup" ]
 }
 
 @test "an empty session list says so instead of printing a bare header" {
@@ -294,20 +294,19 @@ EOF
 }
 
 @test "a row carrying neither status nor state is still listed, with its state marked unavailable" {
-  # Measured live 2026-08-14: 1 of 19 rows (an interactive session in
-  # /Users/toddprice/dscout-wt/core-793) carried neither .status nor .state.
-  # INV-1 says "read .status for every row", which gives no answer for a row
-  # that hasn't got one — so fail open the way INV-2 does for a transcript:
-  # mark the column, keep the row.
+  # Measured live 2026-08-14: 1 of 19 rows (an interactive session in a ticket
+  # worktree) carried neither .status nor .state. INV-1 says "read .status for
+  # every row", which gives no answer for a row that hasn't got one — so fail
+  # open the way INV-2 does for a transcript: mark the column, keep the row.
   cat > "$AGENTS" <<EOF
-[{"pid":8,"cwd":"/Users/toddprice/dscout-wt/core-793","kind":"interactive",
+[{"pid":8,"cwd":"/Users/dev/wt/kir-404","kind":"interactive",
   "startedAt":$(ms_ago 300),"sessionId":"ffffffff-0000-0000-0000-000000000007",
-  "name":"core-793-86","waitingFor":null}]
+  "name":"kir-404-86","waitingFor":null}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"core-793-86"* ]]
-  [[ "$(row_for core-793-86)" =~ ^[[:space:]]*unavailable[[:space:]] ]]
+  [[ "$output" == *"kir-404-86"* ]]
+  [[ "$(row_for kir-404-86)" =~ ^[[:space:]]*unavailable[[:space:]] ]]
   # An unknown state is not an invitation to guess it is blocked.
   [[ "$output" != *"BLOCKED ON YOU"* ]]
 }
@@ -318,18 +317,18 @@ EOF
   # counting a session it never printed — and dropping the sessionId-less one
   # made --json emit the `[]` that must never appear.
   cat > "$AGENTS" <<EOF
-[{"pid":20,"cwd":"/Users/toddprice/dscout-wt/frg-1249","kind":"interactive",
+[{"pid":20,"cwd":"/Users/dev/wt/nim-711","kind":"interactive",
   "status":"waiting","waitingFor":"input needed","startedAt":$(ms_ago 300),
   "sessionId":"abcdef00-0000-0000-0000-000000000014"},
- {"pid":21,"cwd":"/Users/toddprice/dscout-wt/frg-1250","kind":"interactive",
+ {"pid":21,"cwd":"/Users/dev/wt/nim-712","kind":"interactive",
   "status":"waiting","waitingFor":"input needed","startedAt":$(ms_ago 300)}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   [[ "$output" == *"BLOCKED ON YOU (2)"* ]]
   # The name column falls back to the ticket id rather than leaving the row out.
-  [[ "$(row_for FRG-1249)" =~ ^[[:space:]]*waiting[[:space:]] ]]
-  [[ "$(row_for FRG-1250)" =~ ^[[:space:]]*waiting[[:space:]] ]]
+  [[ "$(row_for NIM-711)" =~ ^[[:space:]]*waiting[[:space:]] ]]
+  [[ "$(row_for NIM-712)" =~ ^[[:space:]]*waiting[[:space:]] ]]
   # The heading's count equals the rows actually printed: each row carries its
   # own `<- input needed` note, and the footer legend carries none.
   [ "$(grep -c 'input needed' <<<"$output")" -eq 2 ]
@@ -338,7 +337,7 @@ EOF
   [ "$(jq -r 'length' <<<"$output")" -eq 2 ]
   # A fallback is reported as a fallback: the raw name stays null either way.
   [ "$(jq -r '[.[] | select(.name == null)] | length' <<<"$output")" -eq 2 ]
-  [ "$(jq -r '.[0].displayName' <<<"$output")" = "FRG-1249" ]
+  [ "$(jq -r '.[0].displayName' <<<"$output")" = "NIM-711" ]
   [ "$(jq -r '[.[] | select(.sessionId == null)] | length' <<<"$output")" -eq 1 ]
 }
 
@@ -347,25 +346,25 @@ EOF
   # "array"'` as passing on []. This asserts the array actually carries the
   # sessions, which is the part that line never proves.
   local t
-  t="$(transcript_for /w/frg-1240 11111111-0000-0000-0000-000000000008)"
+  t="$(transcript_for /w/vex-150 11111111-0000-0000-0000-000000000008)"
   cat > "$t" <<EOF
-{"type":"ai-title","aiTitle":"Bound scale anchor labels"}
-{"type":"attachment","gitBranch":"frg-1240-bound-anchors","timestamp":"$(iso_ago 60)"}
-{"type":"pr-link","prNumber":28026,"timestamp":"$(iso_ago 50)"}
+{"type":"ai-title","aiTitle":"Bound the retry backoff window"}
+{"type":"attachment","gitBranch":"vex-150-bound-backoff","timestamp":"$(iso_ago 60)"}
+{"type":"pr-link","prNumber":226,"timestamp":"$(iso_ago 50)"}
 EOF
   cat > "$AGENTS" <<EOF
-[{"pid":9,"cwd":"/w/frg-1240","kind":"interactive","status":"busy",
+[{"pid":9,"cwd":"/w/vex-150","kind":"interactive","status":"busy",
   "startedAt":$(ms_ago 300),"sessionId":"11111111-0000-0000-0000-000000000008",
-  "name":"frg-1240-7a"}]
+  "name":"vex-150-7a"}]
 EOF
   run "$SCRIPT" --json
   [ "$status" -eq 0 ]
   [ "$(jq -r 'length' <<<"$output")" -eq 1 ]
-  [ "$(jq -r '.[0].name' <<<"$output")" = "frg-1240-7a" ]
-  [ "$(jq -r '.[0].ticket' <<<"$output")" = "FRG-1240" ]
-  [ "$(jq -r '.[0].title' <<<"$output")" = "Bound scale anchor labels" ]
-  [ "$(jq -r '.[0].branch' <<<"$output")" = "frg-1240-bound-anchors" ]
-  [ "$(jq -r '.[0].pr' <<<"$output")" = "28026" ]
+  [ "$(jq -r '.[0].name' <<<"$output")" = "vex-150-7a" ]
+  [ "$(jq -r '.[0].ticket' <<<"$output")" = "VEX-150" ]
+  [ "$(jq -r '.[0].title' <<<"$output")" = "Bound the retry backoff window" ]
+  [ "$(jq -r '.[0].branch' <<<"$output")" = "vex-150-bound-backoff" ]
+  [ "$(jq -r '.[0].pr' <<<"$output")" = "226" ]
 }
 
 # ============================================================================
@@ -391,11 +390,11 @@ EOF
 @test "a finished background session is not reported as blocked" {
   cat > "$AGENTS" <<EOF
 [{"pid":13,"cwd":"/w/ddd","kind":"background","id":"0b6f8ecb","status":"idle","state":"done",
-  "startedAt":$(ms_ago 300),"sessionId":"55555555-0000-0000-0000-00000000000c","name":"pr review 28053"}]
+  "startedAt":$(ms_ago 300),"sessionId":"55555555-0000-0000-0000-00000000000c","name":"pr review 253"}]
 EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"pr review 28053"* ]]
+  [[ "$output" == *"pr review 253"* ]]
   [[ "$output" != *"BLOCKED ON YOU"* ]]
 }
 

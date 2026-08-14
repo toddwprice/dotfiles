@@ -178,9 +178,9 @@ iso_to_epoch() {
 # A session's transcript lives at ~/.claude/projects/<slug>/<sessionId>.jsonl,
 # where the slug replaces BOTH `/` and `.` in the absolute cwd with a dash. A
 # s#/#-#g-only version misses every cwd containing a dot: the config directory
-# `/Users/toddprice/.claude`, for one, has to come out as
-# `-Users-toddprice--claude`, with a double dash. Miss that and the path lookup
-# fails and the row reports a missing transcript it actually has.
+# `/Users/dev/.claude`, for one, has to come out as `-Users-dev--claude`, with a
+# double dash. Miss that and the path lookup fails and the row reports a missing
+# transcript it actually has.
 transcript_path() {
   local cwd=$1 sid=$2
   printf '%s/%s/%s.jsonl' "$PROJECTS_DIR" "${cwd//[\/.]/-}" "$sid"
@@ -223,10 +223,10 @@ read_transcript() {
 # The ticket id is the cwd basename matched by PREFIX, ^[a-z]+-[0-9]+, then
 # uppercased. Anchoring it with $ is wrong: measured across all 58 worktrees the
 # prefix form yields a ticket for 45 and correctly declines for 13 (main,
-# contour-main, docker-dev-loop-speedup, ...), while the anchored form also
-# drops the suffixed ones (devops-2241-slice2 -> DEVOPS-2241, frg-1159-rebase,
-# frg-1203-refine). Taking the basename up to the first dash instead would
-# fabricate an id for all 13 that have none.
+# legacy-main, build-cache-speedup, ...), while the anchored form also drops the
+# suffixed ones (pol-909-retry -> POL-909, wug-77-rebase, xyz-4242-refine).
+# Taking the basename up to the first dash instead would fabricate an id for all
+# 13 that have none.
 ticket_of() {
   local base="${1##*/}"
   if [[ "$base" =~ ^([a-z]+-[0-9]+) ]]; then
