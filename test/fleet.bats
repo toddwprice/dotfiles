@@ -85,6 +85,67 @@ EOF
   [[ "$output" != *"28038"* ]]
 }
 
+@test "a sibling transcript in the same project dir is not read into the row" {
+  # The script reads only the file named by .sessionId. Its own comment warns
+  # that a project dir holds 10+ transcripts and globbing it reads the wrong
+  # session — but nothing pinned that until this fixture put a second session in
+  # the same dir. The sibling is deliberately the more recent of the two, so a
+  # glob mutant loses the branch, the PR and the quiet column all at once.
+  local t other
+  t="$(transcript_for /w/glob-probe abcdef00-0000-0000-0000-000000000011)"
+  cat > "$t" <<EOF
+{"type":"attachment","gitBranch":"glob-probe-mine","timestamp":"$(iso_ago 120)"}
+{"type":"pr-link","prNumber":11111,"timestamp":"$(iso_ago 115)"}
+EOF
+  other="$(transcript_for /w/glob-probe abcdef00-0000-0000-0000-000000000012)"
+  cat > "$other" <<EOF
+{"type":"attachment","gitBranch":"glob-probe-not-mine","timestamp":"$(iso_ago 10)"}
+{"type":"pr-link","prNumber":99999,"timestamp":"$(iso_ago 5)"}
+EOF
+  cat > "$AGENTS" <<EOF
+[{"pid":18,"cwd":"/w/glob-probe","kind":"interactive","status":"busy",
+  "startedAt":$(ms_ago 300),"sessionId":"abcdef00-0000-0000-0000-000000000011",
+  "name":"glob-probe-01"}]
+EOF
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"glob-probe-mine"* ]]
+  [[ "$output" == *"11111"* ]]
+  [[ "$output" != *"glob-probe-not-mine"* ]]
+  [[ "$output" != *"99999"* ]]
+}
+
+@test "records at the head of a long transcript are still read" {
+  # The script reads the whole file, not a tail: pr-link and gitBranch records
+  # appear anywhere in it. A `tail -n 200` mutant survives any fixture shorter
+  # than 200 lines, so what a small fixture pins is only "a tail smaller than
+  # this file" — not the rule. Here the branch and both pr-links sit at the
+  # head with 250 lines after them.
+  local t ts i
+  t="$(transcript_for /w/tail-probe abcdef00-0000-0000-0000-000000000013)"
+  ts="$(iso_ago 60)"
+  {
+    printf '{"type":"attachment","gitBranch":"tail-probe-branch","timestamp":"%s"}\n' "$(iso_ago 600)"
+    printf '{"type":"pr-link","prNumber":22222,"timestamp":"%s"}\n' "$(iso_ago 599)"
+    printf '{"type":"pr-link","prNumber":33333,"timestamp":"%s"}\n' "$(iso_ago 598)"
+    for (( i = 0; i < 250; i++ )); do
+      printf '{"type":"user","timestamp":"%s"}\n' "$ts"
+    done
+  } > "$t"
+  [ "$(wc -l < "$t")" -gt 200 ]
+  cat > "$AGENTS" <<EOF
+[{"pid":19,"cwd":"/w/tail-probe","kind":"interactive","status":"busy",
+  "startedAt":$(ms_ago 300),"sessionId":"abcdef00-0000-0000-0000-000000000013",
+  "name":"tail-probe-01"}]
+EOF
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tail-probe-branch"* ]]
+  [[ "$output" == *"33333"* ]]
+  [[ "$output" != *"22222"* ]]
+  [[ "$output" != *"branch unavailable"* ]]
+}
+
 @test "an interactive row's absent state does not blank its status" {
   cat > "$AGENTS" <<EOF
 [{"pid":2,"cwd":"/w/frg-1234","kind":"interactive","status":"waiting",
@@ -108,6 +169,31 @@ EOF
   [[ "$output" == *"frg-1105-50"* ]]
   [[ "$output" == *"branch unavailable"* ]]
   [[ "$output" == *"PR unavailable"* ]]
+}
+
+@test "a transcript that reads but doesn't parse marks its cells unavailable, not 'no PR'" {
+  # Readable is not parseable. /todd:fleet.md promises `unavailable` means the
+  # transcript was missing OR unparseable, and `no PR` is a claim about a
+  # transcript that was never actually read. Keeping the row is INV-2; the cells
+  # are what degrade.
+  local t
+  t="$(transcript_for /w/frg-1300 abcdef00-0000-0000-0000-000000000010)"
+  printf 'this is not json\nneither is this\n' > "$t"
+  cat > "$AGENTS" <<EOF
+[{"pid":17,"cwd":"/w/frg-1300","kind":"interactive","status":"busy",
+  "startedAt":$(ms_ago 300),"sessionId":"abcdef00-0000-0000-0000-000000000010",
+  "name":"frg-1300-3b"}]
+EOF
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"frg-1300-3b"* ]]
+  [[ "$output" == *"branch unavailable"* ]]
+  [[ "$output" == *"PR unavailable"* ]]
+  [[ "$output" != *"no PR"* ]]
+  run "$SCRIPT" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'length' <<<"$output")" -eq 1 ]
+  [ "$(jq -r '.[0].transcript' <<<"$output")" = "unavailable" ]
 }
 
 @test "a cwd containing a dot still resolves to its transcript" {
@@ -191,6 +277,22 @@ EOF
   [[ "$output" != *"no sessions are running"* ]]
 }
 
+@test "--json against an unreadable source exits non-zero rather than reading as an empty fleet" {
+  # The human surface keeps exit 0 (test above) because it has prose to degrade
+  # into. --json has none: with empty stdout and exit 0, `fleet --json | jq
+  # length` yields nothing and a consumer reads it as a fleet with nothing in
+  # it. Stdout must stay empty rather than become `[]`, so the exit code is the
+  # only signal available.
+  printf 'this is not json at all\n' > "$AGENTS"
+  run bash -c '"$1" --json 2>/dev/null' _ "$SCRIPT"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  # The message still goes to stderr, for whoever is relaying it.
+  run "$SCRIPT" --json
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"could not read the session list"* ]]
+}
+
 @test "a row carrying neither status nor state is still listed, with its state marked unavailable" {
   # Measured live 2026-08-14: 1 of 19 rows (an interactive session in
   # /Users/toddprice/dscout-wt/core-793) carried neither .status nor .state.
@@ -208,6 +310,36 @@ EOF
   [[ "$(row_for core-793-86)" =~ ^[[:space:]]*unavailable[[:space:]] ]]
   # An unknown state is not an invitation to guess it is blocked.
   [[ "$output" != *"BLOCKED ON YOU"* ]]
+}
+
+@test "a nameless row and a sessionId-less row both render, and the header counts what printed" {
+  # Both are the INV-2 case: a row whose transcript can't be found still prints,
+  # with the columns it fed marked. Dropping either one left the heading
+  # counting a session it never printed — and dropping the sessionId-less one
+  # made --json emit the `[]` that must never appear.
+  cat > "$AGENTS" <<EOF
+[{"pid":20,"cwd":"/Users/toddprice/dscout-wt/frg-1249","kind":"interactive",
+  "status":"waiting","waitingFor":"input needed","startedAt":$(ms_ago 300),
+  "sessionId":"abcdef00-0000-0000-0000-000000000014"},
+ {"pid":21,"cwd":"/Users/toddprice/dscout-wt/frg-1250","kind":"interactive",
+  "status":"waiting","waitingFor":"input needed","startedAt":$(ms_ago 300)}]
+EOF
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BLOCKED ON YOU (2)"* ]]
+  # The name column falls back to the ticket id rather than leaving the row out.
+  [[ "$(row_for FRG-1249)" =~ ^[[:space:]]*waiting[[:space:]] ]]
+  [[ "$(row_for FRG-1250)" =~ ^[[:space:]]*waiting[[:space:]] ]]
+  # The heading's count equals the rows actually printed: each row carries its
+  # own `<- input needed` note, and the footer legend carries none.
+  [ "$(grep -c 'input needed' <<<"$output")" -eq 2 ]
+  run "$SCRIPT" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'length' <<<"$output")" -eq 2 ]
+  # A fallback is reported as a fallback: the raw name stays null either way.
+  [ "$(jq -r '[.[] | select(.name == null)] | length' <<<"$output")" -eq 2 ]
+  [ "$(jq -r '.[0].displayName' <<<"$output")" = "FRG-1249" ]
+  [ "$(jq -r '[.[] | select(.sessionId == null)] | length' <<<"$output")" -eq 1 ]
 }
 
 @test "--json emits one object per session with the joined fields" {
@@ -267,6 +399,32 @@ EOF
   [[ "$output" != *"BLOCKED ON YOU"* ]]
 }
 
+@test "an interactive row's own status wins over a state the payload shouldn't carry" {
+  # INV-1: .status is read for every row, .state only for a background one. Two
+  # guards enforce it — the jq extraction blanks .state for anything
+  # interactive, and the case that picks the effective state prefers .status for
+  # it — and each masks the other, so both were removable with the suite green.
+  # A row carrying a status and a contradicting state is what tells them apart:
+  # with the guards gone, `interactive:done` matches no allowlist entry and this
+  # row lands in UNKNOWN STATE instead of BLOCKED ON YOU.
+  cat > "$AGENTS" <<EOF
+[{"pid":22,"cwd":"/w/inv1","kind":"interactive","status":"waiting","state":"done",
+  "waitingFor":"input needed","startedAt":$(ms_ago 300),
+  "sessionId":"abcdef00-0000-0000-0000-000000000015","name":"inv1-probe-01"}]
+EOF
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"BLOCKED ON YOU"* ]]
+  [[ "$output" != *"UNKNOWN STATE"* ]]
+  [[ "$(row_for inv1-probe-01)" =~ ^[[:space:]]*waiting[[:space:]] ]]
+  run "$SCRIPT" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.[0].bucket' <<<"$output")" -eq 0 ]
+  [ "$(jq -r '.[0].displayState' <<<"$output")" = "waiting" ]
+  # Not merely deprioritized — an interactive row's .state is never read at all.
+  [ "$(jq -r '.[0].state' <<<"$output")" = "null" ]
+}
+
 @test "with nothing blocked, the blocked section is omitted rather than printed empty" {
   cat > "$AGENTS" <<EOF
 [{"pid":14,"cwd":"/w/eee","kind":"interactive","status":"idle",
@@ -296,18 +454,30 @@ EOF
 EOF
 }
 
+# Both not-stalled cases assert the quiet column as well as the absent marker.
+# `row_for` prints nothing when the row isn't there, and an empty string does not
+# contain "stalled" — so the marker assertion alone passes just as happily on a
+# row that vanished, which is the one outcome this whole tool exists to prevent.
+# The seconds are matched as a range: the fixture timestamp is written a moment
+# before the script reads the clock, so a tick between the two renders 31s.
 @test "a busy session quiet for 30 seconds is not flagged stalled" {
   stall_case 30
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$(row_for stall-probe-01)" != *stalled* ]]
+  local row
+  row="$(row_for stall-probe-01)"
+  [[ "$row" =~ quiet\ 3[0-9]s ]]
+  [[ "$row" != *stalled* ]]
 }
 
 @test "a busy session quiet for 9 minutes is not flagged stalled" {
   stall_case 540
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [[ "$(row_for stall-probe-01)" != *stalled* ]]
+  local row
+  row="$(row_for stall-probe-01)"
+  [[ "$row" == *"quiet 9m"* ]]
+  [[ "$row" != *stalled* ]]
 }
 
 @test "a busy session quiet for 11 minutes is flagged stalled" {
@@ -315,7 +485,6 @@ EOF
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   [[ "$(row_for stall-probe-01)" == *stalled* ]]
-  [[ "$output" == *"10m"* ]]  # the threshold is stated, not implied
 }
 
 @test "a busy session quiet for 3 days is flagged stalled" {

@@ -40,8 +40,10 @@
 # exists to prevent.
 #
 # --json emits the same data as an array of objects for a machine to consume.
-# It prints nothing at all when the session list couldn't be read, which is how
-# a consumer tells that case apart from `[]` (a fleet that really is empty).
+# When the session list couldn't be read it prints nothing at all AND exits 2 —
+# there is no prose for a machine to read, empty stdout on its own is ambiguous,
+# and `[]` would assert the fleet is empty. The human report keeps exit 0 in the
+# same case: it says in words what it couldn't read.
 #
 # To exercise it without live sessions, point CLAUDE_FLEET_AGENTS_JSON at a file
 # of fixture session JSON; the transcript tree is read from $HOME, which is what
@@ -75,8 +77,9 @@ each session's transcript. Sends nothing to any session.
 
 Options:
       --json   Emit the same data as a JSON array instead of the digest.
-               Prints nothing (not `[]`) when the session list can't be read,
-               so a consumer can tell that apart from an empty fleet.
+               Prints nothing (not `[]`) and exits 2 when the session list
+               can't be read, so a consumer can tell that apart from an empty
+               fleet. The digest exits 0 there and says so in words instead.
   -h, --help   Show this help
 
 Columns:
@@ -236,6 +239,14 @@ ticket_of() {
 if ! agents_json="$(read_agents_json)"; then
   echo "fleet: could not read the session list. Not reporting a fleet size — an" >&2
   echo "       unreadable source is not an empty fleet." >&2
+  # The two surfaces exit differently on purpose. A human report degrades into
+  # prose and has just said what happened, so it stays 0 — pinned by the plan's
+  # Scenario for this case, which ends "And fleet exits 0", and by its
+  # Verification note that an empty/bogus source must still exit 0 and say
+  # something. A machine has no prose to read: empty stdout alone is ambiguous
+  # and `[]` would fabricate the empty fleet this tool exists to never report,
+  # so the exit code is the only signal left.
+  if [[ "$JSON" == true ]]; then exit 2; fi
   exit 0
 fi
 
@@ -250,7 +261,10 @@ now="$(date +%s)"
 rows=""
 
 while IFS="$US" read -r sid cwd kind status state waiting_for started name; do
-  [[ -n "$sid" ]] || continue
+  # No `continue` on a missing .sessionId. A row without one has no findable
+  # transcript, which is the case INV-2 already rules on: mark the columns it
+  # feeds, keep the row. Skipping it instead left the header counting a session
+  # it never printed, and made --json emit the `[]` that must never appear.
 
   ticket="$(ticket_of "$cwd")"
 
@@ -258,10 +272,25 @@ while IFS="$US" read -r sid cwd kind status state waiting_for started name; do
   tfile="$(transcript_path "$cwd" "$sid")"
   transcript_ok=false
   if [[ -r "$tfile" ]]; then
-    transcript_ok=true
     tdata="$(read_transcript "$tfile" || true)"
     IFS="$US" read -r branch pr title last_ts <<<"$tdata" || true
+    # Readable is not parseable. A transcript that yielded none of the four
+    # fields told us nothing, so claiming `branch none, no PR` off it states a
+    # fact never read — and /todd:fleet.md promises `unavailable` means the
+    # transcript was missing OR unparseable. Marking the cells and keeping the
+    # row IS INV-2. It can't misfire on real data: 0 of 3028 transcripts on
+    # disk yield zero fields.
+    [[ -z "$branch$pr$title$last_ts" ]] || transcript_ok=true
   fi
+
+  # The name falls back ticket -> cwd basename. `claude agents --json` doesn't
+  # always carry a .name, and the render used to skip a row that hadn't got one
+  # while the header still counted it, so a section printed `(1)` with nothing
+  # beneath it. The raw name is kept alongside for --json, so a consumer can
+  # still tell a real name from a fallback.
+  disp_name="$name"
+  [[ -n "$disp_name" ]] || disp_name="$ticket"
+  [[ -n "$disp_name" ]] || disp_name="${cwd##*/}"
 
   # Title falls back branch -> cwd basename. ai-title is not always present
   # (verified absent from one whole 1.7 MB transcript), so printing .aiTitle
@@ -314,7 +343,7 @@ while IFS="$US" read -r sid cwd kind status state waiting_for started name; do
   qkey=$(( quiet < 0 ? 0 : quiet ))
   rank="$bucket$(printf '%012d' $(( 999999999999 - qkey )))"
 
-  rows="$rows$rank$US$bucket$US$kind$US$status$US$state$US$disp_state$US$name$US$ticket$US$disp_title$US$branch$US$pr$US$cwd$US$sid$US$started$US$last_ts$US$quiet$US$stalled$US$waiting_for$US$transcript_ok"$'\n'
+  rows="$rows$rank$US$bucket$US$kind$US$status$US$state$US$disp_state$US$name$US$disp_name$US$ticket$US$disp_title$US$branch$US$pr$US$cwd$US$sid$US$started$US$last_ts$US$quiet$US$stalled$US$waiting_for$US$transcript_ok"$'\n'
 done < <(jq -r --arg us "$US" '
   .[]
   | [ (.sessionId // ""), (.cwd // ""), (.kind // ""),
@@ -335,19 +364,20 @@ if [[ "$JSON" == true ]]; then
       status:       (if .[3] == "" then null else .[3] end),
       state:        (if .[4] == "" then null else .[4] end),
       displayState: .[5],
-      name:         .[6],
-      ticket:       .[7],
-      title:        .[8],
-      branch:       (if .[9] == "" then null else .[9] end),
-      pr:           (if .[10] == "" then null else .[10] end),
-      cwd:          .[11],
-      sessionId:    .[12],
-      startedAt:    (.[13] | tonumber),
-      lastActivity: (if .[14] == "" then null else .[14] end),
-      quietSeconds: (.[15] | tonumber | if . < 0 then null else . end),
-      stalled:      (.[16] == "true"),
-      waitingFor:   (if .[17] == "" then null else .[17] end),
-      transcript:   (if .[18] == "true" then "read" else "unavailable" end)
+      name:         (if .[6] == "" then null else .[6] end),
+      displayName:  .[7],
+      ticket:       .[8],
+      title:        .[9],
+      branch:       (if .[10] == "" then null else .[10] end),
+      pr:           (if .[11] == "" then null else .[11] end),
+      cwd:          .[12],
+      sessionId:    (if .[13] == "" then null else .[13] end),
+      startedAt:    (.[14] | tonumber),
+      lastActivity: (if .[15] == "" then null else .[15] end),
+      quietSeconds: (.[16] | tonumber | if . < 0 then null else . end),
+      stalled:      (.[17] == "true"),
+      waitingFor:   (if .[18] == "" then null else .[18] end),
+      transcript:   (if .[19] == "true" then "read" else "unavailable" end)
     })'
   exit 0
 fi
@@ -386,14 +416,18 @@ render_bucket() {
 
   printf '\n%s (%s)\n' "$heading" "$n"
 
-  local rank bucket kind status state disp_state name ticket title branch pr
-  local cwd sid started last_ts quiet stalled waiting_for transcript_ok
+  local rank bucket kind status state disp_state name disp_name ticket title
+  local branch pr cwd sid started last_ts quiet stalled waiting_for transcript_ok
   local note cells line
 
-  while IFS="$US" read -r rank bucket kind status state disp_state name ticket \
-      title branch pr cwd sid started last_ts quiet stalled waiting_for transcript_ok; do
-    [[ -n "$name" ]] || continue
-
+  # No guard on the way in. The awk filter below only ever emits a line whose
+  # bucket field equals $b, so a blank line can't reach here — which means any
+  # guard is only ever reached by a real row, and one on an optional upstream
+  # field (.name, .sessionId) drops exactly the rows INV-2 says to keep. That is
+  # how a section came to print its count with nothing under it.
+  while IFS="$US" read -r rank bucket kind status state disp_state name disp_name \
+      ticket title branch pr cwd sid started last_ts quiet stalled waiting_for \
+      transcript_ok; do
     note=""
     [[ "$stalled" == true ]] && note="stalled"
     if [[ -n "$waiting_for" ]]; then
@@ -411,7 +445,7 @@ render_bucket() {
     fi
 
     printf -v line '  %-11s %-26s %-13s %-13s %-14s%s' \
-      "$disp_state" "$(clip 26 "$name")" "$ticket" "up $(human_age "$started")" \
+      "$disp_state" "$(clip 26 "$disp_name")" "$ticket" "up $(human_age "$started")" \
       "quiet $(human_secs "$quiet")" "$note"
     printf '%s\n' "$(trim_right "$line")"
 

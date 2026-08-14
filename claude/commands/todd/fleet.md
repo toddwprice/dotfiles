@@ -13,6 +13,11 @@ Print its output as-is. It is already sorted so the sessions blocked on Todd com
 first, and the columns are already sized — reformatting it into your own table
 loses the ordering that is the whole point.
 
+**If it exits non-zero, it could not read the session list: relay the message it
+printed on stderr.** Don't go quiet, and don't report an empty fleet — an
+unreadable source is not a fleet with nothing in it, and that false negative is
+the thing this command exists to prevent.
+
 Then add two or three lines of your own on top of it:
 
 - **Name what to do first.** Usually the longest-blocked session, not the top row
