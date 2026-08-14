@@ -1,0 +1,433 @@
+#!/usr/bin/env bash
+#
+# fleet — a read-only digest of the live Claude Code session fleet. With 8-15
+# sessions open at once there is no way to see which ones are waiting on you, so
+# this answers that in one screen:
+#
+#   fleet
+#
+# Sessions blocked on you print first, then what's running, then what's idle.
+# Each row carries the session's state, its ticket, how long it has been open,
+# how long its transcript has been quiet, its title, its branch and its newest
+# PR.
+#
+# STRICTLY READ-ONLY. It never messages, resumes, or launches a session — the
+# only `claude` subcommand it runs is `claude agents`. Polling peers by messaging
+# them is the thing this exists to avoid: each message lands in the target's
+# context as a <cross-session-message> block and eats its window, so watching 15
+# sessions that way injects ~90 interruptions an hour into work already in
+# flight. Reading `claude agents --json` plus each session's own transcript costs
+# the observed sessions nothing.
+#
+# Two sources, joined on .sessionId:
+#
+#   claude agents --json              the live sessions: sessionId, absolute
+#                                     cwd, kind, status, waitingFor, startedAt,
+#                                     name, and (background only) id + state.
+#   ~/.claude/projects/<slug>/<sessionId>.jsonl
+#                                     that session's own transcript, for the
+#                                     branch, the newest pr-link, the generated
+#                                     ai-title, and the newest timestamp.
+#
+# Neither payload has a documented schema, so every field is read defensively
+# and every read fails OPEN: a session whose transcript can't be read still
+# prints, with the columns that came from the transcript marked `unavailable`.
+# A supervisor that drops rows is worse than no supervisor.
+#
+# The one thing it will NOT fail open on is the session list itself. If
+# `claude agents --json` can't be read, that is reported as unreadable — never
+# as "no sessions are running", which is the exact false negative this tool
+# exists to prevent.
+#
+# --json emits the same data as an array of objects for a machine to consume.
+# It prints nothing at all when the session list couldn't be read, which is how
+# a consumer tells that case apart from `[]` (a fleet that really is empty).
+#
+# To exercise it without live sessions, point CLAUDE_FLEET_AGENTS_JSON at a file
+# of fixture session JSON; the transcript tree is read from $HOME, which is what
+# test/fleet.bats overrides.
+
+set -euo pipefail
+
+# A busy session whose transcript has been quiet longer than this is marked
+# `stalled`. Deliberately short: over-reporting a session that is merely inside
+# one long tool call is cheaper than missing a wedged one. It is a hint, not a
+# verdict — an interactive transcript also advances on your own typing, so
+# recency is only an honest progress signal for background agents.
+STALL_THRESHOLD_SECS=600
+
+# Unit separator. Tab is IFS whitespace, so bash collapses runs of tabs and an
+# empty field would silently shift every later column; \x1f doesn't.
+US=$'\x1f'
+
+AGENTS_JSON_FILE="${CLAUDE_FLEET_AGENTS_JSON:-}"
+PROJECTS_DIR="$HOME/.claude/projects"
+
+JSON=false
+
+usage() {
+  cat <<'EOF'
+Usage: fleet [--json]
+
+A read-only digest of the live Claude Code sessions: which ones are blocked on
+you, which are running, which have gone quiet. Reads `claude agents --json` and
+each session's transcript. Sends nothing to any session.
+
+Options:
+      --json   Emit the same data as a JSON array instead of the digest.
+               Prints nothing (not `[]`) when the session list can't be read,
+               so a consumer can tell that apart from an empty fleet.
+  -h, --help   Show this help
+
+Columns:
+  state        For an interactive session, `claude agents`' own status
+               (waiting / busy / idle). For a background one, its `state`
+               (blocked / working / done) — every background row reports
+               status "idle" regardless, so the status alone would be a lie.
+               `unavailable` when the row carries neither.
+  quiet        Since the newest record in the session's transcript.
+  stalled      busy, and quiet for longer than 10 minutes.
+  branch / PR  From the transcript. `unavailable` when it couldn't be read.
+
+Environment:
+  CLAUDE_FLEET_AGENTS_JSON   Read the session list from this file instead of
+                             running `claude agents --json`. For tests.
+EOF
+}
+
+die() { echo "fleet: $*" >&2; exit 2; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json)    JSON=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *)         echo "fleet: unknown option '$1'" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+command -v jq >/dev/null 2>&1 || die "'jq' not found on PATH. Install it (brew install jq)."
+
+# --- reading the session list -------------------------------------------------
+#
+# Structurally the same reader as pr-review-queue:241-260, with one deliberate
+# difference: every failure path returns 1 instead of 0. There, a failed read
+# means "don't filter" and the script's real output is unaffected. Here the
+# session list IS the output, so collapsing "couldn't read it" into "nothing is
+# running" would print a reassuring empty fleet to someone with 15 sessions
+# open. The caller branches on the return code and says which happened.
+read_agents_json() {
+  local out
+  if [[ -n "$AGENTS_JSON_FILE" ]]; then
+    if ! out="$(cat "$AGENTS_JSON_FILE" 2>/dev/null)"; then
+      echo "fleet: can't read $AGENTS_JSON_FILE." >&2
+      return 1
+    fi
+  elif ! command -v claude >/dev/null 2>&1; then
+    echo "fleet: 'claude' not on PATH." >&2
+    return 1
+  elif ! out="$(claude agents --json 2>/dev/null)"; then
+    echo "fleet: 'claude agents --json' failed." >&2
+    return 1
+  fi
+  if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$out"; then
+    echo "fleet: the session list wasn't a JSON array." >&2
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+# Epoch millis rendered short: 45s, 6m, 2h 5m, 3d 4h. Lifted verbatim from
+# pr-review-queue:264-274 — a missing startedAt says so rather than measuring
+# from the epoch and claiming 20000-odd days.
+human_age() {
+  local started_ms=$1 secs
+  if (( started_ms <= 0 )); then printf 'an unknown time'; return; fi
+  secs=$(( $(date +%s) - started_ms / 1000 ))
+  if (( secs < 0 )); then secs=0; fi
+  if   (( secs < 60 ));    then printf '%ds' "$secs"
+  elif (( secs < 3600 ));  then printf '%dm' $(( secs / 60 ))
+  elif (( secs < 86400 )); then printf '%dh %dm' $(( secs / 3600 )) $(( secs % 3600 / 60 ))
+  else                          printf '%dd %dh' $(( secs / 86400 )) $(( secs % 86400 / 3600 ))
+  fi
+}
+
+# Seconds rendered the same way, for the quiet column.
+human_secs() {
+  local secs=$1
+  if (( secs < 0 )); then printf '?'; return; fi
+  if   (( secs < 60 ));    then printf '%ds' "$secs"
+  elif (( secs < 3600 ));  then printf '%dm' $(( secs / 60 ))
+  elif (( secs < 86400 )); then printf '%dh %dm' $(( secs / 3600 )) $(( secs % 3600 / 60 ))
+  else                          printf '%dd %dh' $(( secs / 86400 )) $(( secs % 86400 / 3600 ))
+  fi
+}
+
+# ISO-8601 -> epoch seconds. BSD date first (these dotfiles are macOS), GNU as a
+# fallback, 0 if neither can parse it.
+iso_to_epoch() {
+  local ts="${1%Z}" base
+  base="${ts%.*}"
+  date -j -u -f '%Y-%m-%dT%H:%M:%S' "$base" +%s 2>/dev/null \
+    || date -u -d "$1" +%s 2>/dev/null \
+    || printf '0'
+}
+
+# A session's transcript lives at ~/.claude/projects/<slug>/<sessionId>.jsonl,
+# where the slug replaces BOTH `/` and `.` in the absolute cwd with a dash. A
+# s#/#-#g-only version misses every cwd containing a dot: the config directory
+# `/Users/toddprice/.claude`, for one, has to come out as
+# `-Users-toddprice--claude`, with a double dash. Miss that and the path lookup
+# fails and the row reports a missing transcript it actually has.
+transcript_path() {
+  local cwd=$1 sid=$2
+  printf '%s/%s/%s.jsonl' "$PROJECTS_DIR" "${cwd//[\/.]/-}" "$sid"
+}
+
+# branch, PR, title and newest timestamp out of one transcript, in a single
+# pass, as branch<US>pr<US>title<US>timestamp.
+#
+# Reads the whole file, not a tail: pr-link and gitBranch records appear
+# anywhere in it (one measured transcript carried 51 pr-link records spread
+# through 1.7 MB), so a tail-only read gets last-activity right and silently
+# drops the PR. Reads only the one file named by .sessionId, never the
+# directory: a project dir holds 10+ transcripts and globbing it reads the
+# wrong session.
+#
+# `fromjson? // empty` skips any line that isn't parseable JSON, so a partial
+# last line in a file being appended to right now costs one record, not the row.
+read_transcript() {
+  local file=$1
+  jq -R -r '
+    (fromjson? // empty) as $r
+    | if ($r | type) != "object" then empty
+      else
+        [ (if $r.type == "pr-link" and $r.prNumber != null
+             then "pr\t\($r.prNumber)" else empty end),
+          (if ($r.gitBranch // "") != "" then "branch\t\($r.gitBranch)" else empty end),
+          (if ($r.aiTitle // "") != "" then "title\t\($r.aiTitle)" else empty end),
+          (if ($r.timestamp // "") != "" then "ts\t\($r.timestamp)" else empty end) ]
+        | .[]
+      end
+  ' "$file" 2>/dev/null | awk -F'\t' -v us="$US" '
+    $1 == "pr"     { pr = $2 }
+    $1 == "branch" { br = $2 }
+    $1 == "title"  { ti = $2 }
+    $1 == "ts"     { if ($2 > ts) ts = $2 }
+    END { printf "%s%s%s%s%s%s%s\n", br, us, pr, us, ti, us, ts }
+  '
+}
+
+# The ticket id is the cwd basename matched by PREFIX, ^[a-z]+-[0-9]+, then
+# uppercased. Anchoring it with $ is wrong: measured across all 58 worktrees the
+# prefix form yields a ticket for 45 and correctly declines for 13 (main,
+# contour-main, docker-dev-loop-speedup, ...), while the anchored form also
+# drops the suffixed ones (devops-2241-slice2 -> DEVOPS-2241, frg-1159-rebase,
+# frg-1203-refine). Taking the basename up to the first dash instead would
+# fabricate an id for all 13 that have none.
+ticket_of() {
+  local base="${1##*/}"
+  if [[ "$base" =~ ^([a-z]+-[0-9]+) ]]; then
+    printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]'
+  fi
+}
+
+# --- gather -------------------------------------------------------------------
+
+if ! agents_json="$(read_agents_json)"; then
+  echo "fleet: could not read the session list. Not reporting a fleet size — an" >&2
+  echo "       unreadable source is not an empty fleet." >&2
+  exit 0
+fi
+
+total="$(jq 'length' <<<"$agents_json")"
+if [[ "$total" -eq 0 ]]; then
+  if [[ "$JSON" == true ]]; then printf '[]\n'; exit 0; fi
+  echo "fleet: no sessions are running."
+  exit 0
+fi
+
+now="$(date +%s)"
+rows=""
+
+while IFS="$US" read -r sid cwd kind status state waiting_for started name; do
+  [[ -n "$sid" ]] || continue
+
+  ticket="$(ticket_of "$cwd")"
+
+  branch=""; pr=""; title=""; last_ts=""
+  tfile="$(transcript_path "$cwd" "$sid")"
+  transcript_ok=false
+  if [[ -r "$tfile" ]]; then
+    transcript_ok=true
+    tdata="$(read_transcript "$tfile" || true)"
+    IFS="$US" read -r branch pr title last_ts <<<"$tdata" || true
+  fi
+
+  # Title falls back branch -> cwd basename. ai-title is not always present
+  # (verified absent from one whole 1.7 MB transcript), so printing .aiTitle
+  # unconditionally leaves the column blank for every session that never
+  # generated one.
+  disp_title="$title"
+  [[ -n "$disp_title" ]] || disp_title="$branch"
+  [[ -n "$disp_title" ]] || disp_title="${cwd##*/}"
+
+  quiet=-1
+  if [[ -n "$last_ts" ]]; then
+    ts_epoch="$(iso_to_epoch "$last_ts")"
+    if [[ "$ts_epoch" -gt 0 ]]; then
+      quiet=$(( now - ts_epoch ))
+      (( quiet >= 0 )) || quiet=0
+    fi
+  fi
+
+  # INV-1: status is read for every row; state only for a background one. The
+  # jq extraction below enforces that at the point of read, so `state` is empty
+  # by construction for anything interactive. Every background row reports
+  # status "idle" whatever it is actually doing, which is why the background
+  # branch prefers state over status.
+  eff=""
+  case "$kind" in
+    background) eff="$state"; [[ -n "$eff" ]] || eff="$status" ;;
+    *)          eff="$status" ;;
+  esac
+  disp_state="$eff"
+  [[ -n "$disp_state" ]] || disp_state="unavailable"
+
+  # An allowlist, not a denylist of terminal states: a future Claude Code
+  # adding a `paused` status falls through into UNKNOWN STATE, where it is
+  # visible and obviously unclassified, rather than being quietly filed as idle
+  # or loudly reported as blocked.
+  case "$kind:$eff" in
+    interactive:waiting|background:blocked)                 bucket=0 ;;
+    interactive:busy|background:working|background:busy)    bucket=1 ;;
+    interactive:idle|background:done|background:idle)       bucket=2 ;;
+    *)                                                      bucket=3 ;;
+  esac
+
+  stalled=false
+  if (( bucket == 1 )) && (( quiet > STALL_THRESHOLD_SECS )); then
+    stalled=true
+  fi
+
+  # Rank sorts buckets ascending and, within a bucket, longest-quiet first.
+  # Fixed width and leading, so a plain `sort` on the whole line is enough.
+  qkey=$(( quiet < 0 ? 0 : quiet ))
+  rank="$bucket$(printf '%012d' $(( 999999999999 - qkey )))"
+
+  rows="$rows$rank$US$bucket$US$kind$US$status$US$state$US$disp_state$US$name$US$ticket$US$disp_title$US$branch$US$pr$US$cwd$US$sid$US$started$US$last_ts$US$quiet$US$stalled$US$waiting_for$US$transcript_ok"$'\n'
+done < <(jq -r --arg us "$US" '
+  .[]
+  | [ (.sessionId // ""), (.cwd // ""), (.kind // ""),
+      (.status // ""),
+      (if .kind == "background" then (.state // "") else "" end),
+      (.waitingFor // ""), ((.startedAt // 0) | tostring), (.name // "") ]
+  | join($us)' <<<"$agents_json")
+
+rows="$(printf '%s' "$rows" | sort)"
+
+# --- render -------------------------------------------------------------------
+
+if [[ "$JSON" == true ]]; then
+  printf '%s\n' "$rows" | jq -R -s --arg us "$US" '
+    split("\n") | map(select(length > 0)) | map(split($us)) | map({
+      bucket:       (.[1] | tonumber),
+      kind:         .[2],
+      status:       (if .[3] == "" then null else .[3] end),
+      state:        (if .[4] == "" then null else .[4] end),
+      displayState: .[5],
+      name:         .[6],
+      ticket:       .[7],
+      title:        .[8],
+      branch:       (if .[9] == "" then null else .[9] end),
+      pr:           (if .[10] == "" then null else .[10] end),
+      cwd:          .[11],
+      sessionId:    .[12],
+      startedAt:    (.[13] | tonumber),
+      lastActivity: (if .[14] == "" then null else .[14] end),
+      quietSeconds: (.[15] | tonumber | if . < 0 then null else . end),
+      stalled:      (.[16] == "true"),
+      waitingFor:   (if .[17] == "" then null else .[17] end),
+      transcript:   (if .[18] == "true" then "read" else "unavailable" end)
+    })'
+  exit 0
+fi
+
+count_of() { awk -F"$US" -v b="$1" '$2 == b { n++ } END { print n + 0 }' <<<"$rows"; }
+
+n_blocked="$(count_of 0)"
+n_running="$(count_of 1)"
+n_idle="$(count_of 2)"
+n_unknown="$(count_of 3)"
+
+printf 'fleet: %s session(s) — %s blocked on you, %s running, %s idle' \
+  "$total" "$n_blocked" "$n_running" "$n_idle"
+if [[ "$n_unknown" -gt 0 ]]; then printf ', %s in an unrecognized state' "$n_unknown"; fi
+printf '\n'
+
+# Clip to a column width so one long session name can't shift every later
+# column on every other row. Only the name and the title are ever clipped — the
+# branch is not, because it's the thing you paste into a `git` command.
+clip() {
+  local max=$1 s=$2
+  if (( ${#s} > max )); then printf '%s...' "${s:0:max-3}"; else printf '%s' "$s"; fi
+}
+
+# printf's %-Ns pads the last field too, so an empty trailing cell leaves the
+# line covered in trailing whitespace. No fork, unlike sed.
+trim_right() {
+  local s=$1
+  while [[ "$s" == *' ' ]]; do s="${s% }"; done
+  printf '%s' "$s"
+}
+
+render_bucket() {
+  local b=$1 heading=$2 n=$3
+  [[ "$n" -gt 0 ]] || return 0
+
+  printf '\n%s (%s)\n' "$heading" "$n"
+
+  local rank bucket kind status state disp_state name ticket title branch pr
+  local cwd sid started last_ts quiet stalled waiting_for transcript_ok
+  local note cells line
+
+  while IFS="$US" read -r rank bucket kind status state disp_state name ticket \
+      title branch pr cwd sid started last_ts quiet stalled waiting_for transcript_ok; do
+    [[ -n "$name" ]] || continue
+
+    note=""
+    [[ "$stalled" == true ]] && note="stalled"
+    if [[ -n "$waiting_for" ]]; then
+      note="${note:+$note  }<- $waiting_for"
+    fi
+
+    if [[ "$transcript_ok" != true ]]; then
+      cells="[branch unavailable, PR unavailable]"
+    else
+      # When there's no ai-title the title already IS the branch, so naming the
+      # branch again just costs half the line's width.
+      cells=""
+      [[ "$branch" != "$title" ]] && cells="branch ${branch:-none}, "
+      if [[ -n "$pr" ]]; then cells="[${cells}PR $pr]"; else cells="[${cells}no PR]"; fi
+    fi
+
+    printf -v line '  %-11s %-26s %-13s %-13s %-14s%s' \
+      "$disp_state" "$(clip 26 "$name")" "$ticket" "up $(human_age "$started")" \
+      "quiet $(human_secs "$quiet")" "$note"
+    printf '%s\n' "$(trim_right "$line")"
+
+    printf -v line '  %-11s %-68s  %s' "" "$(clip 68 "$title")" "$cells"
+    printf '%s\n' "$(trim_right "$line")"
+  done < <(awk -F"$US" -v b="$b" '$2 == b' <<<"$rows")
+}
+
+render_bucket 0 "BLOCKED ON YOU" "$n_blocked"
+render_bucket 1 "RUNNING"        "$n_running"
+render_bucket 2 "IDLE"           "$n_idle"
+render_bucket 3 "UNKNOWN STATE"  "$n_unknown"
+
+printf '\n'
+printf 'stalled = busy with no transcript activity for 10m+. A hint, not a verdict:\n'
+printf 'an interactive transcript also advances on your own typing, and a session\n'
+printf 'inside one long tool call goes quiet without being stuck.\n'
+
+exit 0
