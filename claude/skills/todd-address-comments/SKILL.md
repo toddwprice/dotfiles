@@ -12,7 +12,7 @@ description: >
   against the actual code, and by default PROPOSES a plan + draft replies and waits for approval
   before changing code or pushing. It also accepts a local self-review JSON produced by
   `todd-pr-review --json-only` against Todd's OWN PR ("address the self-review at
-  ~/Downloads/pr-27600-review.json") — see Local findings mode in Step 1.
+  ~/reviews/pr-27600-review.json") — see Local findings mode in Step 1.
 allowed-tools: Bash(gh:*), Bash(git:*), Bash(mix:*), Bash(yarn:*), Bash(uv:*), Bash(cat:*), Bash(mktemp:*), Read, Grep, Glob, Agent
 ---
 
@@ -92,7 +92,7 @@ Resolve `{owner}/{repo}` once: `gh repo view --json nameWithOwner -q .nameWithOw
 Step 6. This is everything below unless a path says otherwise.
 
 **Local findings mode.** `$ARGUMENTS` contains a path to a review JSON — typically
-`~/Downloads/pr-<N>-review.json` from `todd-pr-review --json-only`. Before doing anything with it,
+`~/reviews/pr-<N>-review.json` from `todd-pr-review --json-only`. Before doing anything with it,
 check who owns the PR:
 
 ```bash
@@ -302,7 +302,7 @@ gh api repos/{owner}/{repo}/pulls/<N>/comments -f body="<reply>" -F in_reply_to=
 ## Notes
 
 - Never push without showing the triage table first.
-- A local review file (`~/Downloads/pr-XXXX-review.{md,json,html}`) is ambiguous on its face — resolve
+- A local review file (`~/reviews/pr-XXXX-review.{md,json,html}`) is ambiguous on its face — resolve
   it by PR authorship, per Step 1. Someone else's PR means Todd is *publishing* his review and
   `todd-sync-review` is the right skill; say so and hand off. His own PR plus a `.json` means it's a
   self-review to act on — Local findings mode, stay here. An `.html`/`.md` artifact is outbound

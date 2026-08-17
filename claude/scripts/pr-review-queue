@@ -9,6 +9,27 @@
 # to printing and running nothing, which is what you want when something
 # downstream is going to consume the lines.
 #
+# --agent picks who does the reviewing. Both read the same skill: `~/.codex/skills`
+# is a symlink to `~/.dotfiles/claude/skills`, so `/todd-pr-review` resolves for
+# either one.
+#
+#   claude   (default)  claude --bg '/todd-pr-review 27615'
+#   codex               codex exec '/todd-pr-review 27615'
+#
+# The two differ in how they detach, and that difference is the reason the codex
+# path is shaped the way it is. `claude --bg` backgrounds itself and returns, so
+# its own stderr is enough to report on. `codex exec` runs in the foreground
+# until the review is done, so launching a queue of them serially would block
+# the terminal for as long as every review takes put together. The codex path
+# therefore backgrounds each one with nohup and sends its output to a log file:
+#
+#   nohup codex exec '/todd-pr-review 27615' > <log> 2>&1 &
+#
+# One consequence worth knowing: that reports the *fork*, not codex's own
+# startup. So "started" is a weaker claim under --agent codex than under claude
+# — a codex that dies on launch says so in its log file, not in this script's
+# exit status. Check the log paths printed on stderr if a review never lands.
+#
 # Know what one invocation does: bare `/todd-pr-review` is the command's posting
 # mode, so each agent submits its review to GitHub on its own. Typing
 # `pr-review-queue` publishes a review on every PR in the queue, on other
@@ -23,11 +44,26 @@
 # Mirrors https://github.com/pulls/reviews with the query:
 #   is:pr review-requested:@me state:open archived:false sort:updated-desc
 #
-# PRs a live background agent is already reviewing are left out, so running
-# this twice doesn't relaunch a review that's still going. Only `claude --bg`
-# sessions are visible to that check — an interactive session where you typed
-# /todd-pr-review yourself carries no recoverable prompt, so it won't suppress
-# anything. --include-running turns the filter off.
+# PRs a live background agent is already reviewing are left out, so running this
+# twice doesn't relaunch a review that's still going. Both agents are covered,
+# from two different sources, because they leave two different traces:
+#
+#   claude   `claude agents --json` for the live sessions, joined to the jobs
+#            dir for the launch prompt the PR number survives in. Only
+#            `claude --bg` sessions are visible — an interactive session where
+#            you typed /todd-pr-review yourself carries no recoverable prompt,
+#            so it won't suppress anything.
+#   codex    the process table. A codex review is an ordinary `codex exec`
+#            process with the prompt sitting in its argv, so one `ps` reports
+#            both that it is alive and which PR it is on. Nothing gets written
+#            down and nothing needs cleaning up — a review that finishes leaves
+#            the process table by itself. It also means a `codex exec
+#            '/todd-pr-review 27615'` you ran by hand DOES suppress, which the
+#            claude equivalent doesn't.
+#
+# Both sources are read whichever agent is launching, so a claude run won't open
+# a second review on a PR codex already has, or the reverse. --include-running
+# turns the whole filter off.
 #
 # stdout still carries nothing but the command lines, so it pipes cleanly:
 #   pr-review-queue --print-only | pbcopy
@@ -50,6 +86,7 @@ RAW=false
 SKIP_RUNNING=true
 LAUNCH=true
 LAUNCH_UNAVAILABLE=false
+AGENT="claude"
 
 # Bare, so each launched agent posts its own review to GitHub — see the header
 # and the --command help for what that means before changing it. Only the first
@@ -57,20 +94,42 @@ LAUNCH_UNAVAILABLE=false
 # rides along harmlessly there.
 CMD="/todd-pr-review"
 
-# Where the in-flight check reads from. Both are overridable so the filter can
-# be exercised against fixtures — see the test harness note further down.
+# Where the in-flight check reads from — claude sessions from the first two, live
+# codex processes from the third. All three are overridable so the filter can be
+# exercised against fixtures instead of live agents; see the test harness note
+# further down.
 AGENTS_JSON_FILE="${PR_REVIEW_QUEUE_AGENTS_JSON:-}"
 JOBS_DIR="${PR_REVIEW_QUEUE_JOBS_DIR:-$HOME/.claude/jobs}"
+PS_OUTPUT_FILE="${PR_REVIEW_QUEUE_PS_OUTPUT:-}"
+
+# Where --agent codex sends each review's output, one log per PR ref. Not under
+# $JOBS_DIR: that tree is Claude Code's own job state and the in-flight check
+# above reads it, so this script has no business writing into the one directory
+# it treats as an external source of truth.
+LOG_DIR="${PR_REVIEW_QUEUE_LOG_DIR:-$HOME/.claude/logs/pr-review-queue}"
 
 usage() {
   cat <<'EOF'
 Usage: pr-review-queue [options]
 
 Starts a background review agent per open PR that has requested your review,
-most-recently-updated first, and prints the `claude --bg '...'` line it ran
-for each.
+most-recently-updated first, and prints the line it ran for each.
 
 Options:
+      --agent NAME       Who reviews: claude (default) or codex. Both resolve
+                         the same skill, since ~/.codex/skills points at
+                         ~/.dotfiles/claude/skills.
+                           claude  ->  claude --bg '<command> <ref>'
+                           codex   ->  codex exec '<command> <ref>'
+                         claude backgrounds itself; codex is foregrounded, so
+                         each codex review is nohup'd into a log file to keep
+                         the queue fanning out instead of running one at a
+                         time. Log paths are printed on stderr. One caveat
+                         under codex: "started" only means the fork succeeded,
+                         so a codex that dies on launch — a spent usage limit,
+                         say — reports itself in its log rather than in this
+                         script's exit status. In-flight suppression covers
+                         both agents.
   -r, --repo OWNER/NAME  Scope the search to one repo (default: dscout/dscout)
   -a, --all-repos        Search every repo. Cross-repo results print as
                          OWNER/NAME#N, because a bare number is only
@@ -89,9 +148,9 @@ Options:
                          -c '/todd-pr-review --html' to render each review
                          locally and post nothing, and submit them yourself.)
       --raw              Emit the bare `<command> <number>` without the
-                         `claude --bg '...'` wrapper. That form is slash-command
-                         text for an interactive session, not something a shell
-                         can exec, so --raw implies --print-only.
+                         launcher wrapper. That form is slash-command text for
+                         an interactive session, not something a shell can
+                         exec, so --raw implies --print-only.
       --include-running  Keep PRs a live background agent is already
                          reviewing. They're left out by default; whatever
                          gets left out is always named on stderr.
@@ -108,7 +167,9 @@ Examples:
   pr-review-queue --raw               # bare /todd-pr-review N lines
   pr-review-queue -a                  # every repo, qualified refs
   pr-review-queue --include-running   # don't hide in-flight reviews
-  claude agents                       # check on what this started
+  pr-review-queue --agent codex       # hand the queue to codex instead
+  pr-review-queue --agent codex -p    # see the codex lines, launch nothing
+  claude agents                       # check on what claude started
 EOF
 }
 
@@ -120,6 +181,7 @@ need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --agent)        need_value "$@"; AGENT="$2"; shift 2 ;;
     -r|--repo)      need_value "$@"; REPO="$2"; shift 2 ;;
     -a|--all-repos) REPO=""; shift ;;
     -n|--limit)     need_value "$@"; LIMIT="$2"; shift 2 ;;
@@ -137,6 +199,13 @@ done
 [[ "$LIMIT" =~ ^[0-9]+$ && "$LIMIT" -gt 0 ]] || die "--limit must be a positive number (got '$LIMIT')"
 [[ -z "$REPO" || "$REPO" == */* ]] || die "--repo must look like OWNER/NAME (got '$REPO')"
 
+# Named explicitly rather than defaulted-to-claude, so a typo'd --agent reports
+# itself instead of quietly launching the wrong reviewer across the whole queue.
+case "$AGENT" in
+  claude|codex) ;;
+  *) die "--agent must be 'claude' or 'codex' (got '$AGENT')" ;;
+esac
+
 # --raw emits `/todd-pr-review 27615` — slash-command text you paste into a
 # session, not a program a shell can find. Launching it would try to exec a
 # file at /todd-pr-review, so --raw is print-only by construction.
@@ -151,13 +220,16 @@ for tool in gh jq; do
   }
 done
 
-# `claude` still isn't in the loop above, because the in-flight filter treats a
-# missing `claude` as "can't tell — show the PR" and carries on. Launching has
-# no such graceful version: with no `claude` there is nothing to start. So it
-# degrades to printing and exits non-zero at the end, rather than printing a
-# tidy queue and looking like it launched something.
-if [[ "$LAUNCH" == true ]] && ! command -v claude >/dev/null 2>&1; then
-  echo "pr-review-queue: 'claude' not on PATH — can't launch anything." >&2
+# The launcher binary still isn't in the loop above, because the in-flight
+# filter treats a missing `claude` as "can't tell — show the PR" and carries on.
+# Launching has no such graceful version: with no launcher there is nothing to
+# start. So it degrades to printing and exits non-zero at the end, rather than
+# printing a tidy queue and looking like it launched something.
+#
+# Which binary that is follows --agent, so `--agent codex` on a machine without
+# codex reports codex rather than passing a claude check and failing later.
+if [[ "$LAUNCH" == true ]] && ! command -v "$AGENT" >/dev/null 2>&1; then
+  echo "pr-review-queue: '$AGENT' not on PATH — can't launch anything." >&2
   echo "pr-review-queue: printing the commands instead; fix PATH or run them yourself." >&2
   LAUNCH=false
   LAUNCH_UNAVAILABLE=true
@@ -227,8 +299,9 @@ echo "pr-review-queue: $count PR(s) awaiting your review${REPO:+ in $REPO}." >&2
 # is invisible, and you never find out it was there.
 #
 # To exercise this without live agents, point PR_REVIEW_QUEUE_AGENTS_JSON at a
-# file of fixture session JSON and PR_REVIEW_QUEUE_JOBS_DIR at a fixture jobs
-# tree.
+# file of fixture session JSON, PR_REVIEW_QUEUE_JOBS_DIR at a fixture jobs tree,
+# and PR_REVIEW_QUEUE_PS_OUTPUT at a file of fixture `pid etime command` lines
+# for the codex half.
 
 # In-flight is an allowlist, not a denylist of terminal states, so a state this
 # script doesn't know (a future Claude Code adding "paused", say) falls through
@@ -259,6 +332,30 @@ read_agents_json() {
   printf '%s' "$out"
 }
 
+# The process table as `pid etime command` lines, or nothing at all if it can't
+# be had. This is the codex half of the in-flight check, and it is read whichever
+# agent is launching — a claude run has no business opening a second review on a
+# PR codex is already working.
+#
+# `-ww` defeats BSD ps's habit of cutting the command column to the terminal
+# width. It doesn't bite as things stand, because this output is captured rather
+# than written to a terminal and macOS only truncates for one — but a clipped
+# argv would drop the PR number off the end of a long --command, and that failure
+# is indistinguishable from "nothing in flight".
+read_ps_output() {
+  local out
+  if [[ -n "$PS_OUTPUT_FILE" ]]; then
+    if ! out="$(cat "$PS_OUTPUT_FILE" 2>/dev/null)"; then
+      echo "pr-review-queue: can't read $PS_OUTPUT_FILE; not filtering in-flight codex reviews." >&2
+      return 0
+    fi
+  elif ! out="$(ps -axww -o pid=,etime=,command= 2>/dev/null)"; then
+    echo "pr-review-queue: 'ps' failed; not filtering in-flight codex reviews." >&2
+    return 0
+  fi
+  printf '%s' "$out"
+}
+
 # Epoch millis rendered short: 45s, 6m, 2h 5m, 3d 4h. A missing startedAt says
 # so rather than measuring from the epoch and claiming 20000-odd days.
 human_age() {
@@ -273,12 +370,39 @@ human_age() {
   fi
 }
 
+# ps `etime` as a count of seconds. The format grows with the age — MM:SS, then
+# HH:MM:SS, then DD-HH:MM:SS — so all three are matched rather than assuming the
+# widest. Unparseable prints nothing, and the caller turns that into an unknown
+# age instead of inventing one.
+#
+# The `10#` on every field is not decoration. etime zero-pads, bash reads a
+# leading zero as octal, and `$(( 08 ))` is a fatal "value too great for base" —
+# so without it this dies for eight seconds out of every minute.
+etime_secs() {
+  local e="$1" d=0 h=0 m=0 s=0
+  if   [[ "$e" =~ ^([0-9]+)-([0-9]+):([0-9]+):([0-9]+)$ ]]; then
+    d="${BASH_REMATCH[1]}"; h="${BASH_REMATCH[2]}"
+    m="${BASH_REMATCH[3]}"; s="${BASH_REMATCH[4]}"
+  elif [[ "$e" =~ ^([0-9]+):([0-9]+):([0-9]+)$ ]]; then
+    h="${BASH_REMATCH[1]}"; m="${BASH_REMATCH[2]}"; s="${BASH_REMATCH[3]}"
+  elif [[ "$e" =~ ^([0-9]+):([0-9]+)$ ]]; then
+    m="${BASH_REMATCH[1]}"; s="${BASH_REMATCH[2]}"
+  else
+    return 0
+  fi
+  printf '%s' $(( 10#$d * 86400 + 10#$h * 3600 + 10#$m * 60 + 10#$s ))
+}
+
+# Both sources, regardless of --agent: each one covers reviews the other cannot
+# see, and a duplicate review is just as bad whichever agent opens it.
 agents_json=""
+ps_output=""
 if [[ "$SKIP_RUNNING" == true ]]; then
   agents_json="$(read_agents_json)"
+  ps_output="$(read_ps_output)"
 fi
 
-if [[ -n "$agents_json" ]]; then
+if [[ -n "$agents_json" || -n "$ps_output" ]]; then
   # The command as it shows up in a launch prompt is the first word of $CMD, so
   # `-c '/todd-pr-review --html'` still matches an intent of
   # `/todd-pr-review 27713 --html`.
@@ -291,36 +415,32 @@ if [[ -n "$agents_json" ]]; then
   loose_word="${loose_word##*:}"
   loose_re="${loose_word//_/[_ ]}"
 
-  # One line per PR ref found in a live in-flight session:
-  #   kind \t ref \t state \t startedAt \t cwd \t prompt
-  # kind is n for a bare number, q for a qualified owner/name#N. Empty fields
-  # would collapse under a tab IFS, so the jq below substitutes "-" rather than
-  # emitting one.
+  # One line per PR ref found in a live in-flight review:
+  #   kind \t ref \t state \t startedAt \t where \t prompt
+  # kind is n for a bare number, q for a qualified owner/name#N. "where" is
+  # whatever locates the review for the agent that owns it — the session's cwd
+  # for claude, the pid for codex, which is what you'd need to kill one. Empty
+  # fields would collapse under a tab IFS, so both scans below substitute "-"
+  # rather than emitting one.
   inflight=""
 
-  while IFS=$'\t' read -r job_id job_state job_started job_cwd job_name; do
-    [[ -n "$job_id" ]] || continue
+  # Append a row for every PR ref in $text. Shared by both sources on purpose: a
+  # claude launch prompt and a codex command line are the same shape of string —
+  # the command token, its flags, and the ref in some order — so one scanner
+  # covers both rather than two that can drift apart.
+  #
+  # $scan_from says where refs start counting. "token" waits for the command
+  # token, which is what stops a number sitting earlier in the string from
+  # reading as a PR. "start" counts from the first token, for the generated-name
+  # fallback that no longer contains the command token at all. Either way every
+  # ref-shaped token after that point counts, so flag order doesn't matter —
+  # `--html 27713` and `27713 --html` both yield 27713.
+  collect_refs() {
+    local text="$1" state="$2" started="$3" cwd="$4" scan_from="$5"
+    local scanning prompt tok
 
-    job_text=""
-    if [[ -r "$JOBS_DIR/$job_id/state.json" ]]; then
-      job_text="$(jq -r '.intent // empty' "$JOBS_DIR/$job_id/state.json" 2>/dev/null || true)"
-    fi
-
-    # Ref scanning starts at the command token when the verbatim prompt is
-    # available, and at the start of the string when we're down to the
-    # auto-generated name. Either way every ref-shaped token after that point
-    # counts, so flag order doesn't matter — `--html 27713` and `27713 --html`
-    # both yield 27713.
-    if [[ -n "$job_text" ]]; then
-      [[ "$job_text" == *"$cmd_token"* ]] || continue
-      scanning=false
-    else
-      job_text="$job_name"
-      [[ "$job_text" =~ $loose_re ]] || continue
-      scanning=true
-    fi
-
-    job_prompt="$(printf '%s' "$job_text" | tr '\n\t' '  ')"
+    if [[ "$scan_from" == start ]]; then scanning=true; else scanning=false; fi
+    prompt="$(printf '%s' "$text" | tr '\n\t' '  ')"
 
     while IFS= read -r tok; do
       [[ -n "$tok" ]] || continue
@@ -329,12 +449,33 @@ if [[ -n "$agents_json" ]]; then
         continue
       fi
       if [[ "$tok" =~ ^[0-9]+$ ]]; then
-        inflight="$inflight""n"$'\t'"$tok"$'\t'"$job_state"$'\t'"$job_started"$'\t'"$job_cwd"$'\t'"$job_prompt"$'\n'
+        inflight="$inflight""n"$'\t'"$tok"$'\t'"$state"$'\t'"$started"$'\t'"$cwd"$'\t'"$prompt"$'\n'
       elif [[ "$tok" =~ ^[^/[:space:]]+/[^/#[:space:]]+#[0-9]+$ ]]; then
-        inflight="$inflight""q"$'\t'"$tok"$'\t'"$job_state"$'\t'"$job_started"$'\t'"$job_cwd"$'\t'"$job_prompt"$'\n'
+        inflight="$inflight""q"$'\t'"$tok"$'\t'"$state"$'\t'"$started"$'\t'"$cwd"$'\t'"$prompt"$'\n'
       fi
-    done < <(tr -s ' \t\n' '\n' <<<"$job_text")
-  done < <(jq -r --argjson live "$IN_FLIGHT_STATES" '
+    done < <(tr -s ' \t\n' '\n' <<<"$text")
+  }
+
+  # --- claude: the session list, joined to the jobs dir for the prompt ---------
+  if [[ -n "$agents_json" ]]; then
+    while IFS=$'\t' read -r job_id job_state job_started job_cwd job_name; do
+      [[ -n "$job_id" ]] || continue
+
+      job_text=""
+      if [[ -r "$JOBS_DIR/$job_id/state.json" ]]; then
+        job_text="$(jq -r '.intent // empty' "$JOBS_DIR/$job_id/state.json" 2>/dev/null || true)"
+      fi
+
+      # The verbatim prompt is the good case. The generated name is the fallback
+      # and has to be matched loosely, having already lost its leading slash.
+      if [[ -n "$job_text" ]]; then
+        [[ "$job_text" == *"$cmd_token"* ]] || continue
+        collect_refs "$job_text" "$job_state" "$job_started" "$job_cwd" token
+      else
+        [[ "$job_name" =~ $loose_re ]] || continue
+        collect_refs "$job_name" "$job_state" "$job_started" "$job_cwd" start
+      fi
+    done < <(jq -r --argjson live "$IN_FLIGHT_STATES" '
       def dash: if . == null or . == "" then "-" else . end;
       .[]
       | select(.kind == "background")
@@ -343,6 +484,44 @@ if [[ -n "$agents_json" ]]; then
       | [(.id | dash), (.state | dash), ((.startedAt // 0) | tostring),
          (.cwd | dash), (.name | dash)]
       | @tsv' <<<"$agents_json")
+  fi
+
+  # --- codex: the process table ------------------------------------------------
+  #
+  # There is no session list to read, so liveness comes from the process itself:
+  # `codex exec '<command> <ref>'` carries everything needed in its argv, and a
+  # review that has finished is simply not there any more.
+  #
+  # argv[0] is matched on its basename so a review someone launched as
+  # /opt/homebrew/bin/codex counts too, and `exec` is required as the subcommand
+  # so an interactive `codex` sitting at a prompt is never read as a review.
+  if [[ -n "$ps_output" ]]; then
+    now_secs="$(date +%s)"
+    while read -r ps_pid ps_etime ps_cmd; do
+      [[ -n "$ps_cmd" && "$ps_pid" =~ ^[0-9]+$ ]] || continue
+
+      [[ "${ps_cmd%% *}" == */codex || "${ps_cmd%% *}" == codex ]] || continue
+      ps_rest="${ps_cmd#* }"
+      [[ "${ps_rest%% *}" == exec ]] || continue
+      [[ "$ps_cmd" == *"$cmd_token"* ]] || continue
+
+      # human_age takes epoch millis, the units claude's startedAt already
+      # arrives in, so ps's elapsed time is converted back into a start instant
+      # rather than teaching the formatter a second unit. An etime it can't parse
+      # yields no seconds at all, and 0 is what human_age reports as unknown.
+      ps_secs="$(etime_secs "$ps_etime")"
+      if [[ -n "$ps_secs" ]]; then
+        ps_started_ms=$(( (now_secs - ps_secs) * 1000 ))
+      else
+        ps_started_ms=0
+      fi
+
+      # "codex" in the state column rather than a liveness word: a codex process
+      # has no state beyond running, and which agent holds the PR is the thing
+      # actually worth reading in the skip report.
+      collect_refs "$ps_cmd" "codex" "$ps_started_ms" "pid $ps_pid" token
+    done <<<"$ps_output"
+  fi
 
   # A bare in-flight number matches that number in any repo — only reachable
   # under --all-repos, where a cross-repo collision could over-suppress. The
@@ -409,6 +588,14 @@ shell_quote() {
   printf "'%s'" "$s"
 }
 
+# A ref as a filename. Bare refs are already safe; a cross-repo `owner/name#N`
+# carries a slash that would read as a directory, so flatten the separators
+# rather than silently creating `$LOG_DIR/dscout/dscout#27615.log`.
+ref_slug() {
+  local s=${1//\//_}
+  printf '%s' "${s//\#/-}"
+}
+
 # Bare numbers are only unambiguous when the search was scoped to one repo.
 if [[ -n "$REPO" ]]; then
   refs="$(jq -r '.[] | "\(.number)"' <<<"$json")"
@@ -419,8 +606,21 @@ fi
 launched=0
 launch_failed=0
 
+# codex writes each review to its own log, so the directory has to exist before
+# the first launch. Failing that is the same class of problem as a missing
+# launcher — there is nowhere for the output to go — so it degrades the same
+# way: print the lines, exit non-zero, don't claim to have launched anything.
+if [[ "$LAUNCH" == true && "$AGENT" == "codex" ]]; then
+  if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+    echo "pr-review-queue: can't create $LOG_DIR — nowhere to put codex output." >&2
+    echo "pr-review-queue: printing the commands instead; fix it or run them yourself." >&2
+    LAUNCH=false
+    LAUNCH_UNAVAILABLE=true
+  fi
+fi
+
 if [[ "$LAUNCH" == true ]]; then
-  echo "pr-review-queue: starting $count background review(s)." >&2
+  echo "pr-review-queue: starting $count background review(s) with $AGENT." >&2
 fi
 
 while IFS= read -r ref; do
@@ -428,6 +628,8 @@ while IFS= read -r ref; do
 
   if [[ "$RAW" == true ]]; then
     printf '%s %s\n' "$CMD" "$ref"
+  elif [[ "$AGENT" == "codex" ]]; then
+    printf 'codex exec %s\n' "$(shell_quote "$CMD $ref")"
   else
     printf 'claude --bg %s\n' "$(shell_quote "$CMD $ref")"
   fi
@@ -436,42 +638,64 @@ while IFS= read -r ref; do
 
   # The prompt goes in as a single argv element, so no shell ever re-parses it
   # — the quoting that makes the *printed* line safe to pipe plays no part in
-  # what actually runs here. `claude --bg` detaches and returns, so these fan
-  # out concurrently instead of running one review at a time.
+  # what actually runs here.
   #
-  # Two redirections, each fixing something that actually went wrong:
-  #
-  #   </dev/null  `claude` reads stdin and APPENDS it to the prompt. This loop
-  #               is fed by a here-string, so without this the first launch
-  #               swallows every remaining ref: the loop runs exactly once and
-  #               that one agent gets the prompt
-  #               "/todd-pr-review --html 27615\n27616\n27617". Observed, not
-  #               theoretical — it spawned a real agent with that prompt.
-  #   >&2         keeps `claude`'s own startup chatter off our stdout, so the
-  #               command-lines-only contract survives launch mode.
+  # `</dev/null` is not optional, and it is not optional for EITHER agent. Both
+  # read stdin and APPEND it to the prompt, and this loop is fed by a
+  # here-string, so without it the first launch swallows every remaining ref:
+  # the loop runs exactly once and that one agent gets the prompt
+  # "/todd-pr-review --html 27615\n27616\n27617". Observed on claude, not
+  # theoretical — it spawned a real agent with that prompt. codex is the same by
+  # its own documentation: "if stdin is piped and a prompt is also provided,
+  # stdin is appended as a `<stdin>` block".
   #
   # A failure here is per-PR, not fatal: the remaining PRs still get launched
   # and the count of failures sets the exit status at the end. One agent that
   # wouldn't start shouldn't cost you the rest of the queue.
-  if claude --bg "$CMD $ref" >&2 </dev/null; then
+  if [[ "$AGENT" == "codex" ]]; then
+    # `codex exec` runs in the foreground until the review is finished, so it is
+    # backgrounded here to keep the queue fanning out rather than reviewing one
+    # PR at a time. nohup so it outlives this shell the way `claude --bg` does,
+    # and output goes to a per-PR log because there's no detached-agent list to
+    # read it back out of afterwards.
+    #
+    # Backgrounding reports the fork, so unlike the claude branch there is no
+    # per-PR success to test: a codex that dies on startup still counts here and
+    # explains itself in its log. The pid is printed so one can be killed
+    # without hunting for it.
+    log="$LOG_DIR/$(ref_slug "$ref").log"
+    nohup codex exec "$CMD $ref" >"$log" 2>&1 </dev/null &
     launched=$(( launched + 1 ))
-    printf '    started  %s\n' "$ref" >&2
+    printf '    started  %s  (pid %s)  -> %s\n' "$ref" "$!" "$log" >&2
   else
-    launch_failed=$(( launch_failed + 1 ))
-    printf '    FAILED   %s  (no agent started for this one)\n' "$ref" >&2
+    # >&2 keeps `claude`'s own startup chatter off our stdout, so the
+    # command-lines-only contract survives launch mode.
+    if claude --bg "$CMD $ref" >&2 </dev/null; then
+      launched=$(( launched + 1 ))
+      printf '    started  %s\n' "$ref" >&2
+    else
+      launch_failed=$(( launch_failed + 1 ))
+      printf '    FAILED   %s  (no agent started for this one)\n' "$ref" >&2
+    fi
   fi
 done <<<"$refs"
 
 if [[ "$LAUNCH" == true ]]; then
-  echo "pr-review-queue: started $launched of $count — follow them with 'claude agents'." >&2
+  # How you follow them differs: claude has a session list, codex has the logs.
+  if [[ "$AGENT" == "codex" ]]; then
+    echo "pr-review-queue: started $launched of $count — follow them in $LOG_DIR." >&2
+  else
+    echo "pr-review-queue: started $launched of $count — follow them with 'claude agents'." >&2
+  fi
   if (( launch_failed > 0 )); then
     echo "pr-review-queue: $launch_failed failed to start (listed above)." >&2
     exit 1
   fi
 fi
 
-# Nothing launched because `claude` was missing. The lines are on stdout, but
-# this run did not do the thing it exists to do, so don't report success.
+# Nothing launched because the launcher was missing, or codex had nowhere to log.
+# The lines are on stdout, but this run did not do the thing it exists to do, so
+# don't report success.
 [[ "$LAUNCH_UNAVAILABLE" == true ]] && exit 1
 
 exit 0

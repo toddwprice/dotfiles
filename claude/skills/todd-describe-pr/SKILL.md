@@ -62,7 +62,7 @@ Each finding has:
 
 ## Step 3 — Render
 
-Write to `.claude/tmp/pr-<N>-<slug>-YYYY-MM-DD-HHMM.html` where `<slug>` is a kebab-case of the PR title (≤40 chars). Create the directory if missing. (A composing skill may override this output dir — `todd-pr-review` writes review artifacts to `~/Downloads/`; `todd-sync-review` looks in both `~/Downloads` and `.claude/tmp`. When composed, honor the caller's chosen dir.)
+Write to `.claude/tmp/pr-<N>-<slug>-YYYY-MM-DD-HHMM.html` where `<slug>` is a kebab-case of the PR title (≤40 chars). Create the directory if missing. (A composing skill may override this output dir — `todd-pr-review` writes review artifacts to `~/reviews/`; `todd-sync-review` looks in both `~/reviews` and `.claude/tmp`. When composed, honor the caller's chosen dir.)
 
 ### Section menu
 

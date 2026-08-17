@@ -748,8 +748,17 @@ Don't render the HTML "just in case" outside HTML mode. That render is the singl
 Save at:
 
 ```
-$HOME/Downloads/pr-<N>-review.json
+$HOME/reviews/pr-<N>-review.json
 ```
+
+`~/reviews/` is the review artifact directory — every file this command writes (JSON payload, HTML,
+`.posted` marker, post lock) goes there and nowhere else.
+
+**Create it before the first write of the run: `mkdir -p "$HOME/reviews"`.** Unlike `~/Downloads` it is
+not guaranteed to exist — this skill is symlinked out of `~/.dotfiles`, so on a machine that has synced
+the dotfiles but never run a review, the directory is missing. A missing directory does not fail
+loudly; it makes `mkdir "$LOCK"` in the 7c preflight fail, which that check reports as
+`ANOTHER RUN HOLDS THE POST LOCK` and exits 0 — a review that never posts and never looks broken.
 
 The shape matches the GitHub PR review API (`POST /repos/{owner}/{repo}/pulls/{N}/reviews`). The
 schema, anchoring rules, the Answer-only rule, and the posting commands are the shared canonical spec
@@ -1105,11 +1114,11 @@ Render the panel itself (substitute the verdict class + values):
     <span><strong>Verdict:</strong> Approve</span>
     <span><strong>Inline comments:</strong> <count></span>
     <span><strong>Top-level body:</strong> <body length in characters or "verdict + N notes"></span>
-    <span><strong>Payload:</strong> <code>$HOME/Downloads/pr-<N>-review.json</code></span>
+    <span><strong>Payload:</strong> <code>$HOME/reviews/pr-<N>-review.json</code></span>
   </div>
   <pre>gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews <span class="gh-flag">\</span>
   <span class="gh-flag">--method</span> POST <span class="gh-flag">\</span>
-  <span class="gh-flag">--input</span> "$HOME/Downloads/pr-<N>-review.json"</pre>
+  <span class="gh-flag">--input</span> "$HOME/reviews/pr-<N>-review.json"</pre>
   <p class="sp-note">Payload validates atomically — if any inline anchor is rejected, GitHub fails the whole request, so you won't end up with a half-posted review. If you change your mind after running, you can dismiss via <code>gh api repos/&lt;owner&gt;/&lt;repo&gt;/pulls/&lt;N&gt;/reviews/&lt;review_id&gt;/dismissals --method PUT -f message=...</code>.</p>
 </div>
 ```
@@ -1119,10 +1128,10 @@ Render the panel itself (substitute the verdict class + values):
 #### Where to write it
 
 ```
-$HOME/Downloads/pr-<N>-review-<slug>-YYYY-MM-DD-HHMM.html
+$HOME/reviews/pr-<N>-review-<slug>-YYYY-MM-DD-HHMM.html
 ```
 
-`<slug>` is a kebab-case of the PR title (≤40 chars). Use the literal expansion of `$HOME` (e.g. `/Users/toddprice/Downloads/...`) — don't pass `$HOME` to `Write`. The HTML lives next to the JSON payload in `~/Downloads/` so both review artifacts are in one place. After writing, `open <path>`.
+`<slug>` is a kebab-case of the PR title (≤40 chars). Use the literal expansion of `$HOME` (e.g. `/Users/toddprice/reviews/...`) — don't pass `$HOME` to `Write`. The HTML lives next to the JSON payload in `~/reviews/` so both review artifacts are in one place. After writing, `open <path>`.
 
 ### 7c. Post the review (Post mode only)
 
@@ -1137,14 +1146,17 @@ Run these before posting. None of them is a reason to stop and ask — each one 
 ```bash
 ME=$(gh api user -q .login)
 HEAD_SHA=$(gh pr view <N> --json headRefOid -q .headRefOid)
-P="$HOME/Downloads/pr-<N>-review.json"
+P="$HOME/reviews/pr-<N>-review.json"
 
 # Content fingerprint of what we're about to post — body + the sorted anchor set.
 FP=$(jq -S '{body, anchors: ([.comments[] | "\(.path):\(.line)"] | sort)}' "$P" \
        | shasum -a 256 | cut -c1-16)
 
 # Post lock. mkdir is atomic — exactly one concurrent run wins it.
-LOCK="$HOME/Downloads/.pr-<N>-review.lock"
+# Create the artifact dir FIRST: `mkdir "$LOCK"` also fails when the parent is
+# missing, and this check reads that as "another run holds the lock" and exits 0.
+mkdir -p "$HOME/reviews"
+LOCK="$HOME/reviews/.pr-<N>-review.lock"
 # Break a stale lock left by a crashed run (older than 30 minutes).
 if [ -d "$LOCK" ] && [ -z "$(find "$LOCK" -maxdepth 0 -mmin -30 2>/dev/null)" ]; then
   rmdir "$LOCK" 2>/dev/null
@@ -1161,14 +1173,14 @@ gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews --paginate \
 
 # Already-posted guard, part 2: have I posted this exact content before,
 # even against a different commit?
-MARKER="$HOME/Downloads/pr-<N>-review.posted"
+MARKER="$HOME/reviews/pr-<N>-review.posted"
 test -f "$MARKER" && grep -q "$FP" "$MARKER" && echo "DUPLICATE: content $FP already posted"
 ```
 
 > **The lock does not auto-release, and that's deliberate.** Shell variables and `trap` handlers do
 > **not** survive between Bash tool calls — a `trap 'rmdir' EXIT` here would fire at the end of *this*
 > call, freeing the lock before you ever reach the POST, which is worse than no lock because it looks
-> protective. So release it with an explicit `rmdir "$HOME/Downloads/.pr-<N>-review.lock"` after the
+> protective. So release it with an explicit `rmdir "$HOME/reviews/.pr-<N>-review.lock"` after the
 > POST succeeds, **and on every path that abandons the post** (duplicate detected, anchor validation
 > unrecoverable, payload lint can't be satisfied, auth failure). The 30-minute staleness break above is
 > the safety net for a run that dies before it can clean up. For the same reason, don't expect `$FP`,
@@ -1232,7 +1244,7 @@ advance the counter.
 
 **c. Check every anchor in the payload against that set.**
 ```bash
-jq -r '.comments[] | "\(.path):\(.line)"' "$HOME/Downloads/pr-<N>-review.json" \
+jq -r '.comments[] | "\(.path):\(.line)"' "$HOME/reviews/pr-<N>-review.json" \
   | sort -u | comm -23 - /tmp/pr-<N>-anchors.txt
 ```
 Any output is an anchor GitHub will reject. **Demote exactly those into the top-level `body`** as
@@ -1262,11 +1274,11 @@ up doesn't bind; a `jq` check against the payload does. So enforce them here, be
 > So: checks (d) through (j) below exist because their prose equivalents did not work. If you add a
 > comment-quality rule to this file in future, add its `jq` check here in the same edit or accept that
 > it will not take effect. Checks (i) and (j) were added 2026-08-13 for the scope-over-tickets and
-> no-nits rules, and both were tuned against the 42 payloads still in `~/Downloads` rather than
+> no-nits rules, and both were tuned against the 42 payloads on disk at the time rather than
 > guessed — (i) fired 15 times, (j) 3 times, and every match was read by hand before shipping.
 
 ```bash
-P="$HOME/Downloads/pr-<N>-review.json"
+P="$HOME/reviews/pr-<N>-review.json"
 
 # a. Inline budget.
 jq '.comments | length' "$P"
@@ -1382,7 +1394,7 @@ in another terminal — to land the same review in between. The preflight check 
 get here. If it now says `DUPLICATE`, stop and report, same as before.
 
 ```bash
-P="$HOME/Downloads/pr-<N>-review.json"
+P="$HOME/reviews/pr-<N>-review.json"
 
 # Recompute the fingerprint — shell state from the preflight call is gone.
 FP=$(jq -S '{body, anchors: ([.comments[] | "\(.path):\(.line)"] | sort)}' "$P" \
@@ -1392,10 +1404,10 @@ URL=$(gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews \
   --method POST --input "$P" --jq '.html_url')
 
 # Record what landed, so a later run recognizes its own content even after the commit moves.
-printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$FP" "$URL" >> "$HOME/Downloads/pr-<N>-review.posted"
+printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$FP" "$URL" >> "$HOME/reviews/pr-<N>-review.posted"
 
 # Release the post lock — nothing else will.
-rmdir "$HOME/Downloads/.pr-<N>-review.lock" 2>/dev/null
+rmdir "$HOME/reviews/.pr-<N>-review.lock" 2>/dev/null
 echo "$URL"
 ```
 
@@ -1424,7 +1436,7 @@ Any other failure (auth, 404, network) — report it and stop. Don't fall back t
 **On every one of these abort paths, release the post lock before you stop:**
 
 ```bash
-rmdir "$HOME/Downloads/.pr-<N>-review.lock" 2>/dev/null
+rmdir "$HOME/reviews/.pr-<N>-review.lock" 2>/dev/null
 ```
 
 Leaving it held blocks the next legitimate run for 30 minutes until the staleness break clears it. Do
@@ -1440,7 +1452,7 @@ Lead with what landed. In order:
 1. **VERDICT** — Approve / Request Changes / Request Clarification, stated plainly.
 2. **Posted review URL** — the `html_url` from 7c.
 3. **What was sent** — one line: `<count> inline comments · <count> PR-wide notes`.
-4. **JSON payload path** — `$HOME/Downloads/pr-<N>-review.json`, as the local record.
+4. **JSON payload path** — `$HOME/reviews/pr-<N>-review.json`, as the local record.
 
 Then a short findings summary (top 3–5, one line each). If any preflight check forced `event: "COMMENT"`, or a finding turned out already-fixed, or anchors were demoted on retry — say so here. Don't bury a downgraded event in a paragraph; Todd needs to know the review posted as a comment rather than an approval.
 
@@ -1450,8 +1462,8 @@ If the verdict is **Request Changes** or **Request Clarification**, make that un
 
 End the chat response with two things, in this order:
 
-1. **HTML visualization** — `$HOME/Downloads/pr-<N>-review-<slug>-...html` (already opened)
-2. **JSON review payload** — `$HOME/Downloads/pr-<N>-review.json` (referenced by the submit command embedded in the HTML)
+1. **HTML visualization** — `$HOME/reviews/pr-<N>-review-<slug>-...html` (already opened)
+2. **JSON review payload** — `$HOME/reviews/pr-<N>-review.json` (referenced by the submit command embedded in the HTML)
 
 Don't surface the `gh api` command in chat — it lives at the bottom of the HTML, which is the intended review surface. Tell Todd in one line what to do: *"Review the HTML; when satisfied, copy the submit command at the bottom and run it."* State plainly that **nothing was posted**.
 
@@ -1462,7 +1474,7 @@ If the verdict is **Request Changes** or **Request Clarification**, mention that
 Report four lines and nothing else — no HTML path, no submit command, no "review the HTML" instruction, no posted URL (nothing was posted). A caller is parsing this:
 
 ```
-JSON: /Users/toddprice/Downloads/pr-<N>-review.json
+JSON: /Users/toddprice/reviews/pr-<N>-review.json
 VERDICT: Approve | Request Changes | Request Clarification
 INLINE: <count> inline comments
 BODY_NOTES: <count> PR-wide notes in the top-level body

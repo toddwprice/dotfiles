@@ -5,7 +5,7 @@ description: >
   GitHub. Use this WHENEVER Todd has edited one of his review files and wants it posted — phrasings
   like "I edited the review html, sync the json and post it", "update the .json to match my new
   comments", "make my comments inline where appropriate", "convert the md review to json so the
-  comments post inline", "post my review from ~/Downloads/pr-25964-review.html", or "update the json
+  comments post inline", "post my review from ~/reviews/pr-25964-review.html", or "update the json
   to match the html so the comments are inline". It reads the edited artifact (HTML, MD, or JSON),
   reconciles it against any original JSON, rebuilds the review payload in the publish schema
   (body + event + inline file:line comments + thread replies), shows it, and on approval posts via
@@ -17,7 +17,7 @@ allowed-tools: Bash(gh:*), Bash(git:*), Bash(cat:*), Bash(mktemp:*), Bash(ls:*),
 # Sync & Post an Edited PR Review
 
 Todd's review flow ends with a `describe_pr` / `pr_review` artifact (an HTML page, sometimes a
-sidecar `.json` or `.md`) in `~/Downloads` or `.claude/tmp/`. He hand-edits the HTML — adds an
+sidecar `.json` or `.md`) in `~/reviews` or `.claude/tmp/`. He hand-edits the HTML — adds an
 annotation, softens a finding, deletes one — and then needs the postable JSON regenerated to match
 **his edits**, with the line-level findings posted **inline**. He's asked for exactly this several
 times ("if I update the html, can you update the json to match my new comments?"). The HTML is the
@@ -27,7 +27,7 @@ source of truth; the JSON is derived.
 
 `$ARGUMENTS` may give a path and/or PR number. Otherwise:
 
-- Find the edited artifact: look in `~/Downloads` and `.claude/tmp/` for the most recent
+- Find the edited artifact: look in `~/reviews` and `.claude/tmp/` for the most recent
   `pr-<N>-review.{html,md,json}` (and `report-pr-<N>-*.html`). If several, prefer the
   most-recently-modified HTML and confirm with Todd which file is the edited one.
 - Find any **original JSON** sidecar for the same PR — that's the prior payload to reconcile against.

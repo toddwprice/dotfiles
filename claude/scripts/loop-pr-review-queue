@@ -23,15 +23,29 @@
 # anything else in that slot is treated as a child argument and you get the
 # 15-minute default.
 #
+# `--agent claude|codex` picks who reviews, and the loop validates it rather
+# than forwarding it blind — a typo'd agent name is a mistake you want reported
+# in the first second, not one tick later:
+#
+#   loop-pr-review-queue 30 --agent codex
+#
 # Two things about `pr-review-queue` are what make looping safe rather than a
 # way to review the same PR twelve times an hour:
 #
 #   - `review-requested:@me` is self-cleaning. GitHub drops you from the
 #     requested reviewers the moment a review is submitted, so a PR the last
 #     tick reviewed is simply not in the next tick's queue.
-#   - In-flight suppression. A PR a live `claude --bg` agent is still working
-#     on is left out, so a review that takes longer than the interval doesn't
-#     get a second agent thrown at it.
+#   - In-flight suppression. A PR a live agent is still reviewing is left out —
+#     a `claude --bg` session or a `codex exec` process, either one — so a
+#     review that takes longer than the interval doesn't get a second agent
+#     thrown at it. Both are covered whichever agent this loop is launching.
+#
+# One thing --max-failures cannot do for you under `--agent codex`: notice a
+# codex that dies on launch. The child backgrounds codex and reports the fork,
+# not codex's own startup, so it exits 0 and this loop counts a good run even
+# when every review died in its first second. A spent usage limit does exactly
+# that. So under codex, read one log out of the first tick rather than trusting
+# a quiet loop — a run of "ok" is not evidence that anything got reviewed.
 #
 # Neither of those protects you from running two loops at once — they'd both
 # pass the in-flight check in the same second and both launch. Hence the
@@ -62,6 +76,11 @@ DEFAULT_INTERVAL="15m"
 MAX_FAILURES=5
 USE_LOCK=true
 
+# Empty means the child is never told about --agent at all, so this loop still
+# drives a pr-review-queue from before the flag existed. Messages that need a
+# name say claude, because that is what the child falls back to.
+AGENT=""
+
 # Overridable so the loop can be exercised against a stub child on a one-second
 # interval — same testing-hook convention pr-review-queue uses for its
 # PR_REVIEW_QUEUE_* variables. MIN_INTERVAL is a floor, not a default: without
@@ -81,6 +100,13 @@ INTERVAL
   `90s`, `20m`, `2h`. Default: 15m. It must be the first argument.
 
 Options (everything else is passed through to pr-review-queue)
+      --agent NAME       Who reviews: claude or codex. Passed to
+                         pr-review-queue, which defaults to claude when this
+                         is left off. Validated here so a bad name is
+                         reported before the first run instead of after it.
+                         Under codex, remember that a run counted "ok" only
+                         means each review was forked -- see the note at the
+                         top of this file.
       --max-failures N   Stop after N runs fail in a row (default: 5).
                          0 never gives up. A single failure never stops the
                          loop; a usage error from the child always does.
@@ -92,11 +118,13 @@ Options (everything else is passed through to pr-review-queue)
 Examples
   loop-pr-review-queue                          # every 15m, reviews and POSTS
   loop-pr-review-queue 30                       # every 30m
+  loop-pr-review-queue 30 --agent codex         # hand each tick to codex
   loop-pr-review-queue 30 -c '/todd-pr-review --html'   # render locally, post nothing
   loop-pr-review-queue 10 -d -v                 # skip drafts, show each PR
   loop-pr-review-queue 60 -n 3                  # hourly, 3 most recent only
   nohup loop-pr-review-queue 15 > /dev/null 2> ~/pr-loop.log &   # detached
-  claude agents                                 # check on what it started
+  claude agents                                 # check on what claude started
+  ls -lt ~/.claude/logs/pr-review-queue         # check on what codex started
 EOF
 }
 
@@ -124,6 +152,12 @@ fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)      usage; exit 0 ;;
+    # The one child flag this loop reads on the way past instead of forwarding
+    # blind. Pass-through would work, but the failure is lopsided: a misspelled
+    # agent name only surfaces when the first tick runs, as a child usage error
+    # a couple of screens into the log. Reading it here costs one case arm and
+    # reports it before anything starts. It is re-emitted below unchanged.
+    --agent)        need_value "$@"; AGENT="$2"; shift 2 ;;
     --max-failures) need_value "$@"; MAX_FAILURES="$2"; shift 2 ;;
     --no-lock)      USE_LOCK=false; shift ;;
     --)             shift; QUEUE_ARGS+=("$@"); break ;;
@@ -132,6 +166,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$MAX_FAILURES" =~ ^[0-9]+$ ]] || die "--max-failures must be a number (got '$MAX_FAILURES')"
+
+# Validated against the same two names the child accepts, and only forwarded
+# when it was actually asked for — an untouched --agent means the child never
+# sees the flag, and a pr-review-queue predating it keeps working.
+if [[ -n "$AGENT" ]]; then
+  case "$AGENT" in
+    claude|codex) ;;
+    *) die "--agent must be 'claude' or 'codex' (got '$AGENT')" ;;
+  esac
+  QUEUE_ARGS=(--agent "$AGENT" ${QUEUE_ARGS[@]+"${QUEUE_ARGS[@]}"})
+fi
 
 # Minutes when there's no suffix, because that's the unit the loop is described
 # in. The suffixes exist so `90s` during testing and `2h` for a slow sweep
@@ -317,7 +362,7 @@ while true; do
 
     if (( MAX_FAILURES > 0 && CONSECUTIVE >= MAX_FAILURES )); then
       echo "loop-pr-review-queue: $CONSECUTIVE consecutive failures — giving up." >&2
-      echo "loop-pr-review-queue: check 'gh auth status' and that 'claude' is on PATH." >&2
+      echo "loop-pr-review-queue: check 'gh auth status' and that '${AGENT:-claude}' is on PATH." >&2
       summary
       exit 1
     fi
