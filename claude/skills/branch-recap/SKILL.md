@@ -1,6 +1,6 @@
 ---
 name: branch-recap
-description: Use when asked for the latest/last work completed on a specific branch, ticket, or PR — "what's the latest on this branch", "where did I leave off", "recap this branch/PR", "any updates on this ticket/PR", "catch me up on this ticket", "look at progress this past week on this Linear project". NOT the comms-inbox sweep (todd-catchup) and NOT single-DYS-session diagnosis (todd:trace-dys).
+description: Use when asked for the latest/last work completed on a specific branch, ticket, or PR — "what's the latest on this branch", "where did I leave off", "recap this branch/PR", "any updates on this ticket/PR", "catch me up on this ticket", "look at progress this past week on this Linear project". NOT the comms-inbox sweep (todd-catchup) and NOT single-DYS-session diagnosis (todd-trace-dys).
 ---
 
 # branch-recap
@@ -11,7 +11,7 @@ Recap the work state of ONE branch/ticket/PR from three sources: git, the GitHub
 
 **This is NOT:**
 - `todd-catchup` — that sweeps Slack/email/notification inboxes. branch-recap ignores comms entirely.
-- `todd:trace-dys` — that diagnoses one DYS/Braintrust session. branch-recap is about branch/PR/ticket progress, not a trace.
+- `todd-trace-dys` — that diagnoses one DYS/Braintrust session. branch-recap is about branch/PR/ticket progress, not a trace.
 
 **READ-ONLY.** Never push, commit, comment, edit an issue, resolve a thread, or post to GitHub/Linear. Only run read commands below.
 

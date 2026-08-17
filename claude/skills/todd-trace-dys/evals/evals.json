@@ -1,5 +1,5 @@
 {
-  "skill_name": "todd:trace-dys",
+  "skill_name": "todd-trace-dys",
   "safety": "Read-only. Decodes state + reads Braintrust traces. No writes. NOTE: needs a CURRENT (non-stale) chat/room id from Todd to test the live-trace path; otherwise only the state-decode + staleness-warning paths are exercised.",
   "evals": [
     {

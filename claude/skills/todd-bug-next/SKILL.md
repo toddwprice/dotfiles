@@ -1,5 +1,6 @@
 ---
-description: Show the top 5 Todo/Backlog bugs from Todd's "My & Unassigned Bugs" Linear view with a recommendation, let him choose one, then spin up its worktree via start-ticket.sh, plan it with `/todd:plan`, and drive it through the systematic debugging triage to a diagnosis (and a fix, when one is in reach). Use when Todd says "grab the next bug", "what bug should I work next", "start the next bug", "/todd:bug-next", or wants a bug from his view turned into real work. Takes optional `--pick N`, `--dry-run`, or an explicit ticket id to bypass the prompt.
+name: todd-bug-next
+description: Show the top 5 Todo/Backlog bugs from Todd's "My & Unassigned Bugs" Linear view with a recommendation, let him choose one, then spin up its worktree via start-ticket.sh, plan it with `/todd-plan`, and drive it through the systematic debugging triage to a diagnosis (and a fix, when one is in reach). Use when Todd says "grab the next bug", "what bug should I work next", "start the next bug", "/todd-bug-next", or wants a bug from his view turned into real work. Takes optional `--pick N`, `--dry-run`, or an explicit ticket id to bypass the prompt.
 ---
 
 You are running Todd's "work the next bug" routine. End to end: pull the top 5 unstarted bugs from his Linear view, recommend one, let **him** pick, then create the worktree, move the session into it, plan the ticket, and debug it properly.
@@ -139,7 +140,7 @@ Nothing with side effects has run yet at this point. Choosing a bug sets off thr
 - creates a git worktree, and
 - runs `linctl issue update <TICKET> --state "In Progress" --assignee me`
 
-and then Step 9's `/todd:plan` run posts a `## 📋 Implementation Plan` comment on the ticket.
+and then Step 9's `/todd-plan` run posts a `## 📋 Implementation Plan` comment on the ticket.
 
 The last two are a public claim on a bug and a public artifact on it, which is why the choice is always Todd's. **Say both in the option descriptions** so the pick is an informed one — picking a ticket here means claiming it *and* commenting on it.
 
@@ -179,24 +180,24 @@ Confirm you landed with `git -C <path> rev-parse --show-toplevel` and `git -C <p
 With the worktree in place, plan it:
 
 ```
-Skill(skill="todd:plan", args="<TICKET> --no-check")
+Skill(skill="todd-plan", args="<TICKET> --no-check")
 ```
 
-**Why here, before the debugging.** The plan comment is the artifact that outlives this session. If the debugging runs long, gets interrupted, or hands off to someone else, `## 📋 Implementation Plan` on the ticket is what the next reader picks up — and `/todd:plan` phase 4 demands two things on a **bug** ticket that a debugging session otherwise never writes down: `### Unchanged behavior` (what must keep working after the fix, with the existing test that proves it) and a `@regression` Scenario for anything that has no such test yet.
+**Why here, before the debugging.** The plan comment is the artifact that outlives this session. If the debugging runs long, gets interrupted, or hands off to someone else, `## 📋 Implementation Plan` on the ticket is what the next reader picks up — and `/todd-plan` phase 4 demands two things on a **bug** ticket that a debugging session otherwise never writes down: `### Unchanged behavior` (what must keep working after the fix, with the existing test that proves it) and a `@regression` Scenario for anything that has no such test yet.
 
-It composes with Step 7 because it does the exact complement. `/todd:plan`'s hard rules forbid creating a worktree or moving Linear state — both already done — and it discovers the ticket's worktree through `git -C "$HOME/dscout-wt/main" worktree list`, which is the one you just created. Nothing to hand it but the ticket id. Two things to watch:
+It composes with Step 7 because it does the exact complement. `/todd-plan`'s hard rules forbid creating a worktree or moving Linear state — both already done — and it discovers the ticket's worktree through `git -C "$HOME/dscout-wt/main" worktree list`, which is the one you just created. Nothing to hand it but the ticket id. Two things to watch:
 
 - Its local copies (`plan-<TICKET>.md`, `anchors-<TICKET>.md`) belong under the **worktree's** `.claude/tmp/`, not `main`'s. The session cwd is still `main`, so those writes need the absolute worktree path.
 - It reads code from that worktree, which is empty of your changes right now. Anything it says about current behavior is about `main`.
 
-**A blocked plan does not stop this command.** On a fresh bug the root cause isn't known yet, so this plan is written blind and `/todd:plan` may hit one of its own stop conditions — more than three surviving blockers, or "can't ground half the anchors". That's a finding about the ticket, not a failure of this run:
+**A blocked plan does not stop this command.** On a fresh bug the root cause isn't known yet, so this plan is written blind and `/todd-plan` may hit one of its own stop conditions — more than three surviving blockers, or "can't ground half the anchors". That's a finding about the ticket, not a failure of this run:
 
 - Keep going to Step 11. The blockers are the questions the debugging has to answer — carry them in as the first things to settle.
 - **Never treat the plan's guess at the cause as the diagnosis.** Written before a repro, it proposes a mechanism; Step 11 still has to reproduce and localize. A plan that agrees with your first hunch is two guesses, not corroboration.
 
-**Re-run `/todd:plan <TICKET>` once the root cause is nailed down**, before writing the fix. It's built for this: phase 0 finds the existing comment, backs the old body up to `.claude/tmp/`, updates that same comment in place so exactly one survives, and writes a `### Changed since the last plan` section naming what the blind plan got wrong. That section is the most valuable thing this flow produces — it stops a disproved theory from being re-derived and re-trusted by whoever reads next.
+**Re-run `/todd-plan <TICKET>` once the root cause is nailed down**, before writing the fix. It's built for this: phase 0 finds the existing comment, backs the old body up to `.claude/tmp/`, updates that same comment in place so exactly one survives, and writes a `### Changed since the last plan` section naming what the blind plan got wrong. That section is the most valuable thing this flow produces — it stops a disproved theory from being re-derived and re-trusted by whoever reads next.
 
-**`--no-check` is why the plan comes back unchecked, and it's deliberate.** `/todd:plan` phase 7 ends by dispatching `/todd:plan-check` to a cold subagent; the flag suppresses it. That check exists to catch a plan an unattended `impl` would misread, and on this flow it would do harm instead: a bug planned before the root cause is known is *expected* to carry ungrounded anchors, so the check would fail it and leave a `❌` stamp sitting on the ticket — which then blocks `/todd:loop` and `/todd:phase` for reasons that have nothing to do with the plan's quality. Step 11's debugging *is* the check, and it's about to test every claim the plan makes.
+**`--no-check` is why the plan comes back unchecked, and it's deliberate.** `/todd-plan` phase 7 ends by dispatching `/todd-plan-check` to a cold subagent; the flag suppresses it. That check exists to catch a plan an unattended `impl` would misread, and on this flow it would do harm instead: a bug planned before the root cause is known is *expected* to carry ungrounded anchors, so the check would fail it and leave a `❌` stamp sitting on the ticket — which then blocks `/todd-loop` and `/todd-phase` for reasons that have nothing to do with the plan's quality. Step 11's debugging *is* the check, and it's about to test every claim the plan makes.
 
 Once the root cause is nailed down and you re-plan (above), drop the flag — a plan written against a known cause is exactly what the check is for.
 
@@ -257,7 +258,7 @@ Three things this depends on:
 
 Run `npx eslint <files>` and `npx tsc --strictNullChecks false --noEmit --project tsconfig.lint.json` in the same container to lint and typecheck.
 
-For a prod bug with ids in the ticket, Datadog logs and Braintrust traces will localize it faster than reading code — pivot there first. `/todd:repro_localhost` is the companion for reproducing against the local stack.
+For a prod bug with ids in the ticket, Datadog logs and Braintrust traces will localize it faster than reading code — pivot there first. `/todd-repro-localhost` is the companion for reproducing against the local stack.
 
 **If it doesn't reproduce:** that is a legitimate outcome, not a failure. Follow the skill's non-reproducible branch, then write up what you ruled out and what evidence would settle it. Do not invent a fix for a bug you never saw.
 

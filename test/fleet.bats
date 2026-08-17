@@ -172,7 +172,7 @@ EOF
 }
 
 @test "a transcript that reads but doesn't parse marks its cells unavailable, not 'no PR'" {
-  # Readable is not parseable. /todd:fleet.md promises `unavailable` means the
+  # Readable is not parseable. todd-fleet/SKILL.md promises `unavailable` means the
   # transcript was missing OR unparseable, and `no PR` is a claim about a
   # transcript that was never actually read. Keeping the row is INV-2; the cells
   # are what degrade.

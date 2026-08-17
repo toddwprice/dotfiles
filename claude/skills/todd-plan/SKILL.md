@@ -1,14 +1,15 @@
 ---
-description: Plan a Linear ticket into ONE Linear comment carrying the human implementation plan, a Gherkin Behavior Spec whose Scenarios are the implementer's TDD checklist, and EARS invariants for the requirements that aren't behavior. Use when Todd says "/todd:plan FRG-1234", "plan this ticket", "write the spec for this ticket", or wants a plan an implementing agent can't misread. Richer sibling of `/todd:coder plan` — same Linear contract, plus grounded behavior scenarios. Then dispatches `/todd:plan-check` to a cold subagent and reports its verdict, so the plan arrives checked and stamped rather than waiting on Todd to run the check himself. Also where a failed check comes back — use when Todd says "resolve the blockers on FRG-1234", "fix what plan-check found", or re-runs this on a plan stamped `❌`. Takes `--dry-run`, `--no-gherkin`, `--no-check`.
+name: todd-plan
+description: Plan a Linear ticket into ONE Linear comment carrying the human implementation plan, a Gherkin Behavior Spec whose Scenarios are the implementer's TDD checklist, and EARS invariants for the requirements that aren't behavior. Use when Todd says "/todd-plan FRG-1234", "plan this ticket", "write the spec for this ticket", or wants a plan an implementing agent can't misread. Richer sibling of `/todd-coder plan` — same Linear contract, plus grounded behavior scenarios. Then dispatches `/todd-plan-check` to a cold subagent and reports its verdict, so the plan arrives checked and stamped rather than waiting on Todd to run the check himself. Also where a failed check comes back — use when Todd says "resolve the blockers on FRG-1234", "fix what plan-check found", or re-runs this on a plan stamped `❌`. Takes `--dry-run`, `--no-gherkin`, `--no-check`.
 ---
 
 You are writing Todd's implementation plan for one Linear ticket. Two audiences, one artifact: a
 human who needs to judge whether the approach is right, and an implementing agent that needs a
 checklist it cannot misread.
 
-## Why this exists and not just `/todd:coder plan`
+## Why this exists and not just `/todd-coder plan`
 
-`/todd:coder plan` writes good prose. Prose is where implementation goes wrong — "handle the edge
+`/todd-coder plan` writes good prose. Prose is where implementation goes wrong — "handle the edge
 case", "keep the existing behavior", "validate the input" all read fine and all leave the
 implementer guessing which edge case, which behavior, which input. Every one of those guesses is a
 place a plan silently fails.
@@ -28,7 +29,7 @@ falsifiable as Scenarios and don't pretend to be behavior. **Two layers, one cov
 Scenarios cover what the system *does*, Invariants cover what must stay *true*. A requirement that
 fits neither is still a blocker.
 
-`/todd:coder plan` stays exactly as it is. Use it for a one-file change where the ceremony costs
+`/todd-coder plan` stays exactly as it is. Use it for a one-file change where the ceremony costs
 more than it saves. Use this for anything an agent will implement unattended.
 
 ## Arguments
@@ -39,7 +40,7 @@ more than it saves. Use this for anything an agent will implement unattended.
 |---|---|---|
 | `--dry-run` | off | Print the full plan in chat. Post nothing to Linear. Still writes the local copy. |
 | `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail, `### Invariants`, and `### Not covered`, and drops the coverage table and the Gherkin block. Every phase still runs, including phases 6 and 7, so the plan still gets posted and checked. Escape hatch for a trivial ticket. |
-| `--no-check` | off | Skip phase 7 — post the plan and don't dispatch the cold check. The plan stays unstamped, so `/todd:loop` and `/todd:phase` will each run the check themselves before they'll touch it. For a caller whose own next step tests every claim the plan makes; see "Callers that pass `--no-check`" in phase 7. |
+| `--no-check` | off | Skip phase 7 — post the plan and don't dispatch the cold check. The plan stays unstamped, so `/todd-loop` and `/todd-phase` will each run the check themselves before they'll touch it. For a caller whose own next step tests every claim the plan makes; see "Callers that pass `--no-check`" in phase 7. |
 
 `--no-gherkin` used to drop `Not covered` too. It no longer does. Scope boundaries are the
 instruction an unattended run most needs and the cheapest one to write — a trivial ticket is
@@ -78,11 +79,11 @@ So:
   axon/dendra/astro. Rename it and non-app work loses its verify path entirely.
 - Exactly one plan comment per ticket. See "An existing plan" below.
 
-⚠️ **You are not the only writer, and the other one doesn't check.** `/todd:coder plan` on a ticket
+⚠️ **You are not the only writer, and the other one doesn't check.** `/todd-coder plan` on a ticket
 that already carries a plan comment adds a second one. Neither reader detects that — both say "a
 comment", singular, with no count and no stop — so the duplicate is silent everywhere until the
-next `/todd:plan` run trips the "more than one" branch in phase 0. `/todd:phase` reaches this
-unattended: its plan-staleness guard re-plans a stale plan by running `/todd:coder plan`, then runs
+next `/todd-plan` run trips the "more than one" branch in phase 0. `/todd-phase` reaches this
+unattended: its plan-staleness guard re-plans a stale plan by running `/todd-coder plan`, then runs
 `impl` in the same subagent, which then reads back whichever of the two comments comes first.
 
 Nothing you can fix from here — the guard belongs in `todd-coder`'s Plan Mode step 5, which needs
@@ -185,7 +186,7 @@ Entered only from phase 0, when the one plan comment carries a `❌ N blockers` 
 1 through 4 entirely** and rejoin the normal flow at phase 5. Everything in the plan that the check
 passed stays exactly as it is; you are here to close N specific findings and nothing else.
 
-**Why this isn't a re-plan.** `/todd:plan-check` reads the plan cold and refuses to fix a 🔴 on
+**Why this isn't a re-plan.** `/todd-plan-check` reads the plan cold and refuses to fix a 🔴 on
 purpose — a checker that quietly rewrites a blocker hides that the plan was wrong, and its fix would
 be a guess at what the planner meant. That reasoning does not apply to you. You *are* the planner:
 grounding a noun, writing the missing `@negative` Scenario, deriving a `# falsifies:` line are all
@@ -197,7 +198,7 @@ because it needed Todd.
 Two sources, in this order:
 
 1. **The stamp's `🔴 Open blockers` block**, in the plan comment. Always present on a `❌` stamp
-   written by the current `/todd:plan-check`.
+   written by the current `/todd-plan-check`.
 2. **`.claude/tmp/<branch-or-ticket>/plan-check-<TICKET>-findings.md`** — the full report, which
    also carries the 🔵 flags the stamp leaves out. Prefer it when it exists; a flag next to a
    blocker is often the same underlying problem and Todd can settle both in one answer.
@@ -220,7 +221,7 @@ and at pass 3 the loop is done — that's step 6's stop, not another revision.
 That's a stamp from before the blocker text was recorded. Do **not** infer what `C1` meant and do
 not re-derive it: your re-derivation may land on a different noun than the checker's did, and you
 would then close a blocker that is still open, with a stamp saying it's resolved. Offer Todd the two
-real options — re-run `/todd:plan-check <TICKET>` to regenerate the findings, or re-plan the ticket
+real options — re-run `/todd-plan-check <TICKET>` to regenerate the findings, or re-plan the ticket
 from scratch — and let him pick.
 
 ### Step 2 — Load the evidence, not the whole codebase
@@ -283,7 +284,7 @@ So a "leave it as written" goes into a `⚖️ Held by decision` block in the st
 - **[D7]** Section 2 is 526 lines. Todd ruled it isn't a split (pass 2).
 ```
 
-**One flag never reaches him: B1.** Brief length now resolves inside `/todd:plan-check` — it relocates
+**One flag never reaches him: B1.** Brief length now resolves inside `/todd-plan-check` — it relocates
 under ~500 words and auto-holds over it, marking the entry `(auto, pass N)`. That's why the B1 line
 above has no name against it. Two answers existed and the word count picks between them, so asking him
 was a line in every report for a call nobody had to make. If B1 *does* arrive as a 🔵 — an older stamp,
@@ -291,9 +292,9 @@ written before that changed — **decide it the same way and record it `(auto, �
 through it.** D7 is not the same and still is his: a long section 2 has no relocation available at any
 length, and what it asks is whether this is one ticket.
 
-`/todd:plan-check` reads that block, carries it forward verbatim into every later stamp, and raises
+`/todd-plan-check` reads that block, carries it forward verbatim into every later stamp, and raises
 nothing in it. **Prioritise the flags that carry `⚠️ book severity 🔴`** — those are the ones that will
-fail the plan the moment `/todd:phase` re-checks it under `--strict`, so a ruling now saves a lap
+fail the plan the moment `/todd-phase` re-checks it under `--strict`, so a ruling now saves a lap
 later.
 
 ### Step 5 — Apply each resolution to the plan, surgically
@@ -303,7 +304,7 @@ checker already accepted has to be re-checked for no reason, and drift is how a 
 regresses.
 
 **Fix the class, not the instance the checker named.** This is the difference between a two-lap fix
-and a nine-lap one, and it's the single most expensive mistake this phase can make. `/todd:plan-check`
+and a nine-lap one, and it's the single most expensive mistake this phase can make. `/todd-plan-check`
 now sweeps every instance before it reports, but a stamp written by an older run — or a finding you
 resolve narrowly — leaves the rest in place, and the next check finds the next one. That is literally
 what happened: FRG-1240 failed on E9 three passes running, on a different Scenario each time.
@@ -328,7 +329,7 @@ relocated it, and it will come back as a blocker one layer down.
 | Uncovered surface in `Verification` (D4) | Name the real command for that surface. Check it exists. |
 | 4+ open questions (B5) | Todd's answers collapse them into `Decisions`. If three or more are still open after he's answered, the ticket is under-specified — see step 6. |
 
-**Update the anchor file, always.** `/todd:plan-check` traces every concrete noun back to it, so a
+**Update the anchor file, always.** `/todd-plan-check` traces every concrete noun back to it, so a
 noun you ground here and don't record reads as ungrounded on the next check and comes straight back
 as the same blocker.
 
@@ -431,14 +432,14 @@ read whole files for this.
 | `build(:mission_draft)` | factory | `apps/axon/test/support/factory.ex:203` | 2026-08-08 |
 ```
 
-This is the one thing a later session cannot reconstruct. `/todd:plan-check` traces every concrete
+This is the one thing a later session cannot reconstruct. `/todd-plan-check` traces every concrete
 noun in the plan back to this file; without it, it can only check that a noun *looks* plausible,
 which is precisely the failure grounding exists to prevent. It costs you three lines and it is the
 difference between a check and a vibe. Write it even under `--dry-run` — especially under
 `--dry-run`, since that's when the plan is most likely to be revised before posting.
 
 **What you write here is provisional, and phase 5 reconciles it.** This matters more than it sounds:
-in 41 audited `/todd:plan-check` runs, C1 — "a concrete noun in section 2 isn't in the anchor file" —
+in 41 audited `/todd-plan-check` runs, C1 — "a concrete noun in section 2 isn't in the anchor file" —
 came back **10 times and was fixed zero times**, making grounding 46% of every blocker the checker has
 ever raised. The cause wasn't carelessness. It was this ordering: you finalize the anchor list *here*,
 in phase 2, and you don't write section 2 until *phase 4*. Every noun phase 4 introduces — a factory
@@ -482,7 +483,7 @@ block, say the Behavior Spec needs answers first, and stop. Don't ship a twelve-
 
 Section 1. This is what gets read to decide whether the approach is right, so it carries the
 *judgement* and nothing else — phase 4 carries the detail, the Behavior Spec carries the
-expectations. Six headings, **~300 words all in** — the same number `/todd:plan-check` B1 measures
+expectations. Six headings, **~300 words all in** — the same number `/todd-plan-check` B1 measures
 against, so aim at it rather than at a tighter target of your own. Same in both modes;
 `--no-gherkin` changes nothing here.
 
@@ -667,7 +668,7 @@ This is also where the implementer's gotchas live — the ones phase 3 kept out 
 one next to the thing it's about: a factory's real name under the file that needs it, a fixture's
 quirk under the module it belongs to. A gotcha in a list at the bottom gets read after the mistake.
 
-**Verification is required, and it is not the pre-push checklist.** `/todd:coder impl` knows exactly
+**Verification is required, and it is not the pre-push checklist.** `/todd-coder impl` knows exactly
 three verify commands — `mix test` for axon, `yarn lint && yarn test` for dendra,
 `uv run ruff check . && uv run pytest` for astro. For anything outside those three apps it has
 nothing: a tool under `.claude/`, a script in `bin/`, a terraform composition, a shared Python
@@ -862,7 +863,7 @@ often missing from a plan and the reason unattended runs wander.
 ## Phase 5 — The pre-post gate
 
 **This is not the plan review.** The full review — 43 checks across contract, brief, detail,
-invariants, and Gherkin — moved to `/todd:plan-check`, which reads the posted plan cold, the way
+invariants, and Gherkin — moved to `/todd-plan-check`, which reads the posted plan cold, the way
 the implementing agent will. Two reasons it belongs there and not here:
 
 - **It was a second copy of the rules.** Nearly every item in the old phase 5 restated something
@@ -905,12 +906,12 @@ the text it's grounding exists. This is the sweep that closes it.
 Do the sweep mechanically, not from memory — read section 2 back and pull the backticked identifiers
 out of it. The nouns that get missed are exactly the ones you were most confident about while writing.
 
-**Reconciling is not checking.** `/todd:plan-check` still traces every noun independently; you are not
+**Reconciling is not checking.** `/todd-plan-check` still traces every noun independently; you are not
 doing its job twice. It verifies the anchors are *true*; you're making sure the list is *complete*. A
 complete list of verified anchors is what turns its group C from a lap into a formality.
 
 Everything else — word counts, heading order, count reconciliation, coverage-table
-completeness, tag and comment presence, EARS form, scenario anti-patterns — is `/todd:plan-check`'s
+completeness, tag and comment presence, EARS form, scenario anti-patterns — is `/todd-plan-check`'s
 job. Don't do it twice.
 
 ---
@@ -920,9 +921,9 @@ job. Don't do it twice.
 **Write the local copies first**, always, including under `--dry-run`:
 
 - `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` — the plan body exactly as posted. Cheap
-  insurance against a failed Linear write, and what `/todd:plan-check --local` reads.
+  insurance against a failed Linear write, and what `/todd-plan-check --local` reads.
 - `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md` — the phase-2 anchor list. Not optional;
-  `/todd:plan-check` can't trace nouns without it.
+  `/todd-plan-check` can't trace nouns without it.
 
 **Post** with `mcp__claude_ai_Linear__save_comment` — new comment, or the existing comment id if
 phase 0 found one. Under `--dry-run`, post nothing and say so plainly.
@@ -976,7 +977,7 @@ still failing on findings you just closed. Replace the whole stamp, blocker bloc
 
 **Carry the pass number forward.** Take it from the stamp you're replacing and add nothing — the
 checker increments it. It's the only lap count the chain has, and at pass 3 it's what makes
-`/todd:plan-check` stop instead of failing the plan a fourth time. A revision that drops the counter
+`/todd-plan-check` stop instead of failing the plan a fourth time. A revision that drops the counter
 restarts the loop at pass 1 with none of its history, which is how ENA-443 reached nine.
 
 **Carry the `⚖️ Held by decision` block forward verbatim, and append to it** any ruling Todd made in
@@ -984,7 +985,7 @@ step 4, plus any B1 you decided for him there — that one marked `(auto, …)`.
 stamp that accumulates rather than being replaced. Drop it and every flag already settled comes back
 on the next check.
 
-🛑 **Never write a `✅ passed` stamp.** That stamp is `/todd:plan-check`'s to write and only after it
+🛑 **Never write a `✅ passed` stamp.** That stamp is `/todd-plan-check`'s to write and only after it
 has actually run the checks. Stamping your own revision as passed is precisely the laundering the
 checker refuses to do in the other direction, and it would walk an unchecked plan straight past
 every gate that reads the stamp. If a blocker is still open, say that in the revision line too:
@@ -1011,7 +1012,7 @@ phase 7 dispatches the check and its verdict is the last thing Todd reads. A rev
 need of a cold read than a fresh plan, not less: every line you touched, you touched because a
 checker told you it was wrong, and you are now the person most convinced those lines are fixed.
 
-**Why the check cannot run in this session.** `/todd:plan-check` works because it has never seen the
+**Why the check cannot run in this session.** `/todd-plan-check` works because it has never seen the
 reasoning that produced the plan — that's the entire argument at the top of that file. You have now
 spent a session deciding that `rooms.ex:181` is the right anchor and that the new `@boundary`
 Scenario says what it needs to. You are, at this moment, the worst available reader of exactly the
@@ -1029,10 +1030,10 @@ check and writes the closing line from its verdict. Under `--no-check` — and o
 here, in one line, as the last thing Todd reads:
 
 ```
-Unchecked (--no-check). Run `/todd:plan-check FRG-1234` before impl.
+Unchecked (--no-check). Run `/todd-plan-check FRG-1234` before impl.
 ```
 
-Under `--dry-run` that's `/todd:plan-check FRG-1234 --local`. Don't soften it into "you may want
+Under `--dry-run` that's `/todd-plan-check FRG-1234 --local`. Don't soften it into "you may want
 to" — an unchecked plan that reads well is exactly the artifact this whole command exists to stop
 shipping.
 
@@ -1075,7 +1076,7 @@ that ran.
 Change nothing else, and add nothing else:
 
 ````
-Read ~/.claude/commands/todd/plan-check.md and follow it exactly.
+Read ~/.claude/skills/todd-plan-check/SKILL.md and follow it exactly.
 
 Its $ARGUMENTS: <TICKET>
 
@@ -1088,7 +1089,7 @@ The Linear MCP tools may be deferred in your session — load them with ToolSear
 Return its phase-6 report verbatim, plus the stamp text you wrote.
 ````
 
-Read-the-file rather than `Skill(skill="todd:plan-check")` for one reason: `Read` is available to
+Read-the-file rather than `Skill(skill="todd-plan-check")` for one reason: `Read` is available to
 every agent and the `Skill` tool may not be. Following the file is what invoking it does anyway.
 
 ### Why the prompt has no fifth block
@@ -1107,7 +1108,7 @@ copy can differ from it, and then the check passed something nobody will read.
 
 ### The paths, and the silent failure they cause
 
-`/todd:plan-check` reads `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md` — **a relative path**,
+`/todd-plan-check` reads `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md` — **a relative path**,
 resolved against the subagent's cwd. Phase 0 may well have sent you to read code from the ticket's
 worktree while the session cwd stayed `main`, so the anchor file you wrote in phase 2 and the path a
 subagent resolves are routinely two different places.
@@ -1130,19 +1131,19 @@ fixes and flags in its words, then close with the line its verdict dictates:
 
 | Verdict returned | Closing line |
 |---|---|
-| `✅ passed` | ``Plan checked. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
-| `✅ passed with N advisories` | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd:loop <TICKET>`.`` — and list them, one line each. They're notes for the implementer, not open questions for Todd |
-| `⚠️ passed (ungrounded)` | Re-dispatch once with the path corrected. Still degraded → ``Plan checked, grounding unchecked — no anchor file found at <path>. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
-| `❌ N blockers` | Triage first — see below. Either you resolve them here and re-dispatch, or ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
+| `✅ passed` | ``Plan checked. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
+| `✅ passed with N advisories` | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd-loop <TICKET>`.`` — and list them, one line each. They're notes for the implementer, not open questions for Todd |
+| `⚠️ passed (ungrounded)` | Re-dispatch once with the path corrected. Still degraded → ``Plan checked, grounding unchecked — no anchor file found at <path>. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
+| `❌ N blockers` | Triage first — see below. Either you resolve them here and re-dispatch, or ``Blocked. Run `/todd-plan <TICKET>` to resolve the N blockers.`` |
 | `❌` at **pass 3** | Don't resolve, don't re-dispatch. ``Three passes haven't settled this.`` Then the one scoping question, and stop |
-| nothing usable — the dispatch failed | ``Posted and unchecked — the check didn't run. Run `/todd:plan-check <TICKET>`.`` |
+| nothing usable — the dispatch failed | ``Posted and unchecked — the check didn't run. Run `/todd-plan-check <TICKET>`.`` |
 
 **Report the `⚠️ book severity 🔴` flags whatever the verdict.** A 🔵 marked that way passes here and
-fails the moment `/todd:phase` re-checks the plan under `--strict`. Todd is looking at the plan right
+fails the moment `/todd-phase` re-checks the plan under `--strict`. Todd is looking at the plan right
 now; a lap from now he isn't. One line each.
 
-**On a pass, the next step is `/clear` and `/todd:loop <TICKET>` — and the `/clear` is half the
-instruction, not politeness.** `/todd:loop` runs a ticket to a reviewed PR across eight phases, and
+**On a pass, the next step is `/clear` and `/todd-loop <TICKET>` — and the `/clear` is half the
+instruction, not politeness.** `/todd-loop` runs a ticket to a reviewed PR across eight phases, and
 its own architecture note says why it can't do this for itself: a command cannot call `/clear`, so
 every phase runs in a dispatched subagent and the orchestrator deliberately holds almost nothing but
 the ticket id, the worktree path and each phase's one-line return. Start that orchestrator in the tail
@@ -1152,20 +1153,20 @@ context. A loop that compacts during its baz round has lost the thread. Todd pre
 only thing that actually empties the window, which is why the closing line asks for it by name rather
 than just naming the command.
 
-`/todd:loop` is the destination rather than `/todd:coder impl` because its phase 0 gates on the stamp
+`/todd-loop` is the destination rather than `/todd-coder impl` because its phase 0 gates on the stamp
 you just earned: `✅` and `⚠️` proceed, `❌` stops, and an unstamped plan makes it run the check
 itself. Sending Todd to `impl` skips the PR, the self-review, the manual test plan and the baz round —
 all work he'd then do by hand. `impl` stays the right call when he wants to drive it himself; it just
 isn't the default worth printing.
 
 A degraded pass goes to the same place. `⚠️` means grounding went unchecked, not that a check failed,
-and `/todd:loop` accepts it explicitly — so the handoff names the loop and the missing anchor file in
+and `/todd-loop` accepts it explicitly — so the handoff names the loop and the missing anchor file in
 the same breath, and Todd decides whether unchecked grounding is worth a re-plan before an unattended
 run.
 
 ### On `❌` — triage, then either fix it here or hand it back
 
-This used to be an unconditional stop: report the blockers, tell Todd to re-run `/todd:plan`, and let
+This used to be an unconditional stop: report the blockers, tell Todd to re-run `/todd-plan`, and let
 a fresh session reach phase 0B through the stamp. **That cost a manual keystroke per lap** — 52
 invocations for 24 tickets in the audited history — and it spent a full session rebuild (re-read the
 ticket, the plan, the anchors) on work this file already classifies as mechanical.
@@ -1175,7 +1176,7 @@ resolve this the same way?* Then:
 
 | Every blocker is **yours to fix** | Any blocker is **Todd's to answer** |
 |---|---|
-| Go to **phase 0B step 5** in this session. Fix them, sweep each class, update the anchor file, write `### Changed since the last plan`, replace the stamp, then **re-dispatch phase 7 once**. Report both verdicts — the first `❌` and what came back. | **Stop.** Report the blockers and close with ``Blocked. Run `/todd:plan <TICKET>`.`` Don't fix the mechanical ones on the way past either: he may answer the open one in a way that changes them. |
+| Go to **phase 0B step 5** in this session. Fix them, sweep each class, update the anchor file, write `### Changed since the last plan`, replace the stamp, then **re-dispatch phase 7 once**. Report both verdicts — the first `❌` and what came back. | **Stop.** Report the blockers and close with ``Blocked. Run `/todd-plan <TICKET>`.`` Don't fix the mechanical ones on the way past either: he may answer the open one in a way that changes them. |
 
 **Why this doesn't break the cold read.** The old rule conflated two things. "Don't *check* your own
 work" is right, and nothing here changes it — the check is a dispatched subagent both times, with no
@@ -1192,19 +1193,19 @@ is the cap, and the pass counter in the stamp enforces the rest.
 The old guard was "if the same blocker survives two passes, stop", and it could not fire: the checker
 kept finding the same *class* on a fresh *instance*, so no two passes ever named the same blocker.
 FRG-1240 went three laps on E9 that way; ENA-443 went nine. Two changes fix it, and both live in
-`/todd:plan-check` — it sweeps every instance of a class before reporting, and the stamp carries a pass
+`/todd-plan-check` — it sweeps every instance of a class before reporting, and the stamp carries a pass
 counter that stops the loop at three regardless of what the findings say. Your job here is to **not
 drop the counter** when you rewrite the stamp.
 
 ### Callers that pass `--no-check`
 
-Two commands invoke this one through `Skill(skill="todd:plan")` and then say, in their own text, not
+Two commands invoke this one through `Skill(skill="todd-plan")` and then say, in their own text, not
 to run the check — so they pass `--no-check` and phase 7 doesn't fire:
 
 | Caller | Why |
 |---|---|
-| `/todd:bug-next` step 9 | Plans the bug **before** the root cause is known, so ungrounded anchors are the expected output, not a defect. Its debugging step tests every claim the plan makes. A `❌` here would be noise, and it would sit on the ticket blocking `/todd:loop` and `/todd:phase` later. |
-| `/todd:devops-next` step 11 | Same shape, same reason. |
+| `/todd-bug-next` step 9 | Plans the bug **before** the root cause is known, so ungrounded anchors are the expected output, not a defect. Its debugging step tests every claim the plan makes. A `❌` here would be noise, and it would sit on the ticket blocking `/todd-loop` and `/todd-phase` later. |
+| `/todd-devops-next` step 11 | Same shape, same reason. |
 
 That's the flag's whole job: a caller whose next step *is* the check. It is not a way to skip the
 check because the plan looks fine — that judgement is the thing you are worst at making.
@@ -1233,7 +1234,7 @@ check because the plan looks fine — that judgement is the thing you are worst 
   dispatch comes back with a verdict, and the verdict is the checker's to give.
 - Never re-plan a ticket whose plan carries a `❌` stamp. That's phase 0B — surgery on the named
   blockers, with everything the check passed left alone.
-- Never write a `✅ passed` stamp. `/todd:plan-check` writes that, after running the checks. A
+- Never write a `✅ passed` stamp. `/todd-plan-check` writes that, after running the checks. A
   revision stamps itself as revised and unchecked.
 - Never leave a `❌` stamp on a plan you revised, and never close a blocker you had to guess the
   meaning of. A resolved-looking blocker that was never understood is worse than an open one.
@@ -1262,7 +1263,7 @@ check because the plan looks fine — that judgement is the thing you are worst 
   again. It's settled, whoever settled it.
 - **Never ask Todd how long the brief should be.** B1 resolves without him: relocate under ~500 words,
   auto-hold over it, record it `(auto, …)`. Two answers, and the word count picks between them.
-- One ticket per invocation. A whole project with milestones is `/todd:linear-project-setup`.
+- One ticket per invocation. A whole project with milestones is `/todd-linear-project-setup`.
 
 ## Failure handling
 
@@ -1272,7 +1273,7 @@ check because the plan looks fine — that judgement is the thing you are worst 
 | Linear MCP blocked or truncating | Fall back to `linctl issue get $TICKET --json`. |
 | Multiple existing plan comments | Stop and report. Todd picks. |
 | Plan carries a `❌` stamp | Phase 0B. Resolve the named blockers; don't re-plan. |
-| `❌` stamp names only check ids, no blocker text and no findings file | Stop. Offer to re-run `/todd:plan-check <TICKET>` for the findings, or to re-plan from scratch. Never infer what a bare `C1` meant. |
+| `❌` stamp names only check ids, no blocker text and no findings file | Stop. Offer to re-run `/todd-plan-check <TICKET>` for the findings, or to re-plan from scratch. Never infer what a bare `C1` meant. |
 | A blocker Todd can't answer | It stays in `Questions / Blockers`, the revision stamp says it's still open, and the report says the plan is still blocked. Never convert it to an `(assumed)` Decision to make the count work. |
 | The same **check id** fires on two consecutive passes | The resolution didn't take, or you fixed one instance of a class. Sweep the class, and say in the report that this is round two on the same finding. Keyed on the check id, not the blocker text — a class that resurfaces on a new line is the case the old identity-keyed guard missed entirely. |
 | Three passes and it still won't settle | Stop. The pass counter in the stamp is the cap; name the one unresolved thing as a scoping question for Todd. |
@@ -1280,16 +1281,16 @@ check because the plan looks fine — that judgement is the thing you are worst 
 | Can't ground more than about half the anchors | The ticket is under-specified. Post the brief and the detail block with the blockers, and say the Behavior Spec needs answers first. Don't ship a spec built on guesses. |
 | More than 3 blockers survive the phase-2 ranking | The ticket is under-specified. Post the brief and the detail block, name the three that matter most, and stop. Don't ship a twelve-question plan. |
 | Section 2 runs past ~400 lines | Post it, and say in the report that the ticket looks like two or three. Never trim the detail to hit a number. |
-| Section 1 runs past ~300 words | Relocate the detail into section 2 — that's the fix, at any length up to ~500 words. Past ~500, relocating is a re-plan: post the brief as written, and don't ask Todd which he'd prefer. `/todd:plan-check` records it `(auto, …)` so it's settled once. |
+| Section 1 runs past ~300 words | Relocate the detail into section 2 — that's the fix, at any length up to ~500 words. Past ~500, relocating is a re-plan: post the brief as written, and don't ask Todd which he'd prefer. `/todd-plan-check` records it `(auto, …)` so it's settled once. |
 | `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
-| Phase 7's subagent errors, times out, or returns no verdict | The plan is posted and unchecked. Say exactly that and give Todd `/todd:plan-check <TICKET>`. Never infer the verdict from your own read of the plan. |
+| Phase 7's subagent errors, times out, or returns no verdict | The plan is posted and unchecked. Say exactly that and give Todd `/todd-plan-check <TICKET>`. Never infer the verdict from your own read of the plan. |
 | The check comes back `⚠️ passed (ungrounded)` | You probably passed the wrong tmp directory — phase 2 always writes the anchor file. Re-dispatch once with the absolute path corrected. Still degraded → report it as degraded, and say grounding went unchecked. |
 | The check comes back `❌`, every blocker mechanical | Resolve them here via phase 0B step 5, sweeping each class, then re-dispatch once. Report both verdicts. |
-| The check comes back `❌`, any blocker needs Todd | Relay the blockers verbatim and close with `/todd:plan <TICKET>`. Don't fix the mechanical ones on the way past — his answer may change them. |
-| The check comes back `✅ passed with N advisories` | A pass. Report the advisories as impl notes, one line each, and hand off to `/todd:loop`. Don't re-plan to clear them. |
+| The check comes back `❌`, any blocker needs Todd | Relay the blockers verbatim and close with `/todd-plan <TICKET>`. Don't fix the mechanical ones on the way past — his answer may change them. |
+| The check comes back `✅ passed with N advisories` | A pass. Report the advisories as impl notes, one line each, and hand off to `/todd-loop`. Don't re-plan to clear them. |
 | The second dispatch in this session also fails | Stop. One in-session fix-and-re-check, then it's Todd's. |
 | The stamp says pass 3 and it still failed | Stop looping. Name the one thing that won't settle as a scoping question. Never a fourth lap. |
 | A check id comes back that an earlier pass recorded as resolved | The resolution didn't take. Say which instance you fixed, which one it found, and why the fix didn't cover it — don't just fix it harder. |
-| A flag is marked `⚠️ book severity 🔴` | Report it even on a pass, and get Todd's ruling now. It fails under `--strict`, which is what `/todd:phase` runs. |
+| A flag is marked `⚠️ book severity 🔴` | Report it even on a pass, and get Todd's ruling now. It fails under `--strict`, which is what `/todd-phase` runs. |
 
 Now plan $ARGUMENTS.

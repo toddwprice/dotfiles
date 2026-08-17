@@ -276,7 +276,7 @@ while IFS="$US" read -r sid cwd kind status state waiting_for started name; do
     IFS="$US" read -r branch pr title last_ts <<<"$tdata" || true
     # Readable is not parseable. A transcript that yielded none of the four
     # fields told us nothing, so claiming `branch none, no PR` off it states a
-    # fact never read — and /todd:fleet.md promises `unavailable` means the
+    # fact never read — and /todd-fleet/SKILL.md promises `unavailable` means the
     # transcript was missing OR unparseable. Marking the cells and keeping the
     # row IS INV-2. It can't misfire on real data: 0 of 3028 transcripts on
     # disk yield zero fields.

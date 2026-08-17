@@ -5,8 +5,8 @@ items off with evidence.
 
 Two callers read this file, and they must not drift:
 
-- **`/todd:coder`** — authors the plan in Plan Mode, runs this in Impl Mode.
-- **`/todd:loop`** — runs this as its own phase, after the self-review fixes land and
+- **`/todd-coder`** — authors the plan in Plan Mode, runs this in Impl Mode.
+- **`/todd-loop`** — runs this as its own phase, after the self-review fixes land and
   before the PR flips to ready.
 
 Everything below was verified against the running stack on 2026-08-11. Where a command
@@ -218,7 +218,7 @@ Consequences, all verified:
 
 - **An absolute path outside the session cwd is rejected.** Including the job tmp dir.
 - **You cannot write evidence into `$WT` when `$WT` isn't the session cwd.** This is the
-  normal case for `/todd:loop`, which runs from `~/dscout-wt/main` but implements in
+  normal case for `/todd-loop`, which runs from `~/dscout-wt/main` but implements in
   `~/dscout-wt/<ticket>`. Don't fight it — write into the session checkout.
 - **Parent directories are not created for you** — a nested filename fails `ENOENT`.
   `mkdir -p` first, from Bash.
@@ -264,7 +264,7 @@ never as a substitute for the stills.
 The Manual Test Plan is *defined* in the `## 📋 Implementation Plan` comment and its
 results go in a **separate** `## 🧪 Manual Verification` comment.
 
-Rewriting the plan comment to tick its boxes is tempting and wrong: `/todd:plan-check`
+Rewriting the plan comment to tick its boxes is tempting and wrong: `/todd-plan-check`
 writes its stamp as the **last line** of that comment, that slot already has more than one
 writer, and a rewrite that drops the stamp silently converts a checked plan into an
 unchecked one. It also destroys the record of what was originally asked for. Re-render the

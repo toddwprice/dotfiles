@@ -1,5 +1,5 @@
 ---
-name: todd:prompt-debugger
+name: todd-prompt-debugger
 description: This skill should be used when the user asks to "debug a prompt", "diagnose a prompt issue", "investigate a prompt failure", "fix a prompt", "prompt regression", "reproduce a prompt bug", "create an eval for an issue", "write a scorer", or "why is the prompt failing". It also applies when the user provides a Linear issue ID (e.g. CNVS-421) and mentions prompt problems, or wants to trace a prompt failure from a Linear ticket through Braintrust logs to a verified fix.
 ---
 
@@ -22,7 +22,7 @@ script that proves the fix works.
 There are two front doors. A ticket is **not** required.
 
 **1a — Starting from a trace/room-id (the common case).** Todd's loop usually begins at one bad
-dscript session, triaged with `todd:trace-dys` — often before any ticket exists. If you were handed a
+dscript session, triaged with `todd-trace-dys` — often before any ticket exists. If you were handed a
 room-id + span id(s) + a one-line diagnosis (that's exactly what `trace-dys`'s handoff passes
 forward), **skip the `linctl` fetch entirely**: you already have the failing span(s) and the failure
 description. Carry forward from the handoff:

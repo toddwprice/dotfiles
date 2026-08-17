@@ -19,7 +19,7 @@ current directory's remote; the queries below are org-wide so they work from any
    gh search prs --review-requested=@me --state=open --json number,title,repository,author,updatedAt \
      --limit 30
    ```
-   Tag each `needs_reply`. These are the same surface as `todd:open-prs`.
+   Tag each `needs_reply`. These are the same surface as `todd-open-prs`.
 
 2. **My open PRs** (do they need a nudge — failing CI, or review comments to answer):
    ```bash

@@ -1,5 +1,5 @@
 ---
-name: todd:trace-dys
+name: todd-trace-dys
 description: >
   Diagnose a single DYS / dscript supervisor session from a chat URL, room id, or localhost link.
   Use this WHENEVER Todd points at one dscript conversation and asks what went wrong — phrasings like
@@ -11,7 +11,7 @@ description: >
   ?state= blob in the URL, pulls the Braintrust trace for that chat, runs a staleness check before
   diagnosing, and explains the supervisor-select decision.
   This is the LIGHTWEIGHT single-session triage — distinct from `braintrust-prompt-review` (which
-  diffs prompt versions in a PR) and `todd:prompt-debugger` (which drives a full Linear-ticket → eval
+  diffs prompt versions in a PR) and `todd-prompt-debugger` (which drives a full Linear-ticket → eval
   investigation). Reach for those when the job is a prompt diff or a ticketed eval; reach for THIS
   when Todd just wants to know what happened in one chat.
 allowed-tools: Bash(bt:*), Bash(python3:*), Bash(base64:*), Bash(jq:*), Read, Grep, Glob, Agent, WebFetch
@@ -72,7 +72,7 @@ bt sql "SELECT id, span_attributes, input, output, error, created, metadata
 ```
 
 If the id doesn't match those metadata keys, widen the search (`WHERE input LIKE '%<id>%'` or scan
-recent rows by timestamp) — see `todd:prompt-debugger`'s `references/log-search-strategies.md` for
+recent rows by timestamp) — see `todd-prompt-debugger`'s `references/log-search-strategies.md` for
 patterns. Pull full span detail for the supervisor decision:
 
 ```bash
@@ -119,12 +119,12 @@ Report tightly:
    `chat.py`, a gate in `study_setup.py`) — without over-prescribing.
 4. **Staleness verdict** — fresh, or stale + re-repro suggested.
 
-If Todd wants it rendered, offer `todd:html_report` for a shareable writeup.
+If Todd wants it rendered, offer `todd-html-report` for a shareable writeup.
 
-## Step 6 — Handoff to `todd:prompt-debugger` (start-from-trace, no ticket needed)
+## Step 6 — Handoff to `todd-prompt-debugger` (start-from-trace, no ticket needed)
 
 If the diagnosis points at a prompt that needs a real fix + eval, hand off to
-`todd:prompt-debugger` — and hand it enough that it can start **from this trace**, without waiting on
+`todd-prompt-debugger` — and hand it enough that it can start **from this trace**, without waiting on
 a Linear ticket (its Step 1 has a start-from-trace door built for exactly this). Pass forward:
 
 - **Room/chat id** and the **Braintrust project id** you resolved in Step 3.

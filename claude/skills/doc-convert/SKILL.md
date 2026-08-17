@@ -44,7 +44,7 @@ pdftotext "/abs/path/report.pdf" - | head
 open "/abs/path/report.pdf"
 ```
 
-This is the same recipe as the `todd:html_report --pdf` path. For PNG@2x, swap `--print-to-pdf=...` for `--screenshot=out.png --force-device-scale-factor=2 --window-size=1200,900`.
+This is the same recipe as the `todd-html-report --pdf` path. For PNG@2x, swap `--print-to-pdf=...` for `--screenshot=out.png --force-device-scale-factor=2 --window-size=1200,900`.
 
 ## Common mistakes
 

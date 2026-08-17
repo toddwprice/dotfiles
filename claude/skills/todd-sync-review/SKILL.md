@@ -1,5 +1,5 @@
 ---
-name: todd:sync-review
+name: todd-sync-review
 description: >
   Sync a hand-edited PR-review HTML/MD artifact into a postable review JSON and publish it inline to
   GitHub. Use this WHENEVER Todd has edited one of his review files and wants it posted — phrasings
@@ -9,8 +9,8 @@ description: >
   to match the html so the comments are inline". It reads the edited artifact (HTML, MD, or JSON),
   reconciles it against any original JSON, rebuilds the review payload in the publish schema
   (body + event + inline file:line comments + thread replies), shows it, and on approval posts via
-  `gh api`. This is the OUTBOUND companion to `todd:describe_pr` / `todd:pr_review` (which generate
-  the artifact) — distinct from `todd:address-comments`, which is for INBOUND comments others left.
+  `gh api`. This is the OUTBOUND companion to `todd-describe-pr` / `todd-pr-review` (which generate
+  the artifact) — distinct from `todd-address-comments`, which is for INBOUND comments others left.
 allowed-tools: Bash(gh:*), Bash(git:*), Bash(cat:*), Bash(mktemp:*), Bash(ls:*), Read, Write, Grep, Glob
 ---
 
@@ -50,8 +50,8 @@ finding is gone; if it added one, include it.
 ## Step 3 — Build the review payload (publish schema)
 
 > **Canonical spec:** `~/.claude/skills/_shared/review-payload.md` — the schema, anchoring rules, the
-> Answer-only rule, and the posting commands live there and are shared with `todd:pr_review` and
-> `todd:address-comments`. Follow it; the summary below must stay in sync with it.
+> Answer-only rule, and the posting commands live there and are shared with `todd-pr-review` and
+> `todd-address-comments`. Follow it; the summary below must stay in sync with it.
 
 Map findings to the GitHub reviews schema:
 
@@ -132,4 +132,4 @@ the synced JSON path.
 
 - HTML is the source of truth — never silently re-introduce a finding Todd deleted.
 - If Todd only wants the JSON regenerated (not posted), stop after Step 3 and hand him the file.
-- If the artifact doesn't exist yet, that's `todd:describe_pr`'s job first — point him there.
+- If the artifact doesn't exist yet, that's `todd-describe-pr`'s job first — point him there.

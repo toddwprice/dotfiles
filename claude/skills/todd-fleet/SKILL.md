@@ -1,4 +1,5 @@
 ---
+name: todd-fleet
 allowed-tools: Bash(~/.claude/scripts/fleet:*), Bash(jq:*)
 description: Show which Claude Code sessions are blocked on me or have stalled. A read-only digest of the live fleet — state, ticket, branch, newest PR, how long each has been open and how long its transcript has been quiet. Use when Todd asks "what's waiting on me", "what sessions are blocked", "which agents are stuck", "show me the fleet", or wants to know which of his 8-15 open sessions needs attention. Sends nothing to any session.
 ---

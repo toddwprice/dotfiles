@@ -1,5 +1,11 @@
 ---
-description: Run full astro verification (compile, lint, tach, modularity, AGENTS.md compliance)
+name: astro-fixup
+description: >
+  Use when verifying the astro app (`apps/astro` — the Python ML/AI service) is clean, before pushing,
+  opening a PR, or handing work off — phrasings like "verify astro", "run the astro checks", "astro
+  fixup", "is astro green", "did I break astro", "check astro before I push", or after any change under
+  `apps/astro`. Covers compile, ruff, tach modularity, tests, and `apps/astro/AGENTS.md` compliance as
+  one ordered gate. Prefer this over the generic `astro:astro-verify` skill for dscout work.
 ---
 
 Run the following verification steps for the astro application, in order. Stop and report if any step fails.

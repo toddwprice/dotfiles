@@ -1,6 +1,6 @@
 ---
-name: todd:coder
-description: Use when the user runs /todd:coder with a Linear ticket ID to either create an implementation plan or execute TDD implementation. Expects args in the form "[plan|impl] TICKET_ID" (e.g., "plan DEV-5" or "impl DEV-5"). Works seamlessly in git worktrees.
+name: todd-coder
+description: Use when the user runs /todd-coder with a Linear ticket ID to either create an implementation plan or execute TDD implementation. Expects args in the form "[plan|impl] TICKET_ID" (e.g., "plan DEV-5" or "impl DEV-5"). Works seamlessly in git worktrees.
 ---
 
 # Todd Coder
@@ -10,17 +10,17 @@ Bridges Linear tickets with disciplined TDD implementation. Reads a ticket, crea
 
 ## Usage
 ```
-/todd:coder plan DEV-5                 # Create implementation plan from ticket
-/todd:coder impl DEV-5                 # Implement ticket using TDD
-/todd:coder impl DEV-5 --orchestrated  # Non-interactive mode, dispatched by /todd:phase
+/todd-coder plan DEV-5                 # Create implementation plan from ticket
+/todd-coder impl DEV-5                 # Implement ticket using TDD
+/todd-coder impl DEV-5 --orchestrated  # Non-interactive mode, dispatched by /todd-phase
 ```
 
 ## Argument Parsing
 
 Parse the args string to extract:
-- **command**: First word, must be `plan` or `impl`. If it's anything else — including a free-form request like "diagnose this trace" or "start on the subtickets and work in parallel" — this is the wrong tool. Don't force-fit it: say plainly that `/todd:coder` only does `plan`/`impl` on a single ticket, name what the user actually seems to want, and stop. (Real runs have mis-fed this a Braintrust-trace prompt and a "work in parallel" instruction; a clean bounce beats improvising an orchestration this skill isn't built for.)
+- **command**: First word, must be `plan` or `impl`. If it's anything else — including a free-form request like "diagnose this trace" or "start on the subtickets and work in parallel" — this is the wrong tool. Don't force-fit it: say plainly that `/todd-coder` only does `plan`/`impl` on a single ticket, name what the user actually seems to want, and stop. (Real runs have mis-fed this a Braintrust-trace prompt and a "work in parallel" instruction; a clean bounce beats improvising an orchestration this skill isn't built for.)
 - **TICKET_ID**: Second word (e.g., `DEV-5`). If missing, show usage and stop.
-- **`--orchestrated`** (optional flag, anywhere in the args): run non-interactively for an orchestrator like `/todd:phase`. See "Orchestrated Mode" below — the short version is: never block on a prompt, still post to Linear, auto-commit on success, and end with the structured status block.
+- **`--orchestrated`** (optional flag, anywhere in the args): run non-interactively for an orchestrator like `/todd-phase`. See "Orchestrated Mode" below — the short version is: never block on a prompt, still post to Linear, auto-commit on success, and end with the structured status block.
 
 ## Worktree Detection
 
@@ -33,12 +33,12 @@ Before starting work, check if running in a git worktree:
 
 ## Plan Mode
 
-Writes the prose plan below. For anything an agent will implement unattended, `/todd:plan TICKET`
+Writes the prose plan below. For anything an agent will implement unattended, `/todd-plan TICKET`
 is the better door — same Linear comment, same first line, plus a Gherkin Behavior Spec whose
 Scenarios become the implementer's checklist and whose steps are grounded in verified symbols.
 This mode stays for the small stuff where that ceremony costs more than it saves.
 
-One asymmetry worth knowing before you pick a door: **this mode emits a `### 🧪 Manual Test Plan` (step 5) and `/todd:plan` does not yet.** On a `/todd:plan` plan, the browser checklist gets derived from the Behavior Spec's UI-observable Scenarios instead — legitimate, because those were authored before the code — or skipped with a reason. If hand-verification matters on a ticket, that's a point in this mode's favour.
+One asymmetry worth knowing before you pick a door: **this mode emits a `### 🧪 Manual Test Plan` (step 5) and `/todd-plan` does not yet.** On a `/todd-plan` plan, the browser checklist gets derived from the Behavior Spec's UI-observable Scenarios instead — legitimate, because those were authored before the code — or skipped with a reason. If hand-verification matters on a ticket, that's a point in this mode's favour.
 
 ### Steps
 
@@ -46,7 +46,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 2. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
-3. **Explore codebase — delegate the search, keep only the findings**: Broad exploration is a fan-out that bloats context fast, and when this skill runs as a subagent under `/todd:phase` its context budget directly feeds implementation quality. So dispatch read-only search agents rather than grepping and reading files inline: `dev-flow:codebase-locator` to find the relevant files, `dev-flow:codebase-analyzer` to trace how they work, `dev-flow:codebase-pattern-finder` for conventions and examples to model. Run independent lookups in parallel (multiple Agent calls in one message), and fold their **returned findings** — not their raw file dumps — into the plan. You're trying to understand:
+3. **Explore codebase — delegate the search, keep only the findings**: Broad exploration is a fan-out that bloats context fast, and when this skill runs as a subagent under `/todd-phase` its context budget directly feeds implementation quality. So dispatch read-only search agents rather than grepping and reading files inline: `dev-flow:codebase-locator` to find the relevant files, `dev-flow:codebase-analyzer` to trace how they work, `dev-flow:codebase-pattern-finder` for conventions and examples to model. Run independent lookups in parallel (multiple Agent calls in one message), and fold their **returned findings** — not their raw file dumps — into the plan. You're trying to understand:
    - What files/modules are involved
    - Existing patterns, utilities, and functions to reuse
    - Test structure and conventions
@@ -90,11 +90,11 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 3. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
-4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`. If that comment also carries a `## 🥒 Behavior Spec` section — written by `/todd:plan` — then **the Scenarios are the acceptance criteria**: the prose above them is context, the Gherkin is the contract. Say which kind of plan you found when you report.
+4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`. If that comment also carries a `## 🥒 Behavior Spec` section — written by `/todd-plan` — then **the Scenarios are the acceptance criteria**: the prose above them is context, the Gherkin is the contract. Say which kind of plan you found when you report.
 
    **Note whether it carries a `### 🧪 Manual Test Plan`** and how many `MT` items. That's what step 7 drives in a browser. A plan without one means nothing gets hand-verified — say so plainly rather than letting it pass unremarked, and don't invent a checklist now to cover the gap (a plan authored after the code is written tests what you built, not what was asked for).
 
-   **Read its plan-check stamp too.** `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
+   **Read its plan-check stamp too.** `/todd-plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
    - `❌` → **failed**. A `**🔴 Open blockers**` block below the stamp line carries each finding in full prose — read those, not a code list. (Stamps written before 2026-08-13 may instead end in a bare `see C1, E11, B5`, and those codes are all there is.)
    - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
    - `✅ passed with N advisories` → **passed**, and there is work in the stamp for you. See below.
@@ -103,7 +103,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
    Report the stamp state in the same breath as which kind of plan you found: `❌` → say so plainly and name the blockers, since the plan is known-wrong and whatever it says about them shouldn't be trusted; unchecked → say the plan was never checked; `⚠️` → say it passed but grounding went unchecked; `✅` → say it passed. **This gate surfaces, it doesn't refuse** — a failed or unchecked plan neither stops you nor earns a new status code (`plan-required` and the rest are what orchestrators parse). You may proceed on a bad plan; you may never proceed *silently* on one.
 
-   **Advisories are instructions to you, and the stamp is the only place they exist.** A `**⚪ Advisories**` block lists gaps `/todd:plan-check` judged too thin to fail the plan over — most often a Scenario with no `# falsifies:`, or a `### Verification` block that never says what a green run won't prove. The plan passed *on the understanding that you'd close them*, so read the block before you write a test and treat each item as part of the work:
+   **Advisories are instructions to you, and the stamp is the only place they exist.** A `**⚪ Advisories**` block lists gaps `/todd-plan-check` judged too thin to fail the plan over — most often a Scenario with no `# falsifies:`, or a `### Verification` block that never says what a green run won't prove. The plan passed *on the understanding that you'd close them*, so read the block before you write a test and treat each item as part of the work:
 
    - **`[E9]` — a Scenario with no `# falsifies:`.** Derive it before you write that test: name the implementation line you'd break and the assertion that goes red. If you can't, the Scenario asserts nothing testable — say so in your summary rather than writing a test that passes either way.
    - **`[E14]` — a measured constant with no provenance.** Derive the number at runtime from the same source instead of hard-coding it, or the test rots on the next dump restore.
@@ -116,7 +116,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
    - If plan found: proceed to implementation using the plan as guide.
    - If no plan found: evaluate the ticket's complexity.
      - **Straightforward** (single file, clear scope, low risk): proceed directly. Tell the user you're skipping the plan phase and why.
-     - **Complex** (multi-file, ambiguous requirements, high risk): stop and suggest running `/todd:coder plan TICKET_ID` first.
+     - **Complex** (multi-file, ambiguous requirements, high risk): stop and suggest running `/todd-coder plan TICKET_ID` first.
 
 6. **Implement incrementally with TDD**: **REQUIRED: Use superpowers:test-driven-development** as the inner loop. How much structure wraps it depends on scope (from step 5) — slicing engages only when the work warrants it:
 
@@ -155,9 +155,9 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 7. **Run the Manual Test Plan in a browser**: Once the tree is green and every slice is committed, execute the ticket's `### 🧪 Manual Test Plan` against the local stack and check the items off with evidence.
 
-   **Read `~/.claude/skills/_shared/manual-verification.md` and follow it.** That file is the procedure — stack readiness, the sign-in sequence, where evidence may be written, and how the results get posted. It's shared with `/todd:loop` so the two can't drift, and it carries the verified commands. Don't improvise a browser recipe from memory; several of the obvious shortcuts are known-broken (`ddu` from a non-interactive shell, `#session_email`, an absolute screenshot path).
+   **Read `~/.claude/skills/_shared/manual-verification.md` and follow it.** That file is the procedure — stack readiness, the sign-in sequence, where evidence may be written, and how the results get posted. It's shared with `/todd-loop` so the two can't drift, and it carries the verified commands. Don't improvise a browser recipe from memory; several of the obvious shortcuts are known-broken (`ddu` from a non-interactive shell, `#session_email`, an absolute screenshot path).
 
-   The short version of what it makes you do: confirm the running containers are bound to **this** worktree before believing anything you see, sign in at `/auth/sign_in` with `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` (falling back to the seeded dev user), run each browser-verifiable item, screenshot pass *and* fail alike, and post a separate `## 🧪 Manual Verification` comment — never rewriting the plan comment, whose last line is `/todd:plan-check`'s stamp.
+   The short version of what it makes you do: confirm the running containers are bound to **this** worktree before believing anything you see, sign in at `/auth/sign_in` with `TEST_USER_EMAIL` / `TEST_USER_PASSWORD` (falling back to the seeded dev user), run each browser-verifiable item, screenshot pass *and* fail alike, and post a separate `## 🧪 Manual Verification` comment — never rewriting the plan comment, whose last line is `/todd-plan-check`'s stamp.
 
    **Skip this step entirely in `--orchestrated` mode** — see "Orchestrated Mode" for why — and report `MANUAL: deferred (orchestrated)`.
 
@@ -185,12 +185,12 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 ## Orchestrated Mode (`--orchestrated`)
 
-When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, there's no human on the other end of the chat, and the orchestrator only needs a compact result — not the full narrated report. In this mode:
+When `/todd-phase` (or any orchestrator) dispatches this skill into a subagent, there's no human on the other end of the chat, and the orchestrator only needs a compact result — not the full narrated report. In this mode:
 
 - **Never block on a question.** Every interactive prompt gets a safe default (see the impl steps). If you genuinely can't proceed, stop with a `fatal` status rather than waiting on input that will never come.
 - **Still post to Linear.** The plan and summary comments are the durable record the orchestrator (and Todd) rely on — keep posting them exactly as in normal mode. This is why the orchestrator dispatches *this skill* rather than running raw TDD: the Linear paper trail comes for free.
 - **Commit automatically** — per slice on the incremental path, once on the fast path (see step 11); never push.
-- **Skip the manual verification browser run (step 7).** Report `MANUAL: deferred (orchestrated)` and let the orchestrator own it. Two reasons, both real: `compose.yaml` pins `name: dscout`, so **every worktree shares one stack** — `/todd:phase` running four tickets in parallel would have four agents `--force-recreate`-ing that single stack at each other, and none of them could trust what it saw. And `/todd:loop` changes the code *after* impl returns, in its address-the-self-review phase, so evidence captured here would be of code that no longer exists by the time the PR opens. Verification belongs after the last edit, which only the orchestrator knows.
+- **Skip the manual verification browser run (step 7).** Report `MANUAL: deferred (orchestrated)` and let the orchestrator own it. Two reasons, both real: `compose.yaml` pins `name: dscout`, so **every worktree shares one stack** — `/todd-phase` running four tickets in parallel would have four agents `--force-recreate`-ing that single stack at each other, and none of them could trust what it saw. And `/todd-loop` changes the code *after* impl returns, in its address-the-self-review phase, so evidence captured here would be of code that no longer exists by the time the PR opens. Verification belongs after the last edit, which only the orchestrator knows.
 - **End with the structured status block** (below) as your final message — that's what the orchestrator parses.
 
 ## Comment Format Templates
@@ -270,7 +270,7 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 ```
 
 ## Error Handling
-- **Invalid args**: Show usage: `/todd:coder [plan|impl] TICKET_ID`
+- **Invalid args**: Show usage: `/todd-coder [plan|impl] TICKET_ID`
 - **Ticket not found**: Report error with the TICKET_ID attempted
 - **Linear MCP unavailable**: Tell user to check Linear plugin configuration
 - **No plan for complex ticket**: Suggest running plan mode first, explain why
@@ -286,7 +286,7 @@ When `/todd:phase` (or any orchestrator) dispatches this skill into a subagent, 
 - Detect and report the worktree path and branch
 - Check for uncommitted changes before starting
 - Commit each verified slice during impl (incremental path) or once at the end (fast path) — no "offer to commit" prompt
-- Never push to origin — leave that to the orchestrator (`/todd:phase`)
+- Never push to origin — leave that to the orchestrator (`/todd-phase`)
 - Use `git status` to report changes when done
 
 **Example output:**

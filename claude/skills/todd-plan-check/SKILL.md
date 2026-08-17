@@ -1,5 +1,6 @@
 ---
-description: Review a posted implementation plan cold, the way the implementing agent will read it. Fixes what is mechanically wrong, flags what needs Todd's judgement, and stamps the plan as checked so `impl` and `loop` can gate on it. Use when Todd says "/todd:plan-check FRG-1234", "check the plan", "is this plan ready", or after any `/todd:plan` or `/todd:coder plan` run. Takes `--local`, `--report-only`, `--strict`.
+name: todd-plan-check
+description: Review a posted implementation plan cold, the way the implementing agent will read it. Fixes what is mechanically wrong, flags what needs Todd's judgement, and stamps the plan as checked so `impl` and `loop` can gate on it. Use when Todd says "/todd-plan-check FRG-1234", "check the plan", "is this plan ready", or after any `/todd-plan` or `/todd-coder plan` run. Takes `--local`, `--report-only`, `--strict`.
 ---
 
 You are reviewing an implementation plan you did not write, for a ticket you have not planned.
@@ -7,7 +8,7 @@ That is the entire point. Do not re-plan it.
 
 ## Why this is a separate command
 
-`/todd:plan` used to check itself. It was worse at it for two reasons that don't go away with a
+`/todd-plan` used to check itself. It was worse at it for two reasons that don't go away with a
 better checklist:
 
 **The author is the worst reader of their own plan.** The session that wrote "the guard rejects the
@@ -16,7 +17,7 @@ looked unambiguous to the session that wrote it — that's *why* it shipped. You
 reasoning, which is the only qualification that matters here.
 
 **A 23-item checklist carried through planning degrades the planning.** The checks mostly restated
-rules `/todd:plan` already states at the point of authoring. Carrying a second copy through six
+rules `/todd-plan` already states at the point of authoring. Carrying a second copy through six
 phases cost attention that phase 2 needed for grounding. The rules stayed where they're actionable;
 the verification moved here, where it's the only job.
 
@@ -34,7 +35,7 @@ finding, not a rewrite.
 |---|---|---|
 | `--local` | off | Read `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` instead of Linear. For checking a `--dry-run` plan before it's posted. Writes fixes back to the local file only. |
 | `--report-only` | off | Change nothing. Report every finding, including the ones you would have fixed. Use when Todd wants to see what the plan got wrong, not a corrected plan. |
-| `--strict` | off | `FLAG` findings **and advisories** are treated as `BLOCKER`. Nothing passes with an open judgement call or a carried-forward note. This is what `/todd:phase` runs, so it's the regime a plan headed for an unattended phase run has to survive. |
+| `--strict` | off | `FLAG` findings **and advisories** are treated as `BLOCKER`. Nothing passes with an open judgement call or a carried-forward note. This is what `/todd-phase` runs, so it's the regime a plan headed for an unattended phase run has to survive. |
 
 No ticket id → show usage and stop.
 
@@ -42,7 +43,7 @@ No ticket id → show usage and stop.
 
 | Level | Means | You do |
 |---|---|---|
-| 🔴 **BLOCKER** | The plan is unusable or will be silently misread. A broken contract string, an ungrounded anchor asserted as fact, a requirement with no coverage. | **Do not fix. Report, fail the check, and hand it back to `/todd:plan`.** These need a decision, and a checker that quietly rewrites them hides the fact that the plan was wrong. |
+| 🔴 **BLOCKER** | The plan is unusable or will be silently misread. A broken contract string, an ungrounded anchor asserted as fact, a requirement with no coverage. | **Do not fix. Report, fail the check, and hand it back to `/todd-plan`.** These need a decision, and a checker that quietly rewrites them hides the fact that the plan was wrong. |
 | 🟡 **FIX** | Mechanically wrong with exactly one correct answer. A miscounted `Scope`, a missing `@slice-N` tag on a scenario that obviously belongs to slice 2, a heading out of order. | **Fix it in place, silently.** List what you fixed in the report; don't ask. |
 | 🔵 **FLAG** | Judgement. Two scenarios that might be duplicates, a `Risks` entry that reads like a gotcha, a section 2 that's long enough to suggest the ticket should split. | **Report it. Change nothing.** Todd decides. Under `--strict` these become BLOCKERs. |
 | ⚪ **ADVISORY** | Not a fourth severity — a **disposition of a 🔴** that makes the plan thin rather than wrong, within the limits in "An advisory is not a blocker" below. | **Report it, change nothing, and don't fail the plan.** It goes in the stamp so `impl` picks it up as a note. Under `--strict` these become BLOCKERs too. |
@@ -110,9 +111,9 @@ Under `--strict`, nothing is advisory-eligible. Advisories become blockers, same
 **The plan.** `mcp__claude_ai_Linear__list_comments` for the ticket, find the comment whose first
 line is `## 📋 Implementation Plan`.
 
-- **None** → nothing to check. Report that, and say whether `/todd:plan` or `/todd:coder plan` has
+- **None** → nothing to check. Report that, and say whether `/todd-plan` or `/todd-coder plan` has
   been run. Stop.
-- **More than one** → 🔴 BLOCKER, and stop. This is the known duplicate-writer bug: `/todd:coder
+- **More than one** → 🔴 BLOCKER, and stop. This is the known duplicate-writer bug: `/todd-coder
   plan` posts a new comment every time without checking for an existing one, so a ticket can carry
   two plans while both readers say "a comment", singular. Report both comment ids and their
   timestamps, say which one `list_comments` returns first (that's the one `impl` will read), and
@@ -176,7 +177,7 @@ failing one.
 --json` if the MCP truncates. You need the original requirements to check coverage — a plan can't
 tell you what it left out. Pull linked Notion and Figma context too, for the same reason.
 
-**The anchors.** `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md`, written by `/todd:plan`
+**The anchors.** `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md`, written by `/todd-plan`
 phase 2. This is your evidence base for every noun in the plan.
 
 **Missing anchor file** → you are checking in **degraded mode**. Say so in the report, at the top,
@@ -221,7 +222,7 @@ to correct a string you could have corrected here — DEVOPS-2244 spent one that
 | A4 | Exactly one plan comment on the ticket (resolved in phase 0). | 🔴 and stop. Which duplicate survives is Todd's call, and picking one could discard the plan he wants |
 
 **Fixing A1–A3 does not make them silent.** Report each one in the 🟡 section, and say in the
-report that the contract was broken — `/todd:plan` phase 5 is supposed to gate exactly these four
+report that the contract was broken — `/todd-plan` phase 5 is supposed to gate exactly these four
 before posting, so an A-group fix here means that gate didn't run. That's worth Todd knowing even
 though it cost him nothing this time.
 
@@ -286,7 +287,7 @@ auto-decide to it.
 
 ## Phase 3 — Group C: grounding
 
-This is the check that only exists because phase 2 of `/todd:plan` wrote the anchor file, and it's
+This is the check that only exists because phase 2 of `/todd-plan` wrote the anchor file, and it's
 the one most likely to find something real.
 
 Walk every concrete noun the plan names — module, function, file path, factory, fixture, config
@@ -325,14 +326,14 @@ one `Grep` establishing whether it's real:
 
 **Still never add to the anchor file.** That rule stands and it isn't in tension with the tiers: the
 advisory *reports* what you verified without *recording* it as grounded, because grounding is
-`/todd:plan` phase 2's job and a row you wrote would claim the planning session did work it didn't.
+`/todd-plan` phase 2's job and a row you wrote would claim the planning session did work it didn't.
 Phase 0B appends the row when it resolves the advisory.
 
 **Say which side of the fence a C1 came from.** "The noun exists at `rooms.ex:181`, it just wasn't
 recorded" and "there is no such function" both used to print as `[C1] ungrounded noun`, and they need
 completely different work from the planner. Name the file:line when you found one.
 
-**When every C1 is on the advisory side, name the cause.** `/todd:plan` writes `anchors-<TICKET>.md`
+**When every C1 is on the advisory side, name the cause.** `/todd-plan` writes `anchors-<TICKET>.md`
 in its phase 2 but authors section 2 in its phase 4, so every noun phase 4 introduces was structurally
 guaranteed to miss the anchor file — that ordering, not carelessness, is what produced ten C1s and
 zero fixes. Its phase 5 now carries a reconciliation gate. A plan still arriving with unrecorded
@@ -429,7 +430,7 @@ Plan: <linear comment url>
 
 🟡 Fixed
 - [A1] First line was `## 📋 Plan`. Rewrote it to `## 📋 Implementation Plan` — note that
-  /todd:plan's phase-5 contract gate should have caught this.
+  /todd-plan's phase-5 contract gate should have caught this.
 - [B4] Scope said 5 files; Files to Modify lists 7. Corrected to 7.
 - [C2] `build(:mission_draft)` cited at factory.ex:203; it's at :211. Line corrected.
 - [E5] Deferred count was 1; table has 2 deferred rows. Corrected.
@@ -443,14 +444,14 @@ Plan: <linear comment url>
 - [E13] "Rejoin after clean disconnect" and "expired presence allows rejoin" may be
   the same scenario in different words.
 - [D7] Section 2 is 520 lines across 3 slices. This looks like two tickets.
-  ⚠️ book severity 🔴 — this one fails under `--strict`, which is what `/todd:phase` runs.
+  ⚠️ book severity 🔴 — this one fails under `--strict`, which is what `/todd-phase` runs.
 
 ⚠️ [E11] also fired on pass 1. The resolution didn't take — last pass it was slice 2 only,
    and the scenario added there asserts a refusal the target can't observe.
 
 ⚖️ Held by decision: B6 (the flag question, pass 1), B1 (brief length, auto, pass 1).
 
-Blocked. Run `/todd:plan FRG-1234` to resolve the 2 blockers.
+Blocked. Run `/todd-plan FRG-1234` to resolve the 2 blockers.
 ```
 
 Under `--report-only` the 🟡 section becomes **Would fix** and nothing is written anywhere.
@@ -464,7 +465,7 @@ Under `--report-only` the 🟡 section becomes **Would fix** and nothing is writ
   take. Put it *below* the finding sections so it reads as commentary on them.
 - **`⚖️ Held by decision`** — one line, findings already settled and never re-argued: Todd's rulings,
   plus any over-ceiling B1 you decided yourself, marked `(auto, …)`.
-- **`⚠️ book severity 🔴` on a 🔵** — a flag that would fail under `--strict`. `/todd:phase` runs
+- **`⚠️ book severity 🔴` on a 🔵** — a flag that would fail under `--strict`. `/todd-phase` runs
   `--strict`, so without this a plan passes here and red-lines there, and Todd finds out a lap later.
   Seen on DEVOPS-2241: `✅ passed · 4 flagged`, two of them book-🔴.
 
@@ -473,24 +474,24 @@ and it depends only on whether there are blockers:
 
 | Outcome | Last line |
 |---|---|
-| ≥1 🔴 blocker, and this is pass 1 or 2 | ``Blocked. Run `/todd:plan <TICKET>` to resolve the N blockers.`` |
+| ≥1 🔴 blocker, and this is pass 1 or 2 | ``Blocked. Run `/todd-plan <TICKET>` to resolve the N blockers.`` |
 | ≥1 🔴 blocker, and this is **pass 3** | ``Three passes haven't settled this. Not a fourth lap — <the one thing that's actually unresolved>, and that's a scoping call.`` |
-| 0 blockers, ≥1 advisory | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
-| 0 blockers, 0 advisories | ``Plan checked. Next: `/clear`, then `/todd:loop <TICKET>`.`` |
+| 0 blockers, ≥1 advisory | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
+| 0 blockers, 0 advisories | ``Plan checked. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
 
 **Pass 3 is a stop, not a failure.** By the third check the loop has demonstrated it can't settle the
 thing on its own, and a fourth lap is the shape that took ENA-443 to nine. Name the one finding that
 keeps coming back, say what two resolutions of it would produce different plans, and hand Todd that
 question. Don't list all the blockers again — he's read them twice.
 
-`/todd:plan` is the right destination for a blocker and this command is not, for the reason the top
+`/todd-plan` is the right destination for a blocker and this command is not, for the reason the top
 of this file gives: fixing a 🔴 takes the planner's knowledge, and you don't have it. You found that
 the plan asserts an ungrounded noun; the planner is the one who can go ground it or turn it into a
 real question. Sending Todd anywhere else — or just listing the blockers and stopping — leaves a
 failed plan sitting on the ticket with nothing driving it to a fix.
 
-**On a pass, `/todd:loop` is the destination and the `/clear` is part of the instruction.** The stamp
-you just wrote is exactly what `/todd:loop` phase 0 gates on — `✅` and `⚠️` proceed, `❌` stops, and an
+**On a pass, `/todd-loop` is the destination and the `/clear` is part of the instruction.** The stamp
+you just wrote is exactly what `/todd-loop` phase 0 gates on — `✅` and `⚠️` proceed, `❌` stops, and an
 unstamped plan makes it run this check itself — so a passed plan is a loop-ready ticket, not just an
 `impl`-ready one. The `/clear` matters because a loop cannot empty its own window: it holds the ticket
 id, the worktree path and one line per phase precisely so it doesn't compact mid-flow, and starting it
@@ -498,16 +499,16 @@ in a session that has just read a plan, a ticket and an anchor file hands it the
 context to begin from. Todd's keystroke is the only thing that fixes that, so ask for it by name.
 
 A degraded pass gets the same handoff. `⚠️ passed (ungrounded)` is a pass with grounding unchecked,
-which `/todd:loop` accepts explicitly — say both things in the one line and let him decide whether to
+which `/todd-loop` accepts explicitly — say both things in the one line and let him decide whether to
 re-plan first.
 
-**One exception: when a runner invoked you inline, the handoff isn't yours to write.** `/todd:loop`
+**One exception: when a runner invoked you inline, the handoff isn't yours to write.** `/todd-loop`
 phase 0 runs this command on an unstamped plan and then reads the stamp itself; telling it to `/clear`
 and start the loop it is already running is noise. Invoked that way, end on the verdict and the stamp
 and let the caller drive.
 
 Don't soften it into "you may want to". A `❌` blocks `loop` and `phase`, but a bare
-`/todd:coder impl` will still build it (see "Wiring this into the rest of the chain"), so a failed
+`/todd-coder impl` will still build it (see "Wiring this into the rest of the chain"), so a failed
 plan nobody re-plans is a plan that can still ship.
 
 **Then write the stamp**, unless `--report-only`. The last line of the plan comment, after a `---`:
@@ -533,7 +534,7 @@ or, on failure — and on failure the stamp **carries the blockers themselves**,
 
 ```markdown
 ---
-*Plan check: ❌ 2 blockers — 2026-08-13 · pass 2 of 3 · resolve with `/todd:plan FRG-1234`*
+*Plan check: ❌ 2 blockers — 2026-08-13 · pass 2 of 3 · resolve with `/todd-plan FRG-1234`*
 
 **🔴 Open blockers**
 - **[C1]** `Axon.Rooms.reject_join/2` is named in slice 1, is not in the anchor file, and does
@@ -546,7 +547,7 @@ or, on failure — and on failure the stamp **carries the blockers themselves**,
 - **[B6]** The flag question in `Questions / Blockers` — Todd ruled it stays as written (pass 1).
 ```
 
-**The `⚖️ Held by decision` block is Todd's, with one exception.** `/todd:plan` phase 0B writes it
+**The `⚖️ Held by decision` block is Todd's, with one exception.** `/todd-plan` phase 0B writes it
 when he rules on a 🔵. You **read** it (phase 0), you **carry it forward verbatim** into every stamp
 you write, and you never raise what's in it. Dropping the block is how a settled question comes
 back — it is the only reason B1 could be raised ten times.
@@ -569,14 +570,14 @@ call Todd made from one you made for him.
 command has, and a `✅` that loses it means the next failure starts over at pass 1.
 
 **Why the full text and not just `see C1, E11, B5`:** the session that resolves these is a fresh
-`/todd:plan` run that never saw your report. `C1` tells it a noun was ungrounded and not *which*
+`/todd-plan` run that never saw your report. `C1` tells it a noun was ungrounded and not *which*
 noun, so it would have to re-derive your finding from scratch — and a re-derivation that comes out
 differently silently resolves the wrong thing. Linear is the only store both sessions are
 guaranteed to share; the tmp directory is per-worktree and Todd may re-plan from anywhere. One line
 per blocker, copied verbatim from the report, is what makes the loop work.
 
 Write each blocker the way the report does: the check id in bold, then what's wrong, then what it
-means. `/todd:plan` reads this block; keep it parseable by a human and an LLM, not by a regex.
+means. `/todd-plan` reads this block; keep it parseable by a human and an LLM, not by a regex.
 
 **Rules for the stamp:**
 
@@ -586,13 +587,13 @@ means. `/todd:plan` reads this block; keep it parseable by a human and an LLM, n
 - Replace any previous stamp rather than appending a second one. One stamp, always the latest.
 - **The `🔴 Open blockers` and `⚪ Advisories` blocks are part of the stamp**, so they get replaced
   wholesale too — and a passing run *removes* the blocker list. A plan that now passes must not still
-  be carrying last run's blockers; `/todd:plan` would walk Todd through issues that are already fixed.
+  be carrying last run's blockers; `/todd-plan` would walk Todd through issues that are already fixed.
 - **`⚖️ Held by decision` is the one block you never replace — you append to it.** Everything else in
   the stamp is this run's output; that block is the accumulated record of what has been settled, and
   it has to survive every run or the settled thing comes back. Copy it forward verbatim and keep the
   `(pass N)` markers so its age is visible. The **only** entry you add yourself is an over-ceiling B1,
-  marked `(auto, pass N)`; everything else in there is Todd's and arrives via `/todd:plan` phase 0B.
-- **You are not the only writer of this slot.** `/todd:plan` phase 0B, after resolving blockers,
+  marked `(auto, pass N)`; everything else in there is Todd's and arrives via `/todd-plan` phase 0B.
+- **You are not the only writer of this slot.** `/todd-plan` phase 0B, after resolving blockers,
   replaces the stamp with `*Plan revised <date> to resolve N blockers (C1, E11, B5) — re-check
   required.*`. Expect to find one and replace it like any other stamp — but **read it first**: the
   ids it names are the blockers your previous run raised. Any of them you raise *again* is a
@@ -608,7 +609,7 @@ means. `/todd:plan` reads this block; keep it parseable by a human and an LLM, n
 - `.claude/tmp/<branch-or-ticket>/plan-check-<TICKET>-findings.md` — the **full report**: blockers,
   advisories, what you fixed, what you flagged. Stable filename, so a later session can open it
   without globbing for a timestamp. This is the long form of what the stamp summarizes —
-  `/todd:plan` prefers it when it's there, because it also carries the 🔵 flags, which the stamp
+  `/todd-plan` prefers it when it's there, because it also carries the 🔵 flags, which the stamp
   deliberately doesn't. Write it even under `--report-only`; a report-only run is exactly when Todd
   wants the findings kept without the plan being touched.
 
@@ -643,16 +644,16 @@ had the checker telling Todd something false on every run.
 | Call site | What it does with a `❌` |
 |---|---|
 | `commands/todd/loop.md:67` | **Stops the loop.** An unstamped plan makes it run this command with `--strict` inline first. |
-| `skills/todd-phase/SKILL.md:174` | **Won't dispatch impl.** Returns `STATUS: recoverable` — deliberately not `plan-required`, which would re-dispatch `plan` and post a duplicate comment. It also runs this command with `--strict` after any `/todd:coder plan`, which is what catches the duplicate (A4). |
+| `skills/todd-phase/SKILL.md:174` | **Won't dispatch impl.** Returns `STATUS: recoverable` — deliberately not `plan-required`, which would re-dispatch `plan` and post a duplicate comment. It also runs this command with `--strict` after any `/todd-coder plan`, which is what catches the duplicate (A4). |
 | `skills/todd-coder/SKILL.md:103` | **Surfaces loudly but does not refuse.** "This gate surfaces, it doesn't refuse." |
 
 Two consequences worth naming in a report rather than assuming Todd remembers:
 
-- **A bare `/todd:coder impl <TICKET>` is the hole.** It's the one path that will build a plan this
+- **A bare `/todd-coder impl <TICKET>` is the hole.** It's the one path that will build a plan this
   command failed. When you return a `❌`, say that `loop` and `phase` are blocked and a direct `impl`
   is not.
-- **`/todd:phase` runs `--strict`, and `/todd:plan` phase 7 doesn't.** So a plan you pass with 🔵
-  flags or advisories can red-line the moment `/todd:phase` re-checks it — a guaranteed extra lap that
+- **`/todd-phase` runs `--strict`, and `/todd-plan` phase 7 doesn't.** So a plan you pass with 🔵
+  flags or advisories can red-line the moment `/todd-phase` re-checks it — a guaranteed extra lap that
   this run had every piece of information to prevent. That's why the report marks a flag
   `⚠️ book severity 🔴`: it tells Todd which of today's flags are tomorrow's blockers, while he's
   still looking at the plan.
@@ -668,7 +669,7 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
 - Never fix a 🔴. Fixing it hides that the plan was wrong, and your fix is a guess. (A1–A3 are not
   exceptions to this — they're 🟡 now, because a heading is a string with one right answer.)
 - Never fix by deleting. Relocate, or report.
-- Never add to the anchor file. Grounding is phase 2 of `/todd:plan`'s job, and re-grounding here
+- Never add to the anchor file. Grounding is phase 2 of `/todd-plan`'s job, and re-grounding here
   would report as checked something that was never verified during planning. Reporting a C1 advisory
   with the `file:line` you found is not adding to it.
 - **Never report one instance of a class you didn't sweep.** If E9 fires, every Scenario gets checked;
@@ -686,7 +687,7 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
 - Never post a second comment. One plan comment, one stamp, inside it.
 - Never report a pass in degraded mode without saying grounding went unchecked.
 - Never change the first line of the plan comment, or either section heading.
-- Never end a failed check without sending Todd to `/todd:plan <TICKET>`. A blocker list with no
+- Never end a failed check without sending Todd to `/todd-plan <TICKET>`. A blocker list with no
   next command is where the loop stops. The one exception is pass 3, where the next step is a scoping
   question and not another lap.
 - Never record a blocker as a bare check id. The stamp carries the finding in words, or the session

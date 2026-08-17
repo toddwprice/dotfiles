@@ -3,20 +3,20 @@
 # pr-review-queue — the PRs GitHub is waiting on me to review. It starts a
 # background review agent per PR and prints the line it ran, one per PR:
 #
-#   claude --bg '/todd:pr_review 27615'
+#   claude --bg '/todd-pr-review 27615'
 #
 # Launching is the default; there's no copy-paste step. --print-only goes back
 # to printing and running nothing, which is what you want when something
 # downstream is going to consume the lines.
 #
-# Know what one invocation does: bare `/todd:pr_review` is the command's posting
+# Know what one invocation does: bare `/todd-pr-review` is the command's posting
 # mode, so each agent submits its review to GitHub on its own. Typing
 # `pr-review-queue` publishes a review on every PR in the queue, on other
 # people's PRs, with nobody reading them first. That is the intended behavior
 # here — the whole point is not hand-driving a queue of reviews — but it isn't a
 # dry run, and there's no undo short of deleting the reviews on GitHub.
 #
-# `-c '/todd:pr_review --html'` is the read-first version: each agent renders a
+# `-c '/todd-pr-review --html'` is the read-first version: each agent renders a
 # local HTML artifact and posts nothing, and you submit the ones you want.
 # Reach for it when the queue is unfamiliar or you want to eyeball the output.
 #
@@ -26,7 +26,7 @@
 # PRs a live background agent is already reviewing are left out, so running
 # this twice doesn't relaunch a review that's still going. Only `claude --bg`
 # sessions are visible to that check — an interactive session where you typed
-# /todd:pr_review yourself carries no recoverable prompt, so it won't suppress
+# /todd-pr-review yourself carries no recoverable prompt, so it won't suppress
 # anything. --include-running turns the filter off.
 #
 # stdout still carries nothing but the command lines, so it pipes cleanly:
@@ -55,7 +55,7 @@ LAUNCH_UNAVAILABLE=false
 # and the --command help for what that means before changing it. Only the first
 # word is used to match in-flight sessions, so adding a flag here (`--html`)
 # rides along harmlessly there.
-CMD="/todd:pr_review"
+CMD="/todd-pr-review"
 
 # Where the in-flight check reads from. Both are overridable so the filter can
 # be exercised against fixtures — see the test harness note further down.
@@ -84,9 +84,9 @@ Options:
                          `| sh` launches everything a second time.
                          --dry-run is an alias.
   -c, --command CMD      Slash command to run per PR (default:
-                         /todd:pr_review, the posting mode — every agent
+                         /todd-pr-review, the posting mode — every agent
                          submits its review to GitHub itself. Pass
-                         -c '/todd:pr_review --html' to render each review
+                         -c '/todd-pr-review --html' to render each review
                          locally and post nothing, and submit them yourself.)
       --raw              Emit the bare `<command> <number>` without the
                          `claude --bg '...'` wrapper. That form is slash-command
@@ -104,8 +104,8 @@ Examples:
   pr-review-queue -n 3                # only the 3 most recent
   pr-review-queue -p                  # just show me the queue, launch nothing
   pr-review-queue -p -n 5 | pbcopy    # top 5, straight to the clipboard
-  pr-review-queue -c '/todd:pr_review --html'   # render locally, post nothing
-  pr-review-queue --raw               # bare /todd:pr_review N lines
+  pr-review-queue -c '/todd-pr-review --html'   # render locally, post nothing
+  pr-review-queue --raw               # bare /todd-pr-review N lines
   pr-review-queue -a                  # every repo, qualified refs
   pr-review-queue --include-running   # don't hide in-flight reviews
   claude agents                       # check on what this started
@@ -137,9 +137,9 @@ done
 [[ "$LIMIT" =~ ^[0-9]+$ && "$LIMIT" -gt 0 ]] || die "--limit must be a positive number (got '$LIMIT')"
 [[ -z "$REPO" || "$REPO" == */* ]] || die "--repo must look like OWNER/NAME (got '$REPO')"
 
-# --raw emits `/todd:pr_review 27615` — slash-command text you paste into a
+# --raw emits `/todd-pr-review 27615` — slash-command text you paste into a
 # session, not a program a shell can find. Launching it would try to exec a
-# file at /todd:pr_review, so --raw is print-only by construction.
+# file at /todd-pr-review, so --raw is print-only by construction.
 if [[ "$RAW" == true ]]; then
   LAUNCH=false
 fi
@@ -280,11 +280,11 @@ fi
 
 if [[ -n "$agents_json" ]]; then
   # The command as it shows up in a launch prompt is the first word of $CMD, so
-  # `-c '/todd:pr_review --html'` still matches an intent of
-  # `/todd:pr_review 27713 --html`.
+  # `-c '/todd-pr-review --html'` still matches an intent of
+  # `/todd-pr-review 27713 --html`.
   cmd_token="${CMD%% *}"
 
-  # Auto-generated job names render "/todd:pr_review" as "pr review", so the
+  # Auto-generated job names render "/todd-pr-review" as "pr review", so the
   # name fallback drops the leading slash and the namespace, and lets either an
   # underscore or a space join the words.
   loose_word="${cmd_token#/}"
@@ -445,7 +445,7 @@ while IFS= read -r ref; do
   #               is fed by a here-string, so without this the first launch
   #               swallows every remaining ref: the loop runs exactly once and
   #               that one agent gets the prompt
-  #               "/todd:pr_review --html 27615\n27616\n27617". Observed, not
+  #               "/todd-pr-review --html 27615\n27616\n27617". Observed, not
   #               theoretical — it spawned a real agent with that prompt.
   #   >&2         keeps `claude`'s own startup chatter off our stdout, so the
   #               command-lines-only contract survives launch mode.

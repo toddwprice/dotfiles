@@ -1,9 +1,10 @@
 ---
+name: todd-open-prs
 allowed-tools: Bash(gh search prs:*), Bash(gh pr view:*), Bash(gh pr checks:*), Bash(git remote:*), Bash(git -C:*), Bash(ls:*), Bash(find:*), Bash(date:*), AskUserQuestion, Agent, Read
-description: Pull the PRs awaiting my review (review requested of me, not yet reviewed), show a triaged list with CI status / diff size / files changed / author / brief summary, let me pick which to review, then fan out a background `/todd:pr_review` subagent per pick — generating HTML+JSON artifacts and STOPPING before posting. Use when Todd wants to see "what PRs need my review", "my review queue", "open PRs assigned to me", "what's waiting on me", or wants to batch-review the PRs requesting his review. Takes an optional time window arg (e.g. `7d`, `14d`, `all`); defaults to the last 7 days.
+description: Pull the PRs awaiting my review (review requested of me, not yet reviewed), show a triaged list with CI status / diff size / files changed / author / brief summary, let me pick which to review, then fan out a background `/todd-pr-review` subagent per pick — generating HTML+JSON artifacts and STOPPING before posting. Use when Todd wants to see "what PRs need my review", "my review queue", "open PRs assigned to me", "what's waiting on me", or wants to batch-review the PRs requesting his review. Takes an optional time window arg (e.g. `7d`, `14d`, `all`); defaults to the last 7 days.
 ---
 
-You are running Todd's open-PR review-queue routine. The goal: pull the PRs awaiting Todd's review, present a triaged list, let Todd select which to review, then dispatch one background `/todd:pr_review` subagent per selected PR — each producing review artifacts and stopping **before** posting anything to GitHub.
+You are running Todd's open-PR review-queue routine. The goal: pull the PRs awaiting Todd's review, present a triaged list, let Todd select which to review, then dispatch one background `/todd-pr-review` subagent per selected PR — each producing review artifacts and stopping **before** posting anything to GitHub.
 
 `$ARGUMENTS` is an optional time window: `7d`, `5d`, `14d`, `30d`, a bare number of days (`10`), or `all` (no date limit). **Default is `7d`** when `$ARGUMENTS` is empty.
 
@@ -62,7 +63,7 @@ Ask via `AskUserQuestion` (multiSelect) which PRs to review now. Each option lab
 
 ## Step 5 — Resolve repo context per selected PR
 
-`/todd:pr_review` reads local files and runs `gh` against the current repo, so each subagent must operate in the right checkout:
+`/todd-pr-review` reads local files and runs `gh` against the current repo, so each subagent must operate in the right checkout:
 
 - **PRs in `dscout/dscout`** run in the current working directory (the monorepo) — no special handling.
 - **PRs in another repo** (e.g. `dscout/claude-plugins`): find the local checkout and have the subagent `cd` into it first, so `gh pr view <n>` resolves the correct repo (NOT a same-numbered PR in the monorepo) and file reads hit the right tree. Locate it:
@@ -79,7 +80,7 @@ git -C <candidate> remote -v
 Spawn **one background `general-purpose` Agent per selected PR**, all in a single message so they run concurrently. Each agent prompt MUST:
 
 1. State the repo context: the working directory / checkout path, and which `owner/repo` the PR lives in (so `gh` resolves correctly). For non-monorepo PRs, instruct it to `cd` into the local checkout first and verify `gh pr view <n>` shows the expected PR.
-2. Invoke the skill named `todd:pr_review` via the Skill tool, passing **`<N> --html`** as the argument. The `--html` flag is required, not decorative — `/todd:pr_review`'s *default* mode posts the review to GitHub itself, and `--html` is what puts it in render-and-hold mode. Drop the flag and this command starts firing unreviewed verdicts at teammates' PRs.
+2. Invoke the skill named `todd-pr-review` via the Skill tool, passing **`<N> --html`** as the argument. The `--html` flag is required, not decorative — `/todd-pr-review`'s *default* mode posts the review to GitHub itself, and `--html` is what puts it in render-and-hold mode. Drop the flag and this command starts firing unreviewed verdicts at teammates' PRs.
 3. **Do NOT post anything to GitHub.** Stop at artifact generation (HTML + JSON). Do not run `gh api .../reviews`. Todd reviews the artifacts first.
 4. Include the PR's title/author and the main risk surface (from Step 2) as context, and — if CI was red — instruct it to assess whether the failures are substantive vs. transient and fold that into the verdict.
 5. Report back concisely: (a) the VERDICT, (b) absolute paths to the HTML and JSON artifacts, (c) top 3–5 findings (severity + one line each), (d) the exact `gh api` submit command the skill generated (printed, NOT executed).

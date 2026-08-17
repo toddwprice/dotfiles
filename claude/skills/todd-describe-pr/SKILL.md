@@ -1,11 +1,12 @@
 ---
+name: todd-describe-pr
 allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr list:*), Bash(gh api:*), Bash(mkdir:*), Bash(open:*), Bash(date:*), Write, Read, Agent
-description: Render a PR as a self-contained HTML artifact — verdict banner, key-numbers row, narrative summary, full diff, severity-coded annotation cards beneath each file, optional side-by-side prompt diff and comparison-table panels, and a Q&A section — to help Todd manually review or to compose with `/todd:pr_review`. Pass the PR number as $ARGUMENTS. Does NOT post anything to GitHub; this is a visualization to support a human review, not an autonomous verdict.
+description: Render a PR as a self-contained HTML artifact — verdict banner, key-numbers row, narrative summary, full diff, severity-coded annotation cards beneath each file, optional side-by-side prompt diff and comparison-table panels, and a Q&A section — to help Todd manually review or to compose with `/todd-pr-review`. Pass the PR number as $ARGUMENTS. Does NOT post anything to GitHub; this is a visualization to support a human review, not an autonomous verdict.
 ---
 
 You are producing a self-contained HTML page that lets Todd review a pull request visually. The page renders the actual diff with **severity-coded annotation cards** placed beneath each file's diff, plus a verdict banner, an at-a-glance stat row, a narrative summary, and (when relevant) specialized panels for prompt diffs, term-list comparisons, and self-answered Q&A. It opens in the browser when done.
 
-This command is **autonomous and visual** — its job is to *describe* the PR so Todd can review it, not to publish a verdict. If Todd wants the autonomous-verdict flow, that's `/todd:pr_review`. Do **not** post comments or reviews from this command.
+This command is **autonomous and visual** — its job is to *describe* the PR so Todd can review it, not to publish a verdict. If Todd wants the autonomous-verdict flow, that's `/todd-pr-review`. Do **not** post comments or reviews from this command.
 
 Arguments: `$ARGUMENTS` is a PR number (e.g. `25604`). If empty, default to the PR for the current branch (`gh pr view --json number -q .number`).
 
@@ -32,9 +33,9 @@ If the diff is very large (>2000 lines or >25 files), dispatch sub-agents in par
 
 ## Step 2 — Annotate
 
-> **Pre-supplied findings (composition seam).** If the caller has already done analysis and is supplying findings (this is how `/todd:pr_review` composes with this command — see its Step 7), **skip the fresh analysis below** and use the supplied findings directly. The schema is the same. Move straight to Step 3.
+> **Pre-supplied findings (composition seam).** If the caller has already done analysis and is supplying findings (this is how `/todd-pr-review` composes with this command — see its Step 7), **skip the fresh analysis below** and use the supplied findings directly. The schema is the same. Move straight to Step 3.
 
-Walk the diff and attach findings to the **file** they relate to (annotations are placed beneath each file's diff, so per-line precision isn't required — the annotation body can reference a specific line by number for readers who want to look). Lean on the heuristics in `/todd:pr_review`'s checklist, but be **selective**: this is a visual review aid, not a comment dump.
+Walk the diff and attach findings to the **file** they relate to (annotations are placed beneath each file's diff, so per-line precision isn't required — the annotation body can reference a specific line by number for readers who want to look). Lean on the heuristics in `/todd-pr-review`'s checklist, but be **selective**: this is a visual review aid, not a comment dump.
 
 Each finding has:
 
@@ -61,7 +62,7 @@ Each finding has:
 
 ## Step 3 — Render
 
-Write to `.claude/tmp/pr-<N>-<slug>-YYYY-MM-DD-HHMM.html` where `<slug>` is a kebab-case of the PR title (≤40 chars). Create the directory if missing. (A composing skill may override this output dir — `todd:pr_review` writes review artifacts to `~/Downloads/`; `todd:sync-review` looks in both `~/Downloads` and `.claude/tmp`. When composed, honor the caller's chosen dir.)
+Write to `.claude/tmp/pr-<N>-<slug>-YYYY-MM-DD-HHMM.html` where `<slug>` is a kebab-case of the PR title (≤40 chars). Create the directory if missing. (A composing skill may override this output dir — `todd-pr-review` writes review artifacts to `~/Downloads/`; `todd-sync-review` looks in both `~/Downloads` and `.claude/tmp`. When composed, honor the caller's chosen dir.)
 
 ### Section menu
 
@@ -416,7 +417,7 @@ Use this HTML shell. The CSS is the **deliverable look** — don't deviate witho
 </div>
 
 <div class="footer">
-  Generated <YYYY-MM-DD> · <one-line provenance, e.g. "Visualization via /todd:describe_pr">
+  Generated <YYYY-MM-DD> · <one-line provenance, e.g. "Visualization via /todd-describe-pr">
 </div>
 
 </body>
@@ -478,7 +479,7 @@ For **annotations**, the title is the gist (3–8 words); the body is the mechan
 ## Boundaries
 
 - **This command does not post to GitHub.** Don't run `gh pr review` or `gh pr comment`. The artifact is for Todd's eyes only.
-- **Don't duplicate `/todd:pr_review`.** That command's job is to render a verdict and emit a `gh pr review …` command. This command's job is to *show* the PR in a form that supports review.
+- **Don't duplicate `/todd-pr-review`.** That command's job is to render a verdict and emit a `gh pr review …` command. This command's job is to *show* the PR in a form that supports review.
 - **Don't add features the diff doesn't justify.** If a PR has zero noteworthy findings, render PR header + narrative + file diffs + a tiny "no findings — looks straightforward" line. That's a valid output. Don't manufacture annotations.
 - **Don't add stat-row cards just to fill space.** Three real numbers beats five made-up ones. Skip the section if you can't think of three.
 

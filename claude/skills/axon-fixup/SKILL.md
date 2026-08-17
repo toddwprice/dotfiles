@@ -1,5 +1,12 @@
 ---
-description: Run full axon verification (compile, format, credo, tests, AGENTS.md compliance)
+name: axon-fixup
+description: >
+  Use when verifying the axon app (`apps/axon` — the Elixir/Phoenix GraphQL backend) is clean, before
+  pushing, opening a PR, or handing work off — phrasings like "verify axon", "run the axon checks",
+  "axon fixup", "is axon green", "did I break axon", "check axon before I push", or after any change
+  under `apps/axon`. Covers compile-with-warnings-as-errors, format, credo, tests, the `assets/`
+  frontend gate, and `apps/axon/AGENTS.md` compliance as one ordered gate. Prefer this over the
+  generic `axon:axon-verify` skill for dscout work.
 ---
 
 Run the following verification steps for the axon application, in order. Stop and report if any step fails.

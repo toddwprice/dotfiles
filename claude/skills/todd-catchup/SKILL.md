@@ -1,5 +1,5 @@
 ---
-name: todd:catchup
+name: todd-catchup
 description: >
   Use when Todd wants to get back up to speed / catch up on open items, pending work, and recent
   activity across his calendar, email, Slack, Notion, and Linear — phrasings like "catch me up",
@@ -7,7 +7,7 @@ description: >
   did I leave off", or "resume my session". This is a cross-channel inbox/triage sweep. Not for a
   git/PR work-recap of a specific branch or ticket ("what's the latest on this branch", "last work
   completed on this ticket") — that is a different task. Not for diagnosing one DYS/dscript session
-  (use todd:trace-dys) or planning/implementing a ticket (use todd:coder).
+  (use todd-trace-dys) or planning/implementing a ticket (use todd-coder).
 disable-model-invocation: true
 argument-hint: "[today|week]"
 allowed-tools: Agent, Read

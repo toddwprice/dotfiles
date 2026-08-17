@@ -1,4 +1,5 @@
 ---
+name: todd-html-report
 allowed-tools: Bash(mkdir:*), Bash(open:*), Bash(date:*), Bash(ls:*), Bash(cp:*), Bash(mv:*), Bash(/usr/bin/python3:*), Bash(/Applications/Google Chrome.app/Contents/MacOS/Google Chrome:*), Write, Read, Agent
 description: Answer a question (diagram, SQL result, subsystem story, comparison) and render it as a self-contained HTML page in the shared `artifacts/` catalog, auto-refreshing an `index.html` table of every report, then open it. Use when Todd wants a shareable visual artifact out of an answer, analysis, diagram, or query result — phrasings like "create an HTML doc for this so I can share it with colleagues", "make a shareable HTML page of this", "turn this into HTML I can send", "render this as HTML", or "update/refresh the existing HTML report/diagram". Pass the topic/question as $ARGUMENTS; append `--pdf` for a Mermaid-aware PDF sibling, or `--ingest <paths…>` to fold previously-created HTML reports into the catalog. Composes with dscout-knowledge, dscout-data-mcp:query-prod, and Mermaid for diagrams.
 ---

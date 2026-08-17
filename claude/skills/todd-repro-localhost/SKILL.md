@@ -1,4 +1,5 @@
 ---
+name: todd-repro-localhost
 allowed-tools: Bash(docker:*), Bash(docker compose:*), Bash(ls:*), Bash(grep:*), Bash(curl:*), Bash(date:*), Read, Agent
 description: Diagnose a bug on the locally-running dscout stack. Pass a URL, screenshot path, or symptom description as $ARGUMENTS. Discovers the right container via `docker compose ps`, pulls logs, optionally reproduces the bug in Claude-in-Chrome, and writes up the root cause. Knows the container→app mapping (axon=Elixir, astro/contour/ai-mod=Python, dendra=React).
 ---

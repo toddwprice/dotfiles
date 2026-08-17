@@ -1,10 +1,11 @@
 ---
-description: Take a planned Linear ticket all the way to a reviewed, ready-for-review PR without supervision — implement it via `/todd:coder impl --orchestrated`, open a draft PR, self-review it with `/todd:pr_review --json-only`, address its own findings, drive the ticket's Manual Test Plan through a real browser against the local stack and tick the items off with screenshot evidence, flip to ready, then wait for baz and address that too, looping until baz is quiet. Use when Todd says "run the loop on FRG-1234", "/todd:loop FRG-1234", "take this ticket to a reviewed PR", or wants a planned ticket driven end to end while he's away. Requires an existing plan (Linear comment or linked Notion doc). Takes `--baz-timeout N`, `--max-rounds N`, `--no-ready`, `--skip-manual`, `--resume PHASE`.
+name: todd-loop
+description: Take a planned Linear ticket all the way to a reviewed, ready-for-review PR without supervision — implement it via `/todd-coder impl --orchestrated`, open a draft PR, self-review it with `/todd-pr-review --json-only`, address its own findings, drive the ticket's Manual Test Plan through a real browser against the local stack and tick the items off with screenshot evidence, flip to ready, then wait for baz and address that too, looping until baz is quiet. Use when Todd says "run the loop on FRG-1234", "/todd-loop FRG-1234", "take this ticket to a reviewed PR", or wants a planned ticket driven end to end while he's away. Requires an existing plan (Linear comment or linked Notion doc). Takes `--baz-timeout N`, `--max-rounds N`, `--no-ready`, `--skip-manual`, `--resume PHASE`.
 ---
 
 You are running Todd's unattended ticket-to-reviewed-PR loop. One planned ticket in, one ready-for-review PR out, with as few interruptions as the work honestly allows.
 
-**No `allowed-tools` is declared on purpose** — same reason as `/todd:bug-next`. The implementation and fix phases run whatever the touched app needs (`mix test`, `yarn lint`, `uv run pytest`, docker), and an allow-list would strangle exactly the part that matters. It inherits the session's permission mode.
+**No `allowed-tools` is declared on purpose** — same reason as `/todd-bug-next`. The implementation and fix phases run whatever the touched app needs (`mix test`, `yarn lint`, `uv run pytest`, docker), and an allow-list would strangle exactly the part that matters. It inherits the session's permission mode.
 
 ## The two rules that shape everything
 
@@ -53,11 +54,11 @@ Do this inline (it's small) and report a one-line summary.
 
 Then branch on what you found:
 
-- **Linear comment** → `/todd:coder impl` finds it on its own. Note in your phase-0 line whether it carries a `## 🥒 Behavior Spec` and how many Scenarios — a spec'd plan gives phase 1 a hard checklist and gives you a real completion number to report at the end; a prose-only plan means "done" is the impl agent's judgement call. Worth knowing which kind of run this is before it starts.
+- **Linear comment** → `/todd-coder impl` finds it on its own. Note in your phase-0 line whether it carries a `## 🥒 Behavior Spec` and how many Scenarios — a spec'd plan gives phase 1 a hard checklist and gives you a real completion number to report at the end; a prose-only plan means "done" is the impl agent's judgement call. Worth knowing which kind of run this is before it starts.
 
   **Note whether it carries a `### 🧪 Manual Test Plan`, and how many `MT` items.** That decides phase 5: a checklist to run, a Behavior Spec to derive one from, or nothing to hand-verify. Same phase-0 line.
 
-  **Then read its plan-check stamp.** `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
+  **Then read its plan-check stamp.** `/todd-plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
 
   - `❌` → **failed**. A `**🔴 Open blockers**` block below the stamp line carries each finding in full prose — that's what you report, not a code list. (Stamps written before 2026-08-13 may instead end in a bare `see C1, E11, B5`; those codes are all you get, and say so.)
   - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
@@ -67,15 +68,15 @@ Then branch on what you found:
 
   The stamp also carries `pass N` and may carry a `**⚖️ Held by decision**` block — findings Todd has already ruled on. Neither changes what you do; don't re-raise anything in the rulings block if you end up reporting on the plan.
 
-  **`❌` → stop the loop.** Report the blockers from the stamp — the prose, not the codes — and tell Todd to run `/todd:plan $TICKET`, which reaches its phase 0B through the stamp. Don't attempt the fix here. That's not because every blocker needs Todd (most are the planner's mechanical work, and `/todd:plan` phase 7 now closes those itself); it's because *this* command is an unattended implementation runner with no planning context loaded, and a plan is the one input it must not improvise.
+  **`❌` → stop the loop.** Report the blockers from the stamp — the prose, not the codes — and tell Todd to run `/todd-plan $TICKET`, which reaches its phase 0B through the stamp. Don't attempt the fix here. That's not because every blocker needs Todd (most are the planner's mechanical work, and `/todd-plan` phase 7 now closes those itself); it's because *this* command is an unattended implementation runner with no planning context loaded, and a plan is the one input it must not improvise.
 
-  **Unchecked → run `/todd:plan-check $TICKET --strict` inline**, then read the stamp it just wrote. Comes back `❌` → stop as above; passes → continue. An unstamped plan is a missing check, not a failed one, and an unattended run should cure that in one step rather than dead-stop. `/todd:coder plan` never stamps, so this is the common case. Note `--strict` admits no advisories, so this path yields a plain `✅ passed` or a `❌`.
+  **Unchecked → run `/todd-plan-check $TICKET --strict` inline**, then read the stamp it just wrote. Comes back `❌` → stop as above; passes → continue. An unstamped plan is a missing check, not a failed one, and an unattended run should cure that in one step rather than dead-stop. `/todd-coder plan` never stamps, so this is the common case. Note `--strict` admits no advisories, so this path yields a plain `✅ passed` or a `❌`.
 
   **`⚠️` or `✅` → continue.** Either way the stamp state goes in the *same* phase-0 line as the Behavior Spec note — one summary line, not two.
 
-  **Carry any advisories into the phase-1 prompt, verbatim.** They're the one part of the stamp the implementing agent needs and `/todd:coder impl` will never look for: it reads the plan body, and an advisory lives in the stamp. A `[E9]` advisory means the plan has a Scenario whose falsification nobody worked out — the implementer has to derive it before writing that test, and if they can't, the Scenario needs saying so rather than a test that asserts nothing. Passing them along costs one line each and is the whole reason a thin plan was allowed through instead of costing a re-plan.
-- **Notion doc only** → **you must carry the plan forward yourself.** `/todd:coder impl` only looks for that Linear comment; a Notion-only plan is invisible to it, and it will quietly grade the ticket "straightforward" and improvise. Extract the plan text and paste it into the phase 1 subagent prompt. **A Notion plan can't be stamp-checked** — `/todd:plan-check` reads the Linear comment, or a local file with `--local`, and never Notion — so this path proceeds on an unchecked plan, and the phase-0 line should say so.
-- **Neither** → stop. Say the loop needs a plan and to run `/todd:plan $TICKET` first — an unattended run is exactly the case its Behavior Spec is for, since there's nobody around to resolve an ambiguous "handle the edge case". `/todd:coder plan $TICKET` or a linked Notion doc also work. Don't offer to plan it here — planning wants Todd's eyes, and that's the whole reason this command takes a *planned* ticket.
+  **Carry any advisories into the phase-1 prompt, verbatim.** They're the one part of the stamp the implementing agent needs and `/todd-coder impl` will never look for: it reads the plan body, and an advisory lives in the stamp. A `[E9]` advisory means the plan has a Scenario whose falsification nobody worked out — the implementer has to derive it before writing that test, and if they can't, the Scenario needs saying so rather than a test that asserts nothing. Passing them along costs one line each and is the whole reason a thin plan was allowed through instead of costing a re-plan.
+- **Notion doc only** → **you must carry the plan forward yourself.** `/todd-coder impl` only looks for that Linear comment; a Notion-only plan is invisible to it, and it will quietly grade the ticket "straightforward" and improvise. Extract the plan text and paste it into the phase 1 subagent prompt. **A Notion plan can't be stamp-checked** — `/todd-plan-check` reads the Linear comment, or a local file with `--local`, and never Notion — so this path proceeds on an unchecked plan, and the phase-0 line should say so.
+- **Neither** → stop. Say the loop needs a plan and to run `/todd-plan $TICKET` first — an unattended run is exactly the case its Behavior Spec is for, since there's nobody around to resolve an ambiguous "handle the edge case". `/todd-coder plan $TICKET` or a linked Notion doc also work. Don't offer to plan it here — planning wants Todd's eyes, and that's the whole reason this command takes a *planned* ticket.
 
 **Find or make the worktree.** `WT_ROOT=$HOME/dscout-wt`, and the conventional path is `$WT_ROOT/<ticket-lowercased>`.
 
@@ -147,7 +148,7 @@ Keep `PR`. Report the URL.
 
 Dispatch a subagent:
 
-> Read `~/.claude/commands/todd/pr_review.md` and execute it for PR `<PR>` with `--json-only`.
+> Read `~/.claude/skills/todd-pr-review/SKILL.md` and execute it for PR `<PR>` with `--json-only`.
 
 It returns four lines: `JSON:`, `VERDICT:`, `INLINE:`, `BODY_NOTES:`. Keep the path and the verdict. **Nothing else from this phase enters your context** — the findings live in the file, and phase 4's subagent reads them from there.
 
@@ -177,7 +178,7 @@ If any check comes back red, **stop before pushing** and report it. A red loop i
 
 Run the ticket's Manual Test Plan against the local stack and tick the items off with evidence. Autonomous — no questions here.
 
-**Why it sits at exactly this point.** Phase 4 changes the code. Evidence captured before it is evidence of code that no longer exists, and a screenshot of a superseded build is worse than no screenshot because it reads as proof. This is also why phase 1's `/todd:coder impl --orchestrated` deliberately *skips* its own browser step and reports `MANUAL: deferred (orchestrated)` — the last edit has to land first, and only you know when that is.
+**Why it sits at exactly this point.** Phase 4 changes the code. Evidence captured before it is evidence of code that no longer exists, and a screenshot of a superseded build is worse than no screenshot because it reads as proof. This is also why phase 1's `/todd-coder impl --orchestrated` deliberately *skips* its own browser step and reports `MANUAL: deferred (orchestrated)` — the last edit has to land first, and only you know when that is.
 
 **Dispatch one subagent.** It needs the Playwright MCP tools plus Bash, so use a general-purpose agent, not a read-only one. Browser snapshots are bulky — that's exactly what you're keeping out of your own context.
 
@@ -193,7 +194,7 @@ Its prompt needs to work cold:
 **When the plan has no `### 🧪 Manual Test Plan`:**
 
 - **It has a `## 🥒 Behavior Spec`** → derive the checklist from the Scenarios that are UI-observable, and label it `_Derived from the Behavior Spec._` This is legitimate because those Scenarios were authored *before* the code, so they're a pre-existing contract you're translating into UI steps. Skip Scenarios with no visible surface rather than inventing one.
-- **Neither** → skip the phase and say so. `/todd:coder plan` emits a Manual Test Plan; `/todd:plan` currently does not. Don't write a checklist from the diff you just built — a test authored after the code tests what you wrote, not what was asked for, and it will pass by construction.
+- **Neither** → skip the phase and say so. `/todd-coder plan` emits a Manual Test Plan; `/todd-plan` currently does not. Don't write a checklist from the diff you just built — a test authored after the code tests what you wrote, not what was asked for, and it will pass by construction.
 
 `--skip-manual` skips this phase outright. Say that it was skipped by flag.
 
@@ -258,14 +259,14 @@ Keep it short:
 - **Never tick a manual item you didn't watch pass.** Not from reading the code, not because a unit test covers it, not because it worked last round. An unverifiable item gets a reason; a checklist that can be ticked without looking launders a guess as a fact and is worth less than no checklist.
 - Never `docker compose down -v` or `down --all`. `-v` destroys the local database, MinIO contents, and the warm build caches; `down` ignores the profile you pass and takes the deps with it either way. Phase 5 names its services explicitly for exactly this reason.
 - Never run the manual verification against anything but `http://localhost:5000`. It signs in with shared local dev credentials.
-- One ticket per invocation. Multiple tickets with stacked PRs is `/todd:phase` — say so and stop.
+- One ticket per invocation. Multiple tickets with stacked PRs is `/todd-phase` — say so and stop.
 - If a phase fails twice, stop and report. Don't improvise around a broken phase.
 
 ## Failure handling
 
 | Failure | Do |
 |---|---|
-| No plan found | Stop. Point at `/todd:plan $TICKET` (or `/todd:coder plan` for something small). |
+| No plan found | Stop. Point at `/todd-plan $TICKET` (or `/todd-coder plan` for something small). |
 | `start-ticket.sh` fails | Stop with its stderr — usually `linctl` auth or a branch that already exists. |
 | Impl returns `fatal` | Stop, report `BLOCKERS`. Worktree and commits survive for a `--resume impl`. |
 | Push rejected | Someone else moved the branch. Stop — don't force. |

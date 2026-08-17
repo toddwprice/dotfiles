@@ -1,6 +1,6 @@
 ---
-name: todd:phase
-description: Use when the user runs /todd:phase to automatically implement remaining tickets in the earliest phase with open work. Implements tickets in parallel git worktrees, then assembles them into a single linear stack of PRs (each PR's base is the previous PR's branch). Requires git and gh CLI, and a Linear project name as the first argument unless one is explicitly defined in the repository's CLAUDE.md.
+name: todd-phase
+description: Use when the user runs /todd-phase to automatically implement remaining tickets in the earliest phase with open work. Implements tickets in parallel git worktrees, then assembles them into a single linear stack of PRs (each PR's base is the previous PR's branch). Requires git and gh CLI, and a Linear project name as the first argument unless one is explicitly defined in the repository's CLAUDE.md.
 ---
 
 # Todd Phase
@@ -37,7 +37,7 @@ If `branchName` is missing/empty for a ticket, halt with a clear error rather th
 ## Usage
 
 ```
-/todd:phase [PROJECT_NAME] [--max-parallel N] [--skip-reviews] [--reviewers user1,user2]
+/todd-phase [PROJECT_NAME] [--max-parallel N] [--skip-reviews] [--reviewers user1,user2]
 ```
 
 **Arguments:**
@@ -48,11 +48,11 @@ If `branchName` is missing/empty for a ticket, halt with a clear error rather th
 
 **Examples:**
 ```
-/todd:phase "Glazing 2"                          # Reviews on, max 3 parallel
-/todd:phase "Glazing 2" --skip-reviews           # Solo / unattended mode
-/todd:phase "Glazing 2" --max-parallel 5         # Up to 5 parallel worktrees
-/todd:phase "Glazing 2" --reviewers alice,bob    # Override reviewer set
-/todd:phase                                       # Only valid if CLAUDE.md defines a Linear project
+/todd-phase "Glazing 2"                          # Reviews on, max 3 parallel
+/todd-phase "Glazing 2" --skip-reviews           # Solo / unattended mode
+/todd-phase "Glazing 2" --max-parallel 5         # Up to 5 parallel worktrees
+/todd-phase "Glazing 2" --reviewers alice,bob    # Override reviewer set
+/todd-phase                                       # Only valid if CLAUDE.md defines a Linear project
 ```
 
 ## Implementation Steps
@@ -68,7 +68,7 @@ If `branchName` is missing/empty for a ticket, halt with a clear error rather th
 
 3. **If CLAUDE.md does not exist or has no Linear project reference**, halt:
    ```
-   Error: PROJECT_NAME is required. Supply it as an argument (e.g. /todd:phase "Glazing 2"),
+   Error: PROJECT_NAME is required. Supply it as an argument (e.g. /todd-phase "Glazing 2"),
    or add a "Linear Project" reference to this repo's CLAUDE.md.
    ```
 
@@ -91,7 +91,7 @@ If either fails, halt:
 Error: this directory isn't inside a git repo, or the branch `main` doesn't exist locally.
 
 Ensure:
-  - You run /todd:phase from a git work tree (including container dirs that use a .git gitfile → .bare pointer).
+  - You run /todd-phase from a git work tree (including container dirs that use a .git gitfile → .bare pointer).
   - `main` is present locally, not just as `origin/main`. If needed: `git branch main origin/main`.
 ```
 
@@ -101,7 +101,7 @@ Also verify the working tree is clean:
 test -z "$(git status --porcelain)"
 ```
 
-If dirty, halt with: `Error: dirty working tree — commit or stash changes before running /todd:phase.`
+If dirty, halt with: `Error: dirty working tree — commit or stash changes before running /todd-phase.`
 
 ### Step 1: Find Earliest Phase With Open Tickets
 
@@ -135,7 +135,7 @@ If dirty, halt with: `Error: dirty working tree — commit or stash changes befo
 
 ### Step 3: Delegated Implementation in Git Worktrees
 
-Each ticket's plan+impl runs in its **own dispatched subagent**, never inline. This is the heart of the skill's context budget: the orchestrator must not carry any ticket's exploration, red-green-refactor, or test output — only the compact summary the subagent returns. Running `/todd:coder` inline here would stack every ticket's full implementation into one context and blow the window on a multi-ticket phase. Delegation is also the *only* way the `--max-parallel` concurrency is real — a single agent runs tool calls sequentially; parallelism comes from dispatching multiple subagents in one message. (See `superpowers:dispatching-parallel-agents` for the pattern and prompt structure.)
+Each ticket's plan+impl runs in its **own dispatched subagent**, never inline. This is the heart of the skill's context budget: the orchestrator must not carry any ticket's exploration, red-green-refactor, or test output — only the compact summary the subagent returns. Running `/todd-coder` inline here would stack every ticket's full implementation into one context and blow the window on a multi-ticket phase. Delegation is also the *only* way the `--max-parallel` concurrency is real — a single agent runs tool calls sequentially; parallelism comes from dispatching multiple subagents in one message. (See `superpowers:dispatching-parallel-agents` for the pattern and prompt structure.)
 
 **Order tickets into dependency waves.** From the `blockedBy` edges (within this batch only), build topological layers: wave 0 = tickets with no in-batch blocker; wave 1 = tickets blocked only by wave-0 tickets; and so on. Independent tickets share a wave and run in parallel; a dependent ticket waits for its blocker's branch to exist, because it needs the blocker's *code* present to implement against (an off-`main` worktree wouldn't have it). Process waves in order; within a wave, dispatch up to `--max-parallel` subagents in a single message, batching if the wave is larger than `--max-parallel`.
 
@@ -164,18 +164,18 @@ For each ticket Tᵢ in the current wave:
 4. **Dispatch a subagent** (general-purpose) for Tᵢ. Give it a **self-contained** prompt — it must not inherit this session's history, so construct exactly the context it needs:
    - Work **only** inside `.worktrees/{TICKET_ID}` (cd there first). Never touch other worktrees; never push.
    - **Plan-staleness guard**: if a plan already exists on the ticket, verify the files/paths it names still exist before trusting it. If the plan is stale (renamed or deleted paths — a real failure mode from past runs), re-plan against current code rather than following it blindly.
-   - Run `/todd:coder plan {TICKET_ID} --orchestrated` (only if no usable plan exists).
-   - **Check the plan before implementing it.** If `/todd:coder plan` just ran, **always** run `/todd:plan-check {TICKET_ID} --strict` — that path always leaves the plan unstamped, so it always needs checking. If you reused an existing plan instead, read its stamp: `/todd:plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
+   - Run `/todd-coder plan {TICKET_ID} --orchestrated` (only if no usable plan exists).
+   - **Check the plan before implementing it.** If `/todd-coder plan` just ran, **always** run `/todd-plan-check {TICKET_ID} --strict` — that path always leaves the plan unstamped, so it always needs checking. If you reused an existing plan instead, read its stamp: `/todd-plan-check` writes one line as the last line of the plan comment, after a `---`. Take the last line containing `Plan check:` and classify it:
      - `❌` → **failed**. A `**🔴 Open blockers**` block below the stamp line carries each finding in full prose — put those in `BLOCKERS`, not a code list. (Stamps written before 2026-08-13 may instead end in a bare `see C1, E11, B5`, and those codes are all there is.)
      - `⚠️ passed (ungrounded)` → **passed, but grounding was never checked** (the anchor file was missing). Proceed, and say grounding went unchecked.
-     - `✅ passed with N advisories` → **passed under the default regime, but not under yours.** `--strict` admits no advisories, so a stamp like this was written by `/todd:plan` phase 7 and hasn't faced your bar. Re-run `/todd:plan-check {TICKET_ID} --strict` and classify what that returns.
+     - `✅ passed with N advisories` → **passed under the default regime, but not under yours.** `--strict` admits no advisories, so a stamp like this was written by `/todd-plan` phase 7 and hasn't faced your bar. Re-run `/todd-plan-check {TICKET_ID} --strict` and classify what that returns.
      - `✅ passed` → **passed**.
-     - No `Plan check:` line anywhere → **unchecked** — not the same as failed. Run `/todd:plan-check {TICKET_ID} --strict`.
+     - No `Plan check:` line anywhere → **unchecked** — not the same as failed. Run `/todd-plan-check {TICKET_ID} --strict`.
 
-     `❌` → **do not dispatch impl for this ticket.** Under `--strict` that includes any open judgement call *and* any advisory. Return `STATUS: recoverable` with each blocker's prose in `BLOCKERS` — not its check id, which tells whoever picks this up nothing about what to fix — so step 5 marks the ticket failed and the phase carries on. If the stamp says `pass 3`, say so: the plan↔check loop is out of laps and a re-plan won't clear it. **Not `plan-required`** — that status re-dispatches a `plan` step, which would post a second plan comment and walk straight into the duplicate case named next. Running plan-check here also catches the duplicate-plan case (its A4 check) — `/todd:coder plan` posts a new plan comment every time without looking for an existing one, and this path has produced duplicates before.
-   - Then run `/todd:coder impl {TICKET_ID} --orchestrated`.
+     `❌` → **do not dispatch impl for this ticket.** Under `--strict` that includes any open judgement call *and* any advisory. Return `STATUS: recoverable` with each blocker's prose in `BLOCKERS` — not its check id, which tells whoever picks this up nothing about what to fix — so step 5 marks the ticket failed and the phase carries on. If the stamp says `pass 3`, say so: the plan↔check loop is out of laps and a re-plan won't clear it. **Not `plan-required`** — that status re-dispatches a `plan` step, which would post a second plan comment and walk straight into the duplicate case named next. Running plan-check here also catches the duplicate-plan case (its A4 check) — `/todd-coder plan` posts a new plan comment every time without looking for an existing one, and this path has produced duplicates before.
+   - Then run `/todd-coder impl {TICKET_ID} --orchestrated`.
    - Squash to one logical commit on `{BRANCH_NAME}` if impl produced several: `git reset --soft {BASE} && git commit`.
-   - Return **only** the `/todd:coder` structured status block (STATUS / TICKET / COMMIT / FILES / TESTS / BLOCKERS / PR_TITLE / PR_BODY) — nothing else.
+   - Return **only** the `/todd-coder` structured status block (STATUS / TICKET / COMMIT / FILES / TESTS / BLOCKERS / PR_TITLE / PR_BODY) — nothing else.
 
 5. **Track** from each returned status: move Tᵢ to `completed` (STATUS: success) or `failed` (recoverable/fatal). Keep the returned `COMMIT`, `PR_TITLE`, and `PR_BODY` — Steps 4–5 use them without re-reading anything. Failed worktrees are left in place for inspection. A ticket whose in-batch blocker failed is marked `skipped` (there's no branch to base it on).
 
@@ -311,7 +311,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 2. #{N+1} (draft, blocked on #{N})
 3. #{N+2} (draft, blocked on #{N+1})
 
-This PR is part of a stack created by `/todd:phase` for phase {PHASE_NAME}.
+This PR is part of a stack created by `/todd-phase` for phase {PHASE_NAME}.
 Merge bottom-up. When this PR merges, GitHub's built-in auto-base-change
 retargets the next PR's base to `main`; then mark that PR ready for review
 (`gh pr ready <number>` — see "Draft→ready promotion").
@@ -321,7 +321,7 @@ Resolves {TICKET_ID}
 
 ## Failure & Resume Semantics
 
-Re-running `/todd:phase` after an interruption is safe and idempotent. State lives in git branches plus GitHub PRs.
+Re-running `/todd-phase` after an interruption is safe and idempotent. State lives in git branches plus GitHub PRs.
 
 | Failure | Behavior |
 |---|---|

@@ -1,5 +1,5 @@
 {
-  "skill_name": "todd:sync-review",
+  "skill_name": "todd-sync-review",
   "safety": "Side-effecting (posts a GitHub review). Eval runs use a local FIXTURE artifact and must STOP at the rebuilt JSON — do NOT call gh api .../reviews or .../comments. Subagent instructions enforce sync-only.",
   "evals": [
     {

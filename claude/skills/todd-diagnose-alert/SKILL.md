@@ -1,4 +1,5 @@
 ---
+name: todd-diagnose-alert
 allowed-tools: Bash(gh:*), Bash(git log:*), Bash(open:*), Bash(mkdir:*), WebFetch, Agent, Write, Read
 description: >
   Diagnose a Datadog or Slack alert/monitor/incident end-to-end — pivots from the URL through

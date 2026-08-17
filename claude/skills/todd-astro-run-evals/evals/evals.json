@@ -1,5 +1,5 @@
 {
-  "skill_name": "todd:astro-run-evals",
+  "skill_name": "todd-astro-run-evals",
   "safety": "Running evals is read-mostly but costs LLM/Braintrust time. Eval runs use PRINT-ONLY prompts so the graded artifact is the emitted command, not a paid run.",
   "evals": [
     {

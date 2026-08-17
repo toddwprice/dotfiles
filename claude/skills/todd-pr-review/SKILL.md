@@ -1,6 +1,16 @@
 ---
+name: todd-pr-review
 allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr checkout:*), Bash(gh api:*), Bash(git:*), Bash(mkdir:*), Bash(open:*), Bash(date:*), Write, Read, Agent
-description: Autonomously review a PR using dscout team conventions — analyzes findings, self-answers each open question via parallel sub-agent research in Todd's voice (clear, terse, kind), renders a VERDICT, builds a JSON review payload with inline file:line comments, and **posts it to GitHub itself** via `gh api .../reviews`. That is the default: no HTML, no copy-paste step, review published. Pass `--html` when you want to eyeball it first — that renders the full HTML visualization (verdict banner, key-numbers row, narrative, full diff, severity-coded annotation cards, self-answered Q&A, embedded submit command) and posts **nothing**. Pass `--json-only` for the machine path — payload only, no HTML, no post (used by `/todd:loop`). Forked from review_pr_steven; trained on 500 real dscout reviews.
+description: >
+  Autonomously review a PR using dscout team conventions — analyzes findings, self-answers each open
+  question via parallel sub-agent research in Todd's voice (clear, terse, kind), renders a VERDICT,
+  builds a JSON review payload with inline file:line comments, and **posts it to GitHub itself** via
+  `gh api .../reviews`. That is the default: no HTML, no copy-paste step, review published. Pass
+  `--html` when you want to eyeball it first — that renders the full HTML visualization (verdict
+  banner, key-numbers row, narrative, full diff, severity-coded annotation cards, self-answered Q&A,
+  embedded submit command) and posts **nothing**. Pass `--json-only` for the machine path — payload
+  only, no HTML, no post (used by `/todd-loop`). Forked from review_pr_steven; trained on 500 real
+  dscout reviews.
 ---
 
 You are performing a code review on a PR in the dscout monorepo. Your review should reflect the values and conventions of this team, derived from hundreds of real code reviews. Your evaluation spans five axes — correctness, readability & simplicity, architecture, security, and performance — folding the generic `code-review-and-quality` five-axis framework into dscout's own conventions and Todd's review voice. Where the generic framework and this command's voice conflict (most sharply on severity-prefix labeling), this command wins; the reconciliation is recorded where it bites (Step 7).
@@ -39,9 +49,9 @@ Three modes. Each row is the complete list of what that run produces — nothing
 
 **Post mode is the default because the copy-the-command-out-of-the-HTML step was pure friction.** The HTML render is also the most expensive step in this command (a big PR can take ~25 minutes on its own), so a run nobody is going to open shouldn't pay for it.
 
-**`/todd:open-prs` stays in HTML mode on purpose.** It fans out reviews across *other people's* PRs and stops before posting, so it passes `--html` explicitly and Todd decides per PR what to submit. If you're editing it, don't "simplify" the flag away.
+**`/todd-open-prs` stays in HTML mode on purpose.** It fans out reviews across *other people's* PRs and stops before posting, so it passes `--html` explicitly and Todd decides per PR what to submit. If you're editing it, don't "simplify" the flag away.
 
-**`pr-review-queue` is the opposite, deliberately (2026-08-05, Todd's call).** It launches a `claude --bg '/todd:pr_review N'` agent per queued PR in the **posting** mode — one invocation reviews and publishes across the whole queue unattended. This file used to say both batch surfaces passed `--html`; that is no longer true, so don't "restore" the flag there. `-c '/todd:pr_review --html'` is that script's read-first escape hatch.
+**`pr-review-queue` is the opposite, deliberately (2026-08-05, Todd's call).** It launches a `claude --bg '/todd-pr-review N'` agent per queued PR in the **posting** mode — one invocation reviews and publishes across the whole queue unattended. This file used to say both batch surfaces passed `--html`; that is no longer true, so don't "restore" the flag there. `-c '/todd-pr-review --html'` is that script's read-first escape hatch.
 
 ## Model & Performance Strategy
 
@@ -126,7 +136,7 @@ this separately".
 
 **This deletes a promise, not the information.** A finding Todd genuinely wants
 tracked still goes in his terminal output at the end of the run, flagged as a
-candidate for `/todd:followup-ticket` — a place where filing it is his decision,
+candidate for `/todd-followup-ticket` — a place where filing it is his decision,
 made after the review, with no obligation already published on someone else's PR.
 
 **Why this is a rule and not a preference:** a floated ticket reads as settled to the
@@ -164,8 +174,8 @@ asked for plainly instead of parked in a ticket nobody files. *"Won't fix in thi
 complete answer, and you still accept it in one round.
 
 **Todd's own PRs are the strong case.** On a PR where `author.login == $ME` — his self-reviews,
-`/todd:loop`, anything reaching `todd:address-comments` — he controls the scope, so the ticket
-excuse has nothing to hide behind. Default hard to fixing it in the PR. `todd:followup-ticket`
+`/todd-loop`, anything reaching `todd-address-comments` — he controls the scope, so the ticket
+excuse has nothing to hide behind. Default hard to fixing it in the PR. `todd-followup-ticket`
 is for the five conditions above, not for work he could finish in the branch he already has open.
 
 ## Review Workflow
@@ -719,11 +729,11 @@ Apply the **approval standard**: approve a change that improves overall code hea
 
 End the VERDICT with this exact signature line (in italics):
 
-_Review generated with `/todd:pr_review` — a Claude Code command forked from `/review_pr_steven` which was trained on 500 real dscout PR reviews (trained 2026-03-04). Self-answered autonomously via parallel sub-agents in Todd's voice._
+_Review generated with `/todd-pr-review` — a Claude Code command forked from `/review_pr_steven` which was trained on 500 real dscout PR reviews (trained 2026-03-04). Self-answered autonomously via parallel sub-agents in Todd's voice._
 
 ## Step 7 — Emit artifacts
 
-Every mode builds the JSON review payload (7a) — it's the review itself, and it doubles as the local record `/todd:address-comments` can read back. What happens next is the only thing the mode changes:
+Every mode builds the JSON review payload (7a) — it's the review itself, and it doubles as the local record `/todd-address-comments` can read back. What happens next is the only thing the mode changes:
 
 | Mode | Run these sub-steps |
 |------|---------------------|
@@ -743,8 +753,8 @@ $HOME/Downloads/pr-<N>-review.json
 
 The shape matches the GitHub PR review API (`POST /repos/{owner}/{repo}/pulls/{N}/reviews`). The
 schema, anchoring rules, the Answer-only rule, and the posting commands are the shared canonical spec
-at `~/.claude/skills/_shared/review-payload.md` (also used by `todd:sync-review` and
-`todd:address-comments`) — keep this section in sync with it.
+at `~/.claude/skills/_shared/review-payload.md` (also used by `todd-sync-review` and
+`todd-address-comments`) — keep this section in sync with it.
 
 ```json
 {
@@ -930,7 +940,7 @@ _<signature line from end of Phase 3>_
 
 > **HTML mode only** — `--html`, or Todd asked for HTML in prose. Post mode skips this and goes to 7c; `--json-only` skips it and goes to 7d. In HTML mode this artifact *is* the deliverable: Todd reads it and submits from the embedded command himself, so nothing gets posted by this run.
 
-Compose with `/todd:describe_pr` to render an HTML page that pins every finding to the diff line it concerns. The HTML also **embeds the `gh api` submit command at the bottom**, so Todd can review the file end-to-end and copy the command out when satisfied. (`describe_pr` builds on the shared base shell at `~/.claude/skills/_shared/report-shell.html` — the single source of truth for the common typography/palette — so this artifact stays visually consistent with the rest without restating the shell.)
+Compose with `/todd-describe-pr` to render an HTML page that pins every finding to the diff line it concerns. The HTML also **embeds the `gh api` submit command at the bottom**, so Todd can review the file end-to-end and copy the command out when satisfied. (`describe_pr` builds on the shared base shell at `~/.claude/skills/_shared/report-shell.html` — the single source of truth for the common typography/palette — so this artifact stays visually consistent with the rest without restating the shell.)
 
 **Run this entire step in a sub-agent on Sonnet 5 — do NOT render the HTML inline.** Rendering is mechanical (parse the diff, fill a template, escape, write a Python helper) and is the largest token sink in the whole review, yet it has zero bearing on the verdict — so it belongs on a faster, cheaper model and off the orchestrator's Opus context. The orchestrator must have already written the JSON payload (Step 7a) and finalized the verdict before dispatching. Dispatch one sub-agent and wait for it to return:
 
@@ -941,7 +951,7 @@ Compose with `/todd:describe_pr` to render an HTML page that pins every finding 
   - The PR number `<N>`, the `<OWNER>/<REPO>`, and the head SHA.
   - The final **verdict** and the **compact structured findings**: each Phase 2 question as `(short topic, file:line, question, verdict tier, Answer verbatim, How I checked verbatim)`, plus Phase 3 non-blocking notes, positive callouts, the stat-row numbers, and the narrative seed. Pass these inline — they're small; the Answer/How I checked are already in Todd's voice with the two-layer split already applied, so the sub-agent must use them **verbatim**, not rewrite them.
   - The output path (compute it per "Where to write it" below) and the JSON payload path from Step 7a.
-  - Instruct it to: **read `~/.claude/commands/todd/describe_pr.md` (Step 3 + Step 4) and the rest of this Step 7b**, then **fetch the diff itself with `gh pr diff <N>`** (do not paste the diff through the orchestrator — let the sub-agent pull it so the bulky diff never hits Opus output), render the page per the rules below, `open` it, and return the path.
+  - Instruct it to: **read `~/.claude/skills/todd-describe-pr/SKILL.md` (Step 3 + Step 4) and the rest of this Step 7b**, then **fetch the diff itself with `gh pr diff <N>`** (do not paste the diff through the orchestrator — let the sub-agent pull it so the bulky diff never hits Opus output), render the page per the rules below, `open` it, and return the path.
 
 Everything below is the rendering spec the sub-agent follows.
 
@@ -974,7 +984,7 @@ Use the question's **short topic** as the annotation `title`. The annotation `bo
 
 #### Diff hunks under every file annotation (required)
 
-**Every file-specific annotation MUST be preceded by a `<div class="diff-file">` block showing the actual diff hunk(s) the annotation refers to.** An annotation that floats without the surrounding diff context is much harder to read — Todd shouldn't have to bounce to GitHub to see what changed. Use the per-file pattern from `/todd:describe_pr`'s Step 3 template:
+**Every file-specific annotation MUST be preceded by a `<div class="diff-file">` block showing the actual diff hunk(s) the annotation refers to.** An annotation that floats without the surrounding diff context is much harder to read — Todd shouldn't have to bounce to GitHub to see what changed. Use the per-file pattern from `/todd-describe-pr`'s Step 3 template:
 
 ```html
 <h2>File N · <code>filename.ext</code></h2>
@@ -1004,7 +1014,7 @@ Use the question's **short topic** as the annotation `title`. The annotation `bo
 - For each file, render only the hunk(s) the annotations reference; you don't need to dump every hunk in a large file. A single comment-only change file shows one hunk; a file with two unrelated annotations may show two hunks.
 - Truncate very long hunks (>~80 rows) with a `<div class="diff-row context"><div class="ln">…</div><div class="ln">…</div><div class="code"><em>(hunk truncated for brevity)</em></div></div>` row — preserve the lines surrounding any `+`/`−` change.
 - **HTML-escape everything inside `.code`** — diff content commonly contains `<`, `>`, `&`, JSX angle-brackets, etc. Failing to escape will mangle the layout.
-- Use the `diff-file` / `diff-filename` / `diff-body` / `diff-row` (hunk|context|added|removed) CSS classes from `/todd:describe_pr`'s template verbatim. Don't roll your own diff-row styling.
+- Use the `diff-file` / `diff-filename` / `diff-body` / `diff-row` (hunk|context|added|removed) CSS classes from `/todd-describe-pr`'s template verbatim. Don't roll your own diff-row styling.
 
 **Recommended rendering helper.** For any PR diff over ~50 lines, write a small Python helper to `$CLAUDE_JOB_DIR` that parses `gh pr diff` output (each `diff --git` boundary + each `@@ -a,b +c,d @@` hunk header) and emits the diff-row HTML for a given (path, hunk-start-line) selector. HTML-escape every `.code` cell via `html.escape()`. This is more reliable than hand-writing the rows for each hunk — diff content frequently breaks ad-hoc string concatenation. The minimum row-rendering loop:
 

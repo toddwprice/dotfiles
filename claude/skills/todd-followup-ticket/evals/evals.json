@@ -1,5 +1,5 @@
 {
-  "skill_name": "todd:followup-ticket",
+  "skill_name": "todd-followup-ticket",
   "safety": "Side-effecting (creates a Linear ticket). Eval runs must STOP at the drafted ticket — do NOT call linctl issue create / save_issue. Subagent instructions enforce draft-only.",
   "evals": [
     {

@@ -1,5 +1,5 @@
 ---
-name: todd:followup-ticket
+name: todd-followup-ticket
 description: >
   File ONE follow-up Linear ticket from the current context — a PR finding, a deferred review
   comment, an out-of-scope bullet, or "let's track this separately". Use this WHENEVER Todd wants to
@@ -10,7 +10,7 @@ description: >
   current FRG / Templates-in-DYS project but is overridable. Drafts the ticket from conversation
   context (problem, evidence, source PR, code refs), shows it for approval, then creates it and
   returns the URL. This is for a SINGLE follow-up — bootstrapping a whole project with milestones is
-  `todd:linear-project-setup`, not this.
+  `todd-linear-project-setup`, not this.
 allowed-tools: Bash(linctl:*), Bash(gh:*), Bash(date:*), Read, Grep, Glob
 ---
 
@@ -36,7 +36,7 @@ thing earns a ticket only if at least one holds:
 **None of them hold?** Say so in one line and name the better disposition instead of filing:
 
 - The fix is small and lands in code the open branch already touches → **do it in the PR.** Offer
-  that, and hand off to `todd:address-comments` if the work came from review threads.
+  that, and hand off to `todd-address-comments` if the work came from review threads.
 - Nothing breaks if it's never done — you can't finish *"if this isn't changed, ___ breaks"* → it's a
   nit. **Drop it.** A ticket is not a polite way to decline something; it's a promise with a due date
   nobody set.
@@ -118,7 +118,7 @@ After approval:
 1. Create the issue in the resolved team + project.
 2. If a source PR exists, add the ticket link as a PR comment or attach the PR URL to the issue so
    the two are cross-linked.
-3. If Todd asked to attach an HTML report (e.g. a `todd:html_report` / `todd:describe_pr` artifact),
+3. If Todd asked to attach an HTML report (e.g. a `todd-html-report` / `todd-describe-pr` artifact),
    attach it to the issue (`linctl` attachment flags, or the Linear MCP `create_attachment`).
 4. Return the new ticket identifier + URL, one line.
 

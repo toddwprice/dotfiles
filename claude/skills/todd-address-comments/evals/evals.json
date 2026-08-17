@@ -1,5 +1,5 @@
 {
-  "skill_name": "todd:address-comments",
+  "skill_name": "todd-address-comments",
   "safety": "Propose-first. Eval runs must STOP at the triage table — never implement, commit, or push. Subagent instructions enforce this.",
   "evals": [
     {

@@ -1,5 +1,5 @@
 ---
-name: todd:astro-run-evals
+name: todd-astro-run-evals
 description: >
   Run the Astro offline Braintrust evals (or a scoped subset) and summarize the results. Use this
   WHENEVER Todd wants to run dscript/supervisor or other Astro evals — phrasings like "run all

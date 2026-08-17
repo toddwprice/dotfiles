@@ -1,6 +1,13 @@
 ---
+name: todd-standup
 allowed-tools: Bash(git log:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh search prs:*), Bash(linctl:*), Bash(date:*), Bash(mkdir:*), Bash(open:*), Write, mcp__plugin_slack_slack__slack_send_message
-description: Generate a brief standup grouped by workstream as HTML, open it in the browser, and post it to my Slack DM.
+description: >
+  Use when Todd explicitly asks for his standup — "write my standup", "my standup", "generate my
+  standup", "standup for today", "post my standup". Gathers yesterday's landed work and today's next
+  steps from his branches, the PRs he reviewed, and Linear; groups it by workstream; renders it as HTML;
+  and posts it to his own Slack self-DM. Requires an explicit standup request — it POSTS to Slack
+  without asking, so do NOT trigger it from a general "what did I work on" or "catch me up" question;
+  use `branch-recap` or `todd-catchup` for those.
 ---
 
 Generate a lean standup covering **Yesterday** and **Today**, grouped by workstream, render it as HTML and open it, then post it to my Slack DM.

@@ -1,7 +1,7 @@
 # Canonical: GitHub review payload + posting (Todd's review convention)
 
 **Single source of truth** for how Todd's review skills build and post a PR review. Consumed by
-`todd:pr_review`, `todd:sync-review`, and `todd:address-comments`. If you change the schema, the
+`todd-pr-review`, `todd-sync-review`, and `todd-address-comments`. If you change the schema, the
 line-anchoring rules, the posting commands, or the Answer-only rule, change them **here** — the
 skills should point at this file, not re-derive it (they drifted before this existed).
 
@@ -56,7 +56,7 @@ skills should point at this file, not re-derive it (they drifted before this exi
   > `positive` finding inline. Measured over 425 posted comments, that criterion produced 46%
   > non-blocking against 2.4% blocking, 41 threads that drew a "no change needed" reply, and 23% that
   > drew no reply at all. A later audit (2026-08-13, 80 comments) found the old rule still live *here*
-  > after being fixed in `todd:pr_review`, which is why 39% of comments were still non-blocking.
+  > after being fixed in `todd-pr-review`, which is why 39% of comments were still non-blocking.
   > **Don't restore it, and if you change the rule, change it in `commands/todd/pr_review.md` and
   > `skills/todd-sync-review/SKILL.md` in the same edit** — those are the other two copies.
   >
@@ -109,11 +109,11 @@ Posting a review is outbound and public, so the default across these skills is: 
 payload and wait for Todd's confirmation** first. Post replies individually; if one fails, report it
 and continue.
 
-**One standing exception: `todd:pr_review` in its default (Post) mode.** Todd asked for that command
+**One standing exception: `todd-pr-review` in its default (Post) mode.** Todd asked for that command
 to publish the review itself rather than hand him a command to copy — so it runs the `POST` without
 confirming, under the preflight gates in its Step 7c. That exception is scoped to that command's
-default mode and nothing else: `todd:pr_review --html`, `todd:sync-review`, and
-`todd:address-comments` all still show the payload and wait.
+default mode and nothing else: `todd-pr-review --html`, `todd-sync-review`, and
+`todd-address-comments` all still show the payload and wait.
 
 ### Event constraints GitHub enforces (all consumers)
 
