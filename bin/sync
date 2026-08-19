@@ -16,6 +16,8 @@ WATCHED_DIRS=(
     "$HOME/.claude/commands"
     "$HOME/.claude/agents"
     "$HOME/.config/zed"
+    "$HOME/.codex/config.toml"
+    "$HOME/.codex/AGENTS.md"
 )
 
 # Filenames to ignore when scanning. mkrc would symlink them and the .gitignore

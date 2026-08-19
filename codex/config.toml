@@ -1,3 +1,11 @@
+openai_base_url = "https://us.api.openai.com/v1"
+
+approvals_reviewer = "user"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
+
 [projects."/Users/toddprice/dscout-wt"]
 trust_level = "trusted"
 
@@ -6,12 +14,6 @@ last_updated = "2026-08-17T19:13:21Z"
 last_revision = "31ce59d9011cfb1d78f265649a228dac5de58d76"
 source_type = "git"
 source = "https://github.com/warpdotdev/codex-warp.git"
-
-[model_providers.openaidr]
-name = "OpenAI Data Residency"
-base_url = "https://us.api.openai.com/v1"
-wire_api = "responses"
-requires_openai_auth = true
 
 [plugins."warp@codex-warp"]
 enabled = true

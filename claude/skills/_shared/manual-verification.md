@@ -45,6 +45,49 @@ Stop, and report the items as unverified with the reason, if any of these hold:
 
 ## Step 1 — Bring the stack up
 
+### 1a. Reserve the shared environment first
+
+The app containers and Chrome are a single-machine resource. **Do not probe,
+restart, or drive `localhost` until this session owns the reservation.**
+`acquire` waits in FIFO order, so a manual-verification agent queues behind an
+active browser session instead of replacing the checkout it is testing.
+
+Prefer the command from the worktree under test once this feature is on `main`.
+Until then, `$HOME/dscout-wt/shared-docker-resources` is the local rollout copy.
+`DSCOUT_SHARED_ENV_BIN` lets a caller supply a different copy explicitly.
+
+```bash
+shared_env_bin="$WT/bin/shared-env"
+if [ ! -x "$shared_env_bin" ]; then
+  shared_env_bin="${DSCOUT_SHARED_ENV_BIN:-$HOME/dscout-wt/shared-docker-resources/bin/shared-env}"
+fi
+
+if [ ! -x "$shared_env_bin" ]; then
+  echo "shared-env is unavailable; cannot safely run browser verification" >&2
+  exit 1
+fi
+
+cd "$WT" && "$shared_env_bin" acquire \
+  --purpose "manual verification: $TICKET" \
+  --up
+```
+
+- Exit `0` means the reservation is yours and the app services are ready for
+  this worktree. Continue below.
+- Exit `7` means the reservation is yours but Compose could not start the app
+  services. Capture the service failure, release the reservation, and mark all
+  items unverified. Do not test a previous checkout by accident.
+- Any other nonzero exit means no reservation was acquired. Report the queue or
+  timeout result; do not start Compose directly and do not drive the browser.
+
+The reservation spans every browser tool call in this procedure. Release it
+after posting results, including when a checklist item fails or verification
+becomes impossible.
+
+Each Bash tool call starts with a fresh shell. Repeat the resolver block when a
+later command needs `$shared_env_bin`; do not assume that variable or `cd "$WT"`
+survives from the acquisition call.
+
 ### Never call `ddu` from the Bash tool. It is guaranteed to fail.
 
 `ddu` is `alias ddu="dscout-down && dscout-up"` (`~/.dotfiles/zshrc:80`), and those
@@ -66,10 +109,10 @@ The failure is quiet and misleading rather than loud: `_dscout_root` returns emp
 the shell happens to be in** with an empty service list — `no such service:`. Nothing is
 destroyed (no `-v`, no services matched), but nothing you wanted happened either.
 
-Inline what `ddu` expands to instead. `WT` is the absolute worktree path holding your
-changes.
+The reservation command above replaces `ddu` and direct `docker compose` calls.
+`WT` is the absolute worktree path holding your changes.
 
-### 1a. Probe before you touch anything
+### 1b. Confirm the reservation loaded this worktree
 
 ```bash
 curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:5000/auth/sign_in
@@ -77,53 +120,17 @@ docker inspect dscout-axon-1 \
   --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
 ```
 
-- `200` **and** the binding equals `$WT` → **the stack is already right. Don't bounce it.**
-  Phoenix recompiles on request in dev and webpack rebuilds on change, so your edits are
-  already live. Skip to step 2 and save seven minutes.
-- Binding is some *other* worktree → you must rebind (1c). Say plainly in your report that
-  you rebound it, and from what: it interrupts whatever was running there.
-- Not serving → bring it up (1c).
+- `200` **and** the binding equals `$WT` → the stack is right. Continue to step 2.
+- A different binding, or no successful response → report every item unverified and
+  release the reservation. Do not bypass the mutex with direct Compose commands; the
+  reservation is specifically what keeps another session's browser run intact.
 
-### 1b. The `.env` files the containers need
+If `acquire --up` failed because the worktree is missing required `.env` files,
+create or link those files, then run `cd "$WT" && "$shared_env_bin" up` while
+you still hold the reservation. The repository's shared-env guide lists the
+required files and one-time database setup.
 
-`_dscout_ensure_env` is one of the helpers the snapshot drops, so do its job by hand.
-axon and astro won't boot without these, and a fresh worktree has neither:
-
-```bash
-for f in apps/axon/.env apps/astro/.env; do
-  [ -f "$HOME/dscout-wt/main/$f" ] && [ ! -e "$WT/$f" ] \
-    && ln -s "$HOME/dscout-wt/main/$f" "$WT/$f" && echo "symlinked $f"
-done
-```
-
-### 1c. Up, bound to your worktree
-
-Name the services explicitly. **Don't use `--profile dev`** — `contour` joined that
-profile and declares a required `env_file: ./apps/contour/.env` that mostly doesn't exist
-locally, so a bare `--profile dev up` dies at model load. Naming services activates their
-profile anyway, and `depends_on` pulls in database/redis/s3.
-
-```bash
-cd "$WT" && docker compose -f compose.yaml down dendra axon astro astro-worker 2>&1 \
-  | grep -v "has active endpoints"
-
-cd "$WT" && docker compose -f compose.yaml up -d --wait \
-  --wait-timeout "${DSCOUT_WAIT_TIMEOUT:-420}" \
-  --force-recreate dendra axon astro astro-worker
-```
-
-- `--force-recreate` is what actually rebinds the containers to `$WT`'s paths. Include it
-  whenever the binding was wrong; it's harmless when it was already right.
-- The `has active endpoints` warning on `down` is expected — Compose tries to drop the
-  network while the deps are still attached.
-- **Never** `down --all` and **never** pass `-v`. Both take the deps with them; `-v`
-  additionally destroys the database, MinIO contents, and the warm webpack/node_modules
-  caches. `down` ignores the profile you pass and removes every container in the project,
-  which is why the service list is spelled out.
-- 420s fits inside the Bash tool's 600s cap. If it times out, report
-  `docker compose -f compose.yaml logs --tail 50 axon` rather than retrying blind.
-
-### 1d. Migrations, if the work added one
+### 1c. Migrations, if the work added one
 
 The code reloader covers `lib/`. It does **not** cover migrations, `config/`, `mix.exs`,
 or new deps — those need the restart above, and a migration needs running:
@@ -288,6 +295,29 @@ batching the prepare calls lets the earlier ones die:
 Then embed the same `assetUrl` in the comment body as `![MT1](<assetUrl>)` so the image
 renders inline. If an embed doesn't render, the attachment row from step 3 is the durable
 copy — say so rather than silently dropping the evidence.
+
+### Release the reservation
+
+After the results comment is posted — whether it says verified, failed, or
+unverified — stop the app services, then release the browser slot. Re-resolve
+the command path because this is normally a different Bash tool call:
+
+```bash
+shared_env_bin="$WT/bin/shared-env"
+if [ ! -x "$shared_env_bin" ]; then
+  shared_env_bin="${DSCOUT_SHARED_ENV_BIN:-$HOME/dscout-wt/shared-docker-resources/bin/shared-env}"
+fi
+
+cd "$WT" && "$shared_env_bin" down || down_rc=$?
+cd "$WT" && "$shared_env_bin" release \
+  --note "manual verification: $TICKET complete"
+
+[ -z "${down_rc:-}" ] || echo "shared-env down failed with $down_rc" >&2
+```
+
+If this reports exit `5`, the lock is still yours and the release must be
+retried. Report a failed `down`, but do not keep the reservation merely because
+the app containers could not be removed. Never use `--force` for normal cleanup.
 
 If uploading fails, **still post the comment** with the local paths and a note that the
 upload failed. Losing the results because the attachment step broke is the worse outcome.

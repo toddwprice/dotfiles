@@ -1084,7 +1084,8 @@ Resolve every `.claude/tmp/<branch-or-ticket>/…` path in that file against thi
 <ABSOLUTE TMP DIR>
 
 The Linear MCP tools may be deferred in your session — load them with ToolSearch before its phase 0.
-`save_comment` is how the stamp gets written and it has no fallback.
+If `save_comment` is unavailable or fails, follow `/todd-plan-check`'s `linctl comment update`
+fallback and verify the updated comment through `linctl issue get`.
 
 Return its phase-6 report verbatim, plus the stamp text you wrote.
 ````

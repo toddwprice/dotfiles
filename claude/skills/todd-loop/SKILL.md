@@ -185,11 +185,12 @@ Run the ticket's Manual Test Plan against the local stack and tick the items off
 Its prompt needs to work cold:
 
 - **"Read `~/.claude/skills/_shared/manual-verification.md` and follow it."** That file is the procedure and it carries the verified commands. Tell it not to improvise a browser recipe — several obvious shortcuts are known-broken (`ddu` from a non-interactive shell, `#session_email` as a selector, an absolute screenshot path).
+- **Reserve the shared environment before the first localhost or browser call.** The manual-verification procedure resolves `bin/shared-env` from `$WT`, falling back to `$DSCOUT_SHARED_ENV_BIN` or `$HOME/dscout-wt/shared-docker-resources/bin/shared-env` during this local rollout. Run `acquire --purpose "manual verification: $TICKET" --up`, let it queue rather than taking another agent's stack, and release after posting results on every path.
 - `TICKET`, the absolute `WT` path, and the branch-tip SHA — the results comment records provenance, and provenance is what makes the ticks trustworthy.
 - The Manual Test Plan items, lifted verbatim from the plan comment.
 - The cwd-resets warning, and: **write evidence to a path relative to the session's cwd**, because the Playwright MCP roots every write at the session directory and will refuse a path inside `$WT` when `$WT` isn't it. That's the normal case here.
 
-**The one thing that invalidates the whole phase.** Every worktree shares one Compose project (`compose.yaml` pins `name: dscout`), so the containers answering `localhost:5000` may be serving a *different* worktree's code. The subagent must confirm the binding matches `$WT` before believing anything it sees, and rebind if not. If it can't, everything comes back unverified — never tick against code you didn't run.
+**The one thing that invalidates the whole phase.** Every worktree shares one Compose project (`compose.yaml` pins `name: dscout`), so the containers answering `localhost:5000` may be serving a *different* worktree's code. The reservation starts the app services from `$WT`, but the subagent must still confirm the binding matches `$WT` before believing anything it sees. If it can't, everything comes back unverified — never tick against code you didn't run.
 
 **When the plan has no `### 🧪 Manual Test Plan`:**
 
@@ -257,7 +258,7 @@ Keep it short:
 - Never post the self-review JSON to GitHub. It's scaffolding; the fixes are the output.
 - Never flip a PR to ready with a red check, or with a manual item that was observed failing.
 - **Never tick a manual item you didn't watch pass.** Not from reading the code, not because a unit test covers it, not because it worked last round. An unverifiable item gets a reason; a checklist that can be ticked without looking launders a guess as a fact and is worth less than no checklist.
-- Never `docker compose down -v` or `down --all`. `-v` destroys the local database, MinIO contents, and the warm build caches; `down` ignores the profile you pass and takes the deps with it either way. Phase 5 names its services explicitly for exactly this reason.
+- Never `docker compose down -v`, `down --all`, or direct Compose cleanup in phase 5. `-v` destroys the local database, MinIO contents, and warm build caches; a bare `down` takes shared deps with it. Use `bin/shared-env down` while holding the reservation, then `bin/shared-env release`.
 - Never run the manual verification against anything but `http://localhost:5000`. It signs in with shared local dev credentials.
 - One ticket per invocation. Multiple tickets with stacked PRs is `/todd-phase` — say so and stop.
 - If a phase fails twice, stop and report. Don't improvise around a broken phase.
@@ -273,7 +274,7 @@ Keep it short:
 | `gh pr create` fails | Stop with the error; the branch is already pushed, so `--resume pr` retries just this. |
 | pr_review returns no JSON | Re-dispatch once, then stop. |
 | Per-app check red | Stop before pushing. Report the failing command and output. |
-| Stack won't come up for phase 5 | Report the failing service and `docker compose -f compose.yaml logs --tail 50 axon`, mark every item unverified, and continue to phase 6. A browser that won't start isn't a reason to sit on reviewed, green code. |
+| Stack won't come up for phase 5 | Report the failing service and `docker compose -f compose.yaml logs --tail 50 axon`, release the reservation, mark every item unverified, and continue to phase 6. A browser that won't start isn't a reason to sit on reviewed, green code. |
 | Containers bound to another worktree and won't rebind | All items unverified. Continue, and say the evidence is missing rather than implying it passed. |
 | Sign-in doesn't reach `/efflux` (2FA, SSO, bad credentials) | All items unverified with the landing URL. Don't route around an account's auth requirements. |
 | A manual item fails | Stop before phase 6. Report it with the screenshot — a feature observed not working doesn't get flipped to ready. |

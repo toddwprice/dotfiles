@@ -4,6 +4,7 @@
 #
 #   loop-pr-review-queue          # every 15 minutes
 #   loop-pr-review-queue 30       # every 30 minutes
+#   loop-pr-review-queue --interval 30 -d  # every 30 minutes; flags can come first
 #   loop-pr-review-queue 90s      # every 90 seconds
 #   loop-pr-review-queue 2h       # every 2 hours
 #
@@ -18,10 +19,9 @@
 #
 #   loop-pr-review-queue 30 -c '/todd-pr-review --html'
 #
-# Every argument after the interval goes straight to `pr-review-queue`, so
-# `-d`, `-v`, `-n 3`, `-r owner/name` all work. The interval has to come first;
-# anything else in that slot is treated as a child argument and you get the
-# 15-minute default.
+# Every argument other than the interval goes straight to `pr-review-queue`, so
+# `-d`, `-v`, `-n 3`, `-r owner/name` all work. Keep using the original first
+# positional form, or use `--interval` / `-i` anywhere among the loop options.
 #
 # `--agent claude|codex` picks who reviews, and the loop validates it rather
 # than forwarding it blind — a typo'd agent name is a mistake you want reported
@@ -91,15 +91,20 @@ LOCK_DIR="${LOOP_PR_REVIEW_QUEUE_LOCK:-${TMPDIR:-/tmp}/loop-pr-review-queue.lock
 
 usage() {
   cat <<'EOF'
-Usage: loop-pr-review-queue [INTERVAL] [pr-review-queue args...]
+Usage: loop-pr-review-queue [INTERVAL] [loop options] [pr-review-queue args...]
 
 Runs pr-review-queue immediately, then again every INTERVAL, until you stop it.
 
 INTERVAL
   A bare number is minutes: `20` means every 20 minutes. Suffixes work too --
-  `90s`, `20m`, `2h`. Default: 15m. It must be the first argument.
+  `90s`, `20m`, `2h`. Default: 15m. The original positional form must come
+  first; use --interval or -i to set it after other loop options.
 
 Options (everything else is passed through to pr-review-queue)
+  -i, --interval VALUE
+                         Wait VALUE between runs. Same formats as INTERVAL.
+                         This is the equivalent of the first positional form,
+                         but can appear alongside loop options.
       --agent NAME       Who reviews: claude or codex. Passed to
                          pr-review-queue, which defaults to claude when this
                          is left off. Validated here so a bad name is
@@ -118,6 +123,8 @@ Options (everything else is passed through to pr-review-queue)
 Examples
   loop-pr-review-queue                          # every 15m, reviews and POSTS
   loop-pr-review-queue 30                       # every 30m
+  loop-pr-review-queue --interval 30 -d         # same interval; skip drafts
+  loop-pr-review-queue --agent codex -i 2h      # codex every 2 hours
   loop-pr-review-queue 30 --agent codex         # hand each tick to codex
   loop-pr-review-queue 30 -c '/todd-pr-review --html'   # render locally, post nothing
   loop-pr-review-queue 10 -d -v                 # skip drafts, show each PR
@@ -134,10 +141,10 @@ need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
 
 # --- argument parsing ---------------------------------------------------------
 #
-# Only the first positional is ours, and only if it looks like an interval.
+# The original first positional form is ours only if it looks like an interval.
+# --interval/-i is the explicit form and can appear among loop options.
 # Everything else — including flags we don't recognize — belongs to the child,
-# so `loop-pr-review-queue -d` is a 15-minute loop that skips drafts rather
-# than an error about an unknown option.
+# so `loop-pr-review-queue -d` is a 15-minute loop that skips drafts.
 
 INTERVAL_RAW=""
 QUEUE_ARGS=()
@@ -152,6 +159,12 @@ fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)      usage; exit 0 ;;
+    -i|--interval)
+      need_value "$@"
+      [[ -z "$INTERVAL_RAW" ]] || die "interval was set more than once"
+      INTERVAL_RAW="$2"
+      shift 2
+      ;;
     # The one child flag this loop reads on the way past instead of forwarding
     # blind. Pass-through would work, but the failure is lopsided: a misspelled
     # agent name only surfaces when the first tick runs, as a child usage error

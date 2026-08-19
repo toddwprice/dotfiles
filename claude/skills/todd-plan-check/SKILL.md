@@ -109,7 +109,10 @@ Under `--strict`, nothing is advisory-eligible. Advisories become blockers, same
 ## Phase 0 — Load the plan and its evidence
 
 **The plan.** `mcp__claude_ai_Linear__list_comments` for the ticket, find the comment whose first
-line is `## 📋 Implementation Plan`.
+line is `## 📋 Implementation Plan`. If the Linear MCP is unavailable, deferred, or errors, run
+`linctl auth status` and `linctl issue get $TICKET --json`; read the same comment from
+`.comments.nodes`. The fallback has the same duplicate-plan stop: do not choose between two plan
+comments just because the MCP is absent.
 
 - **None** → nothing to check. Report that, and say whether `/todd-plan` or `/todd-coder plan` has
   been run. Stop.
@@ -581,9 +584,13 @@ means. `/todd-plan` reads this block; keep it parseable by a human and an LLM, n
 
 **Rules for the stamp:**
 
-- It goes **inside the existing comment**, at the end, via `save_comment` with the comment id from
-  phase 0. Never a new comment — a second comment on the ticket is the duplicate-plan bug you exist
-  partly to catch.
+- It goes **inside the existing comment**, at the end. Use `save_comment` with the comment id from
+  phase 0 when the Linear MCP is available. If it is unavailable, deferred, or the write fails, run
+  `linctl auth status`, then `linctl comment update <COMMENT_ID> --body "$(<CHECKED_PLAN_PATH)"`.
+  `CHECKED_PLAN_PATH` is the checked local copy written below, and `COMMENT_ID` is the one plan
+  comment selected in phase 0. Never create a new comment — a second comment on the ticket is the
+  duplicate-plan bug you exist partly to catch. Re-read `linctl issue get $TICKET --json` and verify
+  that this same comment still starts with `## 📋 Implementation Plan` and ends with the new stamp.
 - Replace any previous stamp rather than appending a second one. One stamp, always the latest.
 - **The `🔴 Open blockers` and `⚪ Advisories` blocks are part of the stamp**, so they get replaced
   wholesale too — and a passing run *removes* the blocker list. A plan that now passes must not still
@@ -711,6 +718,6 @@ The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. The
 | An anchor's line number is off but the symbol is in the file | 🟡. Correct the number. Not a blocker — the grounding was done. |
 | Ticket not found or MCP truncating | Fall back to `linctl issue get $TICKET --json`. If that also fails, run groups A–D and skip E1 — you can't check coverage against a ticket you can't read. Say which group you skipped. |
 | Plan contradicted by the code | 🔴 Report it as a finding. Don't correct the plan; the correction may change the approach, which is Todd's call. |
-| `save_comment` fails | The checked local copy is on disk — report its path. |
+| `save_comment` is unavailable or fails | Fall back to `linctl auth status` then `linctl comment update <COMMENT_ID> --body "$(<CHECKED_PLAN_PATH)"`; re-read the issue and verify the one plan comment carries the new stamp. Report the local path only if both writes fail. |
 
 Now check $ARGUMENTS.
