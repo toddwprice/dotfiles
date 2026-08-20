@@ -9,16 +9,9 @@
 #   loop-pr-review-queue 2h       # every 2 hours
 #   loop-pr-review-queue --agent codex --model gpt-5.6  # override the default model
 #
-# READ THIS BEFORE STARTING ONE. `pr-review-queue` doesn't print a queue — it
-# launches a background review agent per PR, and the command it launches is
-# bare `/todd-pr-review`, the POSTING mode. Each agent submits its review to
-# GitHub on its own. So this loop reviews and publishes on other people's PRs,
-# unattended, every N minutes, until you stop it. That is what it's for, but
-# it isn't a dry run and there's no undo short of deleting the reviews.
-#
-# The read-first loop passes the flag through to the child:
-#
-#   loop-pr-review-queue 30 -c '/todd-pr-review --html'
+# READ THIS BEFORE STARTING ONE. `todd-pr-review` now pauses for Todd's
+# decisions before it builds or posts a review. This loop cannot drive that
+# interactive checkpoint; use it only with another non-interactive command.
 #
 # Every argument other than the interval goes straight to `pr-review-queue`, so
 # `-d`, `-v`, `-n 3`, `-r owner/name` all work. Keep using the original first
@@ -129,14 +122,12 @@ Options (everything else is passed through to pr-review-queue)
   -h, --help             Show this help
 
 Examples
-  loop-pr-review-queue                          # every 15m, reviews and POSTS
-  loop-pr-review-queue 30                       # every 30m
-  loop-pr-review-queue --interval 30 -d         # same interval; skip drafts
-  loop-pr-review-queue -i 2h                    # Claude + Sonnet every 2 hours
-  loop-pr-review-queue --agent codex -i 2h      # codex every 2 hours
-  loop-pr-review-queue --agent codex --model gpt-5.6 -i 2h
-  loop-pr-review-queue 30 --agent codex         # hand each tick to codex
-  loop-pr-review-queue 30 -c '/todd-pr-review --html'   # render locally, post nothing
+  loop-pr-review-queue -p                       # print queue; review manually
+  loop-pr-review-queue 30 -c /other-command     # run another command every 30m
+  loop-pr-review-queue --interval 30 -d -c /other-command
+  loop-pr-review-queue -i 2h -c /other-command  # Claude + Sonnet every 2 hours
+  loop-pr-review-queue --agent codex -i 2h -c /other-command
+  loop-pr-review-queue --agent codex --model gpt-5.6 -c /other-command
   loop-pr-review-queue 10 -d -v                 # skip drafts, show each PR
   loop-pr-review-queue 60 -n 3                  # hourly, 3 most recent only
   nohup loop-pr-review-queue 15 > /dev/null 2> ~/pr-loop.log &   # detached

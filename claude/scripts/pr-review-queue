@@ -36,16 +36,10 @@
 # — a codex that dies on launch says so in its log file, not in this script's
 # exit status. Check the log paths printed on stderr if a review never lands.
 #
-# Know what one invocation does: bare `/todd-pr-review` is the command's posting
-# mode, so each agent submits its review to GitHub on its own. Typing
-# `pr-review-queue` publishes a review on every PR in the queue, on other
-# people's PRs, with nobody reading them first. That is the intended behavior
-# here — the whole point is not hand-driving a queue of reviews — but it isn't a
-# dry run, and there's no undo short of deleting the reviews on GitHub.
-#
-# `-c '/todd-pr-review --html'` is the read-first version: each agent renders a
-# local HTML artifact and posts nothing, and you submit the ones you want.
-# Reach for it when the queue is unfamiliar or you want to eyeball the output.
+# `todd-pr-review` now requires Todd's decision on each surfaced finding before
+# it writes or posts a review. This queue cannot supply those answers, so it
+# refuses to launch that command in the background. Use `--print-only` or
+# `--raw`, then run each review in an interactive session.
 #
 # Mirrors https://github.com/pulls/reviews with the query:
 #   is:pr review-requested:@me state:open archived:false sort:updated-desc
@@ -95,10 +89,9 @@ LAUNCH_UNAVAILABLE=false
 AGENT="claude"
 MODEL=""
 
-# Bare, so each launched agent posts its own review to GitHub — see the header
-# and the --command help for what that means before changing it. Only the first
-# word is used to match in-flight sessions, so adding a flag here (`--html`)
-# rides along harmlessly there.
+# The default requires an interactive Todd decision checkpoint. Only the first
+# word is used to match in-flight sessions, so adding a flag here rides along
+# harmlessly there.
 CMD="/todd-pr-review"
 
 # Where the in-flight check reads from — claude sessions from the first two, live
@@ -152,11 +145,10 @@ Options:
                          somewhere — otherwise the pipe still launches, and
                          `| sh` launches everything a second time.
                          --dry-run is an alias.
-  -c, --command CMD      Slash command to run per PR (default:
-                         /todd-pr-review, the posting mode — every agent
-                         submits its review to GitHub itself. Pass
-                         -c '/todd-pr-review --html' to render each review
-                         locally and post nothing, and submit them yourself.)
+  -c, --command CMD      Slash command to run per PR. /todd-pr-review requires
+                         an interactive decision checkpoint and may only be
+                         emitted with --print-only or --raw; background launch
+                         is refused.
       --raw              Emit the bare `<command> <number>` without the
                          launcher wrapper. That form is slash-command text for
                          an interactive session, not something a shell can
@@ -168,12 +160,12 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  pr-review-queue                     # review + post on every PR awaiting me
+  pr-review-queue -p                  # print PRs; run reviews interactively
   pr-review-queue -v -d               # skip drafts, show what each one is
   pr-review-queue -n 3                # only the 3 most recent
   pr-review-queue -p                  # just show me the queue, launch nothing
   pr-review-queue -p -n 5 | pbcopy    # top 5, straight to the clipboard
-  pr-review-queue -c '/todd-pr-review --html'   # render locally, post nothing
+  pr-review-queue --raw               # copy interactive review commands
   pr-review-queue --raw               # bare /todd-pr-review N lines
   pr-review-queue -a                  # every repo, qualified refs
   pr-review-queue --include-running   # don't hide in-flight reviews
@@ -224,6 +216,11 @@ esac
 # file at /todd-pr-review, so --raw is print-only by construction.
 if [[ "$RAW" == true ]]; then
   LAUNCH=false
+fi
+
+if [[ "$LAUNCH" == true && "$CMD" == "/todd-pr-review"* ]]; then
+  echo "pr-review-queue: /todd-pr-review needs Todd's interactive decisions; use --print-only or --raw." >&2
+  exit 2
 fi
 
 for tool in gh jq; do
@@ -417,8 +414,8 @@ fi
 
 if [[ -n "$agents_json" || -n "$ps_output" ]]; then
   # The command as it shows up in a launch prompt is the first word of $CMD, so
-  # `-c '/todd-pr-review --html'` still matches an intent of
-  # `/todd-pr-review 27713 --html`.
+  # `-c '/todd-pr-review --json-only'` still matches an intent of
+  # `/todd-pr-review 27713 --json-only`.
   cmd_token="${CMD%% *}"
 
   # Auto-generated job names render "/todd-pr-review" as "pr review", so the
@@ -447,7 +444,7 @@ if [[ -n "$agents_json" || -n "$ps_output" ]]; then
   # reading as a PR. "start" counts from the first token, for the generated-name
   # fallback that no longer contains the command token at all. Either way every
   # ref-shaped token after that point counts, so flag order doesn't matter —
-  # `--html 27713` and `27713 --html` both yield 27713.
+  # `--json-only 27713` and `27713 --json-only` both yield 27713.
   collect_refs() {
     local text="$1" state="$2" started="$3" cwd="$4" scan_from="$5"
     local scanning prompt tok
@@ -671,7 +668,7 @@ while IFS= read -r ref; do
   # read stdin and APPEND it to the prompt, and this loop is fed by a
   # here-string, so without it the first launch swallows every remaining ref:
   # the loop runs exactly once and that one agent gets the prompt
-  # "/todd-pr-review --html 27615\n27616\n27617". Observed on claude, not
+  # "/todd-pr-review --json-only 27615\n27616\n27617". Observed on claude, not
   # theoretical — it spawned a real agent with that prompt. codex is the same by
   # its own documentation: "if stdin is piped and a prompt is also provided,
   # stdin is appended as a `<stdin>` block".

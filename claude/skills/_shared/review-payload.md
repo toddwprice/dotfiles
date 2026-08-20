@@ -112,7 +112,7 @@ and continue.
 **One standing exception: `todd-pr-review` in its default (Post) mode.** Todd asked for that command
 to publish the review itself rather than hand him a command to copy — so it runs the `POST` without
 confirming, under the preflight gates in its Step 7c. That exception is scoped to that command's
-default mode and nothing else: `todd-pr-review --html`, `todd-sync-review`, and
+default mode and nothing else: `todd-pr-review --json-only`, `todd-sync-review`, and
 `todd-address-comments` all still show the payload and wait.
 
 ### Event constraints GitHub enforces (all consumers)

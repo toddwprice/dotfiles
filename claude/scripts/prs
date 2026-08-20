@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+#
+# prs — open pull requests waiting for my review, with the associated Linear
+# issue rather than the PR title. GitHub is the source for review state and
+# creation time; Linear is the source for the ticket title.
+
+set -euo pipefail
+
+REPO="dscout/dscout"
+LIMIT=100
+SKIP_DRAFTS=false
+
+usage() {
+  cat <<'EOF'
+Usage: prs [options]
+
+Lists open PRs that have requested your review, oldest first.
+
+  #       GitHub PR number
+  Submitter  GitHub author
+  Linear  Linear ticket and its current title
+  Created  When the PR was opened (UTC)
+
+Options:
+  -r, --repo OWNER/NAME  Search one repo (default: dscout/dscout)
+  -a, --all-repos        Search every repo
+  -n, --limit N          Max PRs to return (default: 100)
+  -d, --no-drafts        Leave draft PRs out
+  -h, --help             Show this help
+EOF
+}
+
+die() { echo "prs: $*" >&2; exit 2; }
+need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -r|--repo)      need_value "$@"; REPO="$2"; shift 2 ;;
+    -a|--all-repos) REPO=""; shift ;;
+    -n|--limit)     need_value "$@"; LIMIT="$2"; shift 2 ;;
+    -d|--no-drafts) SKIP_DRAFTS=true; shift ;;
+    -h|--help)      usage; exit 0 ;;
+    *)              die "unknown option '$1'" ;;
+  esac
+done
+
+[[ "$LIMIT" =~ ^[0-9]+$ && "$LIMIT" -gt 0 ]] || die "--limit must be a positive number (got '$LIMIT')"
+[[ -z "$REPO" || "$REPO" == */* ]] || die "--repo must look like OWNER/NAME (got '$REPO')"
+
+for tool in gh jq linctl; do
+  command -v "$tool" >/dev/null 2>&1 || die "'$tool' not found on PATH"
+done
+
+gh auth status >/dev/null 2>&1 || die "gh is not authenticated; run: gh auth login"
+linctl auth status >/dev/null 2>&1 || die "linctl is not authenticated; run: linctl auth"
+
+qualifiers=("archived:false")
+[[ -n "$REPO" ]] && qualifiers+=("repo:$REPO")
+
+if ! json="$(gh search prs "${qualifiers[@]}" \
+    --review-requested=@me \
+    --state=open \
+    --sort=created \
+    --order=asc \
+    --limit "$LIMIT" \
+    --json number,repository,isDraft,title,author,createdAt)"; then
+  die "GitHub PR search failed"
+fi
+
+if [[ "$SKIP_DRAFTS" == true ]]; then
+  json="$(jq '[.[] | select(.isDraft | not)]' <<<"$json")"
+fi
+
+count="$(jq 'length' <<<"$json")"
+if [[ "$count" -eq 0 ]]; then
+  echo "No open PRs are waiting for your review${REPO:+ in $REPO}."
+  exit 0
+fi
+
+printf '%-8s %-18s %-64s %s\n' '#' 'Submitter' 'Linear' 'Created (UTC)'
+
+while IFS=$'\t' read -r number author pr_title created repo; do
+  # PR titles conventionally carry the Linear identifier, e.g. [FRG-1234] or
+  # FRG-1234: title. The Linear title is intentionally fetched fresh instead
+  # of echoing the PR title, which often describes the implementation instead.
+  if [[ "$pr_title" =~ ([[:alpha:]][[:alnum:]]*-[0-9]+) ]]; then
+    ticket="${BASH_REMATCH[1]^^}"
+    if issue="$(linctl issue get "$ticket" --json 2>/dev/null)"; then
+      ticket_title="$(jq -r '.title // empty' <<<"$issue")"
+      linear="$ticket — $ticket_title"
+    else
+      linear="$ticket — not found in Linear"
+    fi
+  else
+    linear='— no Linear ticket in PR title'
+  fi
+
+  # A bare number only identifies a PR within one repository. Keep the normal
+  # output short, but qualify it when --all-repos broadens that scope.
+  if [[ -n "$REPO" ]]; then
+    pr_ref="#$number"
+  else
+    pr_ref="$repo#$number"
+  fi
+
+  # GitHub gives an ISO-8601 timestamp, so the opening date and time stay
+  # unambiguous regardless of the machine's local timezone.
+  printf '%-8s %-18s %-64s %s\n' "$pr_ref" "@$author" "$linear" "$created"
+done < <(jq -r '.[] | [
+  (.number | tostring),
+  (.author.login // "ghost"),
+  .title,
+  .createdAt,
+  .repository.nameWithOwner
+] | @tsv' <<<"$json")
