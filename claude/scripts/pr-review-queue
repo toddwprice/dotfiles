@@ -4,6 +4,7 @@
 # background review agent per PR and prints the line it ran, one per PR:
 #
 #   claude --bg '/todd-pr-review 27615'
+#   claude --bg --model sonnet '/todd-pr-review 27615'
 #
 # Launching is the default; there's no copy-paste step. --print-only goes back
 # to printing and running nothing, which is what you want when something
@@ -15,6 +16,11 @@
 #
 #   claude   (default)  claude --bg '/todd-pr-review 27615'
 #   codex               codex exec '/todd-pr-review 27615'
+#
+# --model passes a model name to whichever agent --agent selected:
+#
+#   claude --bg --model sonnet '/todd-pr-review 27615'
+#   codex exec --model gpt-5.6-luna '/todd-pr-review 27615'
 #
 # The two differ in how they detach, and that difference is the reason the codex
 # path is shaped the way it is. `claude --bg` backgrounds itself and returns, so
@@ -87,6 +93,7 @@ SKIP_RUNNING=true
 LAUNCH=true
 LAUNCH_UNAVAILABLE=false
 AGENT="claude"
+MODEL=""
 
 # Bare, so each launched agent posts its own review to GitHub — see the header
 # and the --command help for what that means before changing it. Only the first
@@ -130,6 +137,9 @@ Options:
                          say — reports itself in its log rather than in this
                          script's exit status. In-flight suppression covers
                          both agents.
+  -m, --model NAME       Pass NAME through to the selected agent.
+                           claude  ->  claude --bg --model NAME '<command> <ref>'
+                           codex   ->  codex exec --model NAME '<command> <ref>'
   -r, --repo OWNER/NAME  Scope the search to one repo (default: dscout/dscout)
   -a, --all-repos        Search every repo. Cross-repo results print as
                          OWNER/NAME#N, because a bare number is only
@@ -169,6 +179,8 @@ Examples:
   pr-review-queue --include-running   # don't hide in-flight reviews
   pr-review-queue --agent codex       # hand the queue to codex instead
   pr-review-queue --agent codex -p    # see the codex lines, launch nothing
+  pr-review-queue -m sonnet           # review with Claude Sonnet
+  pr-review-queue --agent codex -m gpt-5.6-luna  # review with Codex Luna
   claude agents                       # check on what claude started
 EOF
 }
@@ -182,6 +194,7 @@ need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent)        need_value "$@"; AGENT="$2"; shift 2 ;;
+    -m|--model)     need_value "$@"; MODEL="$2"; shift 2 ;;
     -r|--repo)      need_value "$@"; REPO="$2"; shift 2 ;;
     -a|--all-repos) REPO=""; shift ;;
     -n|--limit)     need_value "$@"; LIMIT="$2"; shift 2 ;;
@@ -605,6 +618,10 @@ fi
 
 launched=0
 launch_failed=0
+model_args=()
+if [[ -n "$MODEL" ]]; then
+  model_args=(--model "$MODEL")
+fi
 
 # codex writes each review to its own log, so the directory has to exist before
 # the first launch. Failing that is the same class of problem as a missing
@@ -629,9 +646,19 @@ while IFS= read -r ref; do
   if [[ "$RAW" == true ]]; then
     printf '%s %s\n' "$CMD" "$ref"
   elif [[ "$AGENT" == "codex" ]]; then
-    printf 'codex exec %s\n' "$(shell_quote "$CMD $ref")"
+    if [[ -n "$MODEL" ]]; then
+      printf 'codex exec --model %s %s\n' \
+        "$(shell_quote "$MODEL")" "$(shell_quote "$CMD $ref")"
+    else
+      printf 'codex exec %s\n' "$(shell_quote "$CMD $ref")"
+    fi
   else
-    printf 'claude --bg %s\n' "$(shell_quote "$CMD $ref")"
+    if [[ -n "$MODEL" ]]; then
+      printf 'claude --bg --model %s %s\n' \
+        "$(shell_quote "$MODEL")" "$(shell_quote "$CMD $ref")"
+    else
+      printf 'claude --bg %s\n' "$(shell_quote "$CMD $ref")"
+    fi
   fi
 
   [[ "$LAUNCH" == true ]] || continue
@@ -664,13 +691,13 @@ while IFS= read -r ref; do
     # explains itself in its log. The pid is printed so one can be killed
     # without hunting for it.
     log="$LOG_DIR/$(ref_slug "$ref").log"
-    nohup codex exec "$CMD $ref" >"$log" 2>&1 </dev/null &
+    nohup codex exec "${model_args[@]}" "$CMD $ref" >"$log" 2>&1 </dev/null &
     launched=$(( launched + 1 ))
     printf '    started  %s  (pid %s)  -> %s\n' "$ref" "$!" "$log" >&2
   else
     # >&2 keeps `claude`'s own startup chatter off our stdout, so the
     # command-lines-only contract survives launch mode.
-    if claude --bg "$CMD $ref" >&2 </dev/null; then
+    if claude --bg "${model_args[@]}" "$CMD $ref" >&2 </dev/null; then
       launched=$(( launched + 1 ))
       printf '    started  %s\n' "$ref" >&2
     else

@@ -7,6 +7,7 @@
 #   loop-pr-review-queue --interval 30 -d  # every 30 minutes; flags can come first
 #   loop-pr-review-queue 90s      # every 90 seconds
 #   loop-pr-review-queue 2h       # every 2 hours
+#   loop-pr-review-queue --agent codex --model gpt-5.6  # override the default model
 #
 # READ THIS BEFORE STARTING ONE. `pr-review-queue` doesn't print a queue — it
 # launches a background review agent per PR, and the command it launches is
@@ -25,7 +26,9 @@
 #
 # `--agent claude|codex` picks who reviews, and the loop validates it rather
 # than forwarding it blind — a typo'd agent name is a mistake you want reported
-# in the first second, not one tick later:
+# in the first second, not one tick later. Unless `--model` overrides it, the
+# loop selects the matching model for each tick: Sonnet for Claude, and GPT-5.6
+# Luna for Codex:
 #
 #   loop-pr-review-queue 30 --agent codex
 #
@@ -76,10 +79,10 @@ DEFAULT_INTERVAL="15m"
 MAX_FAILURES=5
 USE_LOCK=true
 
-# Empty means the child is never told about --agent at all, so this loop still
-# drives a pr-review-queue from before the flag existed. Messages that need a
-# name say claude, because that is what the child falls back to.
+# Empty means the child is never told about --agent at all. It still receives
+# --model sonnet, because pr-review-queue defaults to Claude in that case.
 AGENT=""
+MODEL=""
 
 # Overridable so the loop can be exercised against a stub child on a one-second
 # interval — same testing-hook convention pr-review-queue uses for its
@@ -109,9 +112,14 @@ Options (everything else is passed through to pr-review-queue)
                          pr-review-queue, which defaults to claude when this
                          is left off. Validated here so a bad name is
                          reported before the first run instead of after it.
+                         The loop passes --model sonnet for claude and
+                         --model gpt-5.6-luna for codex on every run.
                          Under codex, remember that a run counted "ok" only
                          means each review was forked -- see the note at the
                          top of this file.
+      --model MODEL_NAME Pass MODEL_NAME through to pr-review-queue on every
+                         run. This overrides the loop's default model for the
+                         selected agent.
       --max-failures N   Stop after N runs fail in a row (default: 5).
                          0 never gives up. A single failure never stops the
                          loop; a usage error from the child always does.
@@ -124,7 +132,9 @@ Examples
   loop-pr-review-queue                          # every 15m, reviews and POSTS
   loop-pr-review-queue 30                       # every 30m
   loop-pr-review-queue --interval 30 -d         # same interval; skip drafts
+  loop-pr-review-queue -i 2h                    # Claude + Sonnet every 2 hours
   loop-pr-review-queue --agent codex -i 2h      # codex every 2 hours
+  loop-pr-review-queue --agent codex --model gpt-5.6 -i 2h
   loop-pr-review-queue 30 --agent codex         # hand each tick to codex
   loop-pr-review-queue 30 -c '/todd-pr-review --html'   # render locally, post nothing
   loop-pr-review-queue 10 -d -v                 # skip drafts, show each PR
@@ -171,6 +181,7 @@ while [[ $# -gt 0 ]]; do
     # a couple of screens into the log. Reading it here costs one case arm and
     # reports it before anything starts. It is re-emitted below unchanged.
     --agent)        need_value "$@"; AGENT="$2"; shift 2 ;;
+    --model)        need_value "$@"; MODEL="$2"; shift 2 ;;
     --max-failures) need_value "$@"; MAX_FAILURES="$2"; shift 2 ;;
     --no-lock)      USE_LOCK=false; shift ;;
     --)             shift; QUEUE_ARGS+=("$@"); break ;;
@@ -180,16 +191,19 @@ done
 
 [[ "$MAX_FAILURES" =~ ^[0-9]+$ ]] || die "--max-failures must be a number (got '$MAX_FAILURES')"
 
-# Validated against the same two names the child accepts, and only forwarded
-# when it was actually asked for — an untouched --agent means the child never
-# sees the flag, and a pr-review-queue predating it keeps working.
+# Resolve the default selection here, including the child's Claude default, so
+# every tick gets the model that agent is meant to use. An explicit --model
+# overrides that default and is forwarded on every tick.
+case "${AGENT:-claude}" in
+  claude) [[ -n "$MODEL" ]] || MODEL="sonnet" ;;
+  codex)  [[ -n "$MODEL" ]] || MODEL="gpt-5.6-luna" ;;
+  *) die "--agent must be 'claude' or 'codex' (got '$AGENT')" ;;
+esac
+
 if [[ -n "$AGENT" ]]; then
-  case "$AGENT" in
-    claude|codex) ;;
-    *) die "--agent must be 'claude' or 'codex' (got '$AGENT')" ;;
-  esac
   QUEUE_ARGS=(--agent "$AGENT" ${QUEUE_ARGS[@]+"${QUEUE_ARGS[@]}"})
 fi
+QUEUE_ARGS=(${QUEUE_ARGS[@]+"${QUEUE_ARGS[@]}"} --model "$MODEL")
 
 # Minutes when there's no suffix, because that's the unit the loop is described
 # in. The suffixes exist so `90s` during testing and `2h` for a slow sweep
