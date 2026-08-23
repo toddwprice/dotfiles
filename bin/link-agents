@@ -3,9 +3,9 @@
 # link-agents — symlink the shared agent config into every installed harness.
 #
 # One source tree (ai/) is linked whole into each tool's own location, so a new
-# skill or command is live everywhere the moment it lands in the repo. Rows for
-# harnesses that aren't installed are skipped. Real content is never deleted:
-# a destination holding a real file or directory is refused and reported, the
+# skill is live everywhere the moment it lands in the repo. Rows for harnesses
+# that aren't installed are skipped. Real content is never deleted: a
+# destination holding a real file or directory is refused and reported, the
 # rows after it are still linked, and the run exits non-zero at the end. One
 # bad row shouldn't cost you the other eleven, so callers that must not abort
 # on a refusal should invoke this with `|| true` and read the output.
@@ -41,9 +41,9 @@ esac
 ROWS=(
   "skills|$HOME/.claude/skills|$HOME/.claude"
   "skills|$HOME/.agents/skills|"
-  "commands|$HOME/.claude/commands|$HOME/.claude"
-  "commands|$HOME/.codex/prompts|$HOME/.codex"
-  "commands|$HOME/.config/opencode/commands|$HOME/.config/opencode"
+  "skills|$HOME/.codex/skills|$HOME/.codex"
+  "skills|$HOME/.config/opencode/skills|$HOME/.config/opencode"
+  "skills|$HOME/.zcode/skills|$HOME/.zcode"
   "AGENTS.md|$HOME/.claude/CLAUDE.md|$HOME/.claude"
   "AGENTS.md|$HOME/.codex/AGENTS.md|$HOME/.codex"
   "AGENTS.md|$HOME/.config/opencode/AGENTS.md|$HOME/.config/opencode"

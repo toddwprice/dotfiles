@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for claude/scripts/fleet — the read-only Claude Code fleet digest.
+# Tests for ai/claude/scripts/fleet — the read-only Claude Code fleet digest.
 #
 # Every test is fixture-driven: CLAUDE_FLEET_AGENTS_JSON stands in for
 # `claude agents --json`, and a fake ~/.claude/projects tree under the bats
@@ -19,7 +19,7 @@
 #     plus one skip, the tightened form prints 1.
 
 setup() {
-  SCRIPT="$BATS_TEST_DIRNAME/../claude/scripts/fleet"
+  SCRIPT="$BATS_TEST_DIRNAME/../ai/claude/scripts/fleet"
   export HOME="$BATS_TEST_TMPDIR/home"
   PROJECTS="$HOME/.claude/projects"
   AGENTS="$BATS_TEST_TMPDIR/agents.json"

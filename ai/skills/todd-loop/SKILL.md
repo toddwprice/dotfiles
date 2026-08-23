@@ -260,7 +260,7 @@ Keep it short:
 - **Never tick a manual item you didn't watch pass.** Not from reading the code, not because a unit test covers it, not because it worked last round. An unverifiable item gets a reason; a checklist that can be ticked without looking launders a guess as a fact and is worth less than no checklist.
 - Never `docker compose down -v`, `down --all`, or direct Compose cleanup in phase 5. `-v` destroys the local database, MinIO contents, and warm build caches; a bare `down` takes shared deps with it. Use `bin/shared-env down` while holding the reservation, then `bin/shared-env release`.
 - Never run the manual verification against anything but `http://localhost:5000`. It signs in with shared local dev credentials.
-- One ticket per invocation. Multiple tickets with stacked PRs is `/todd-phase` — say so and stop.
+- One ticket per invocation. Multiple tickets with stacked PRs isn't supported — say so and stop.
 - If a phase fails twice, stop and report. Don't improvise around a broken phase.
 
 ## Failure handling

@@ -11,13 +11,14 @@ set -euo pipefail
 
 # Directories to scan for new files. Add a path here whenever you start
 # managing a new dotfile location.
+#
+# ~/.claude/skills, ~/.claude/agents, and their siblings in ~/.codex,
+# ~/.config/opencode, and ~/.zcode are NOT here: bin/link-agents symlinks
+# those whole to ai/, so a new file saved there already lives inside the
+# repo — it needs `git add`, not `mkrc`, and phase 2 below already surfaces
+# it as an uncommitted change.
 WATCHED_DIRS=(
-    "$HOME/.claude/skills"
-    "$HOME/.claude/commands"
-    "$HOME/.claude/agents"
     "$HOME/.config/zed"
-    "$HOME/.codex/config.toml"
-    "$HOME/.codex/AGENTS.md"
 )
 
 # Filenames to ignore when scanning. mkrc would symlink them and the .gitignore

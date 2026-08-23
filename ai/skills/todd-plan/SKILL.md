@@ -63,7 +63,7 @@ re-plan after the cause is known runs the normal approval flow. See phase 7's ca
 |---|---|---|
 | `--dry-run` | off | Print the full plan in chat. Post nothing to Linear. Still writes the local copy. |
 | `--no-gherkin` | off | No Gherkin. Section 1 is unchanged; section 2 keeps the implementation detail, `### Invariants`, and `### Not covered`, and drops the coverage table and the Gherkin block. Every phase still runs, including phases 6 and 7, so the plan still gets posted and checked. Escape hatch for a trivial ticket. |
-| `--no-check` | off | Skip phase 7 — post the plan and don't dispatch the cold check. A direct invocation still requires approval; the two caller-owned provisional plans do not. The plan stays check-unstamped, so `/todd-loop` and `/todd-phase` will each run the check themselves before they'll touch it. See "Callers that pass `--no-check`" in phase 7. |
+| `--no-check` | off | Skip phase 7 — post the plan and don't dispatch the cold check. A direct invocation still requires approval; the two caller-owned provisional plans do not. The plan stays check-unstamped, so `/todd-loop` will run the check itself before it'll touch it. See "Callers that pass `--no-check`" in phase 7. |
 
 No flag by itself skips the approval walkthrough. `--dry-run` records approval only in the local
 copy; a direct `--no-check` skips the cold check, not Todd's review. Only the two caller-owned
@@ -113,13 +113,11 @@ can replace its own stamp without erasing Todd's approval.
 ⚠️ **You are not the only writer, and the other one doesn't check.** `/todd-coder plan` on a ticket
 that already carries a plan comment adds a second one. Neither reader detects that — both say "a
 comment", singular, with no count and no stop — so the duplicate is silent everywhere until the
-next `/todd-plan` run trips the "more than one" branch in phase 0. `/todd-phase` reaches this
-unattended: its plan-staleness guard re-plans a stale plan by running `/todd-coder plan`, then runs
-`impl` in the same subagent, which then reads back whichever of the two comments comes first.
+next `/todd-plan` run trips the "more than one" branch in phase 0.
 
-Nothing you can fix from here — the guard belongs in `todd-coder`'s Plan Mode step 5, which needs
-this command's find-then-update-in-place logic. What you *can* do is not add to the problem: always
-resolve an existing plan comment through phase 0 before writing.
+Nothing you can fix from here — the missing duplicate check belongs in `todd-coder`'s Plan Mode
+step 5, which needs this command's find-then-update-in-place logic. What you *can* do is not add to
+the problem: always resolve an existing plan comment through phase 0 before writing.
 
 ## Two sections, two readers
 
@@ -326,7 +324,7 @@ length, and what it asks is whether this is one ticket.
 
 `/todd-plan-check` reads that block, carries it forward verbatim into every later stamp, and raises
 nothing in it. **Prioritise the flags that carry `⚠️ book severity 🔴`** — those are the ones that will
-fail the plan the moment `/todd-phase` re-checks it under `--strict`, so a ruling now saves a lap
+fail the plan the moment `/todd-loop` re-checks it under `--strict`, so a ruling now saves a lap
 later.
 
 ### Step 5 — Apply each resolution to the plan, surgically
@@ -1223,7 +1221,7 @@ fixes and flags in its words, then close with the line its verdict dictates:
 | nothing usable — the dispatch failed | ``Approved and posted, but unchecked — the check didn't run. Run `/todd-plan-check <TICKET>`.`` |
 
 **Report the `⚠️ book severity 🔴` flags whatever the verdict.** A 🔵 marked that way passes here and
-fails the moment `/todd-phase` re-checks the plan under `--strict`. Todd is looking at the plan right
+fails the moment `/todd-loop` re-checks the plan under `--strict`. Todd is looking at the plan right
 now; a lap from now he isn't. One line each.
 
 **On a pass, the next step is `/clear` and `/todd-loop <TICKET>` — and the `/clear` is half the
@@ -1290,7 +1288,7 @@ phase 7 doesn't fire:
 
 | Caller | Why |
 |---|---|
-| `/todd-bug-next` step 9 | Plans the bug **before** the root cause is known, so ungrounded anchors are the expected output, not a defect. Its debugging step tests every claim the plan makes. A `❌` here would be noise, and it would sit on the ticket blocking `/todd-loop` and `/todd-phase` later. |
+| `/todd-bug-next` step 9 | Plans the bug **before** the root cause is known, so ungrounded anchors are the expected output, not a defect. Its debugging step tests every claim the plan makes. A `❌` here would be noise, and it would sit on the ticket blocking `/todd-loop` later. |
 | `/todd-devops-next` step 11 | Same shape, same reason. |
 
 That's the flag's whole job: a caller whose next step *is* the check. It is not a way to skip the
@@ -1398,6 +1396,6 @@ then checked normally.
 | The second dispatch in this session also fails | Stop. One in-session fix-and-re-check, then it's Todd's. |
 | The stamp says pass 3 and it still failed | Stop looping. Name the one thing that won't settle as a scoping question. Never a fourth lap. |
 | A check id comes back that an earlier pass recorded as resolved | The resolution didn't take. Say which instance you fixed, which one it found, and why the fix didn't cover it — don't just fix it harder. |
-| A flag is marked `⚠️ book severity 🔴` | Report it even on a pass, and get Todd's ruling now. It fails under `--strict`, which is what `/todd-phase` runs. |
+| A flag is marked `⚠️ book severity 🔴` | Report it even on a pass, and get Todd's ruling now. It fails under `--strict`, which is what `/todd-loop` runs. |
 
 Now plan $ARGUMENTS.

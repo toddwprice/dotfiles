@@ -206,6 +206,7 @@
   "editorMode": "normal",
   "preferredNotifChannel": "auto",
   "autoScrollEnabled": false,
+  "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": false,
   "skipAutoPermissionPrompt": true
 }

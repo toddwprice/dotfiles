@@ -12,7 +12,7 @@ Bridges Linear tickets with disciplined TDD implementation. Reads a ticket, crea
 ```
 /todd-coder plan DEV-5                 # Create implementation plan from ticket
 /todd-coder impl DEV-5                 # Implement ticket using TDD
-/todd-coder impl DEV-5 --orchestrated  # Non-interactive mode, dispatched by /todd-phase
+/todd-coder impl DEV-5 --orchestrated  # Non-interactive mode, dispatched by /todd-loop
 ```
 
 ## Argument Parsing
@@ -20,7 +20,7 @@ Bridges Linear tickets with disciplined TDD implementation. Reads a ticket, crea
 Parse the args string to extract:
 - **command**: First word, must be `plan` or `impl`. If it's anything else — including a free-form request like "diagnose this trace" or "start on the subtickets and work in parallel" — this is the wrong tool. Don't force-fit it: say plainly that `/todd-coder` only does `plan`/`impl` on a single ticket, name what the user actually seems to want, and stop. (Real runs have mis-fed this a Braintrust-trace prompt and a "work in parallel" instruction; a clean bounce beats improvising an orchestration this skill isn't built for.)
 - **TICKET_ID**: Second word (e.g., `DEV-5`). If missing, show usage and stop.
-- **`--orchestrated`** (optional flag, anywhere in the args): run non-interactively for an orchestrator like `/todd-phase`. See "Orchestrated Mode" below — the short version is: never block on a prompt, still post to Linear, auto-commit on success, and end with the structured status block.
+- **`--orchestrated`** (optional flag, anywhere in the args): run non-interactively for an orchestrator like `/todd-loop`. See "Orchestrated Mode" below — the short version is: never block on a prompt, still post to Linear, auto-commit on success, and end with the structured status block.
 
 ## Worktree Detection
 
@@ -46,7 +46,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 2. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
 
-3. **Explore codebase — delegate the search, keep only the findings**: Broad exploration is a fan-out that bloats context fast, and when this skill runs as a subagent under `/todd-phase` its context budget directly feeds implementation quality. So dispatch read-only search agents rather than grepping and reading files inline: `dev-flow:codebase-locator` to find the relevant files, `dev-flow:codebase-analyzer` to trace how they work, `dev-flow:codebase-pattern-finder` for conventions and examples to model. Run independent lookups in parallel (multiple Agent calls in one message), and fold their **returned findings** — not their raw file dumps — into the plan. You're trying to understand:
+3. **Explore codebase — delegate the search, keep only the findings**: Broad exploration is a fan-out that bloats context fast, and when this skill runs as a subagent under `/todd-loop` its context budget directly feeds implementation quality. So dispatch read-only search agents rather than grepping and reading files inline: `dev-flow:codebase-locator` to find the relevant files, `dev-flow:codebase-analyzer` to trace how they work, `dev-flow:codebase-pattern-finder` for conventions and examples to model. Run independent lookups in parallel (multiple Agent calls in one message), and fold their **returned findings** — not their raw file dumps — into the plan. You're trying to understand:
    - What files/modules are involved
    - Existing patterns, utilities, and functions to reuse
    - Test structure and conventions
@@ -185,12 +185,12 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 ## Orchestrated Mode (`--orchestrated`)
 
-When `/todd-phase` (or any orchestrator) dispatches this skill into a subagent, there's no human on the other end of the chat, and the orchestrator only needs a compact result — not the full narrated report. In this mode:
+When `/todd-loop` (or any orchestrator) dispatches this skill into a subagent, there's no human on the other end of the chat, and the orchestrator only needs a compact result — not the full narrated report. In this mode:
 
 - **Never block on a question.** Every interactive prompt gets a safe default (see the impl steps). If you genuinely can't proceed, stop with a `fatal` status rather than waiting on input that will never come.
 - **Still post to Linear.** The plan and summary comments are the durable record the orchestrator (and Todd) rely on — keep posting them exactly as in normal mode. This is why the orchestrator dispatches *this skill* rather than running raw TDD: the Linear paper trail comes for free.
 - **Commit automatically** — per slice on the incremental path, once on the fast path (see step 11); never push.
-- **Skip the manual verification browser run (step 7).** Report `MANUAL: deferred (orchestrated)` and let the orchestrator own it. Two reasons, both real: `compose.yaml` pins `name: dscout`, so **every worktree shares one stack** — `/todd-phase` running four tickets in parallel would have four agents `--force-recreate`-ing that single stack at each other, and none of them could trust what it saw. And `/todd-loop` changes the code *after* impl returns, in its address-the-self-review phase, so evidence captured here would be of code that no longer exists by the time the PR opens. Verification belongs after the last edit, which only the orchestrator knows.
+- **Skip the manual verification browser run (step 7).** Report `MANUAL: deferred (orchestrated)` and let the orchestrator own it. Two reasons, both real: `compose.yaml` pins `name: dscout`, so **every worktree shares one stack** — concurrent orchestrated runs would have multiple agents `--force-recreate`-ing that single stack at each other, and none of them could trust what it saw. And `/todd-loop` changes the code *after* impl returns, in its address-the-self-review phase, so evidence captured here would be of code that no longer exists by the time the PR opens. Verification belongs after the last edit, which only the orchestrator knows.
 - **End with the structured status block** (below) as your final message — that's what the orchestrator parses.
 
 ## Comment Format Templates
@@ -286,7 +286,7 @@ When `/todd-phase` (or any orchestrator) dispatches this skill into a subagent, 
 - Detect and report the worktree path and branch
 - Check for uncommitted changes before starting
 - Commit each verified slice during impl (incremental path) or once at the end (fast path) — no "offer to commit" prompt
-- Never push to origin — leave that to the orchestrator (`/todd-phase`)
+- Never push to origin — leave that to the orchestrator (`/todd-loop`)
 - Use `git status` to report changes when done
 
 **Example output:**

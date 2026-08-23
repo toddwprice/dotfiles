@@ -5,9 +5,8 @@ setup() {
   export HOME="$BATS_TEST_TMPDIR/home"
   export DOTFILES="$HOME/.dotfiles"
   local ai="$DOTFILES/ai"
-  mkdir -p "$ai/skills/demo" "$ai/commands" "$ai/claude/agents" "$ai/claude/scripts"
+  mkdir -p "$ai/skills/demo" "$ai/claude/agents" "$ai/claude/scripts"
   echo "skill"  > "$ai/skills/demo/SKILL.md"
-  echo "cmd"    > "$ai/commands/demo.md"
   echo "agents" > "$ai/AGENTS.md"
   echo "{}"     > "$ai/claude/settings.json"
   echo "line"   > "$ai/claude/statusline-command.sh"
@@ -34,7 +33,6 @@ setup() {
   # skills and CLAUDE.md have one above, these are the remaining five.
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [ "$(readlink "$HOME/.claude/commands")" = "$DOTFILES/ai/commands" ]
   [ "$(readlink "$HOME/.claude/settings.json")" = "$DOTFILES/ai/claude/settings.json" ]
   [ "$(readlink "$HOME/.claude/statusline-command.sh")" = "$DOTFILES/ai/claude/statusline-command.sh" ]
   [ "$(readlink "$HOME/.claude/agents")" = "$DOTFILES/ai/claude/agents" ]
@@ -85,19 +83,20 @@ setup() {
   [ ! -e "$HOME/.agents" ]
 }
 
-@test "gates codex and opencode rows when those harnesses are absent" {
+@test "gates codex, opencode, and zcode rows when those harnesses are absent" {
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   [[ "$output" == *"gate"* ]]
   [ ! -e "$HOME/.codex" ]
   [ ! -e "$HOME/.config/opencode" ]
+  [ ! -e "$HOME/.zcode" ]
 }
 
 @test "links codex rows once ~/.codex exists" {
   mkdir -p "$HOME/.codex"
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [ "$(readlink "$HOME/.codex/prompts")" = "$DOTFILES/ai/commands" ]
+  [ "$(readlink "$HOME/.codex/skills")" = "$DOTFILES/ai/skills" ]
   [ "$(readlink "$HOME/.codex/AGENTS.md")" = "$DOTFILES/ai/AGENTS.md" ]
 }
 
@@ -105,8 +104,15 @@ setup() {
   mkdir -p "$HOME/.config/opencode"
   run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [ "$(readlink "$HOME/.config/opencode/commands")" = "$DOTFILES/ai/commands" ]
+  [ "$(readlink "$HOME/.config/opencode/skills")" = "$DOTFILES/ai/skills" ]
   [ "$(readlink "$HOME/.config/opencode/AGENTS.md")" = "$DOTFILES/ai/AGENTS.md" ]
+}
+
+@test "links zcode skills row once ~/.zcode exists" {
+  mkdir -p "$HOME/.zcode"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$HOME/.zcode/skills")" = "$DOTFILES/ai/skills" ]
 }
 
 @test "second run is a no-op and reports ok" {

@@ -11,7 +11,7 @@
 # downstream is going to consume the lines.
 #
 # --agent picks who does the reviewing. Both read the same skill: `~/.codex/skills`
-# is a symlink to `~/.dotfiles/claude/skills`, so `/todd-pr-review` resolves for
+# is a symlink to `~/.dotfiles/ai/skills`, so `/todd-pr-review` resolves for
 # either one.
 #
 #   claude   (default)  claude --bg '/todd-pr-review 27615'
@@ -118,7 +118,7 @@ most-recently-updated first, and prints the line it ran for each.
 Options:
       --agent NAME       Who reviews: claude (default) or codex. Both resolve
                          the same skill, since ~/.codex/skills points at
-                         ~/.dotfiles/claude/skills.
+                         ~/.dotfiles/ai/skills.
                            claude  ->  claude --bg '<command> <ref>'
                            codex   ->  codex exec '<command> <ref>'
                          claude backgrounds itself; codex is foregrounded, so

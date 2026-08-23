@@ -35,7 +35,7 @@ finding, not a rewrite.
 |---|---|---|
 | `--local` | off | Read `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` instead of Linear. For checking a `--dry-run` plan before it's posted. Writes fixes back to the local file only. |
 | `--report-only` | off | Change nothing. Report every finding, including the ones you would have fixed. Use when Todd wants to see what the plan got wrong, not a corrected plan. |
-| `--strict` | off | `FLAG` findings **and advisories** are treated as `BLOCKER`. Nothing passes with an open judgement call or a carried-forward note. This is what `/todd-phase` runs, so it's the regime a plan headed for an unattended phase run has to survive. |
+| `--strict` | off | `FLAG` findings **and advisories** are treated as `BLOCKER`. Nothing passes with an open judgement call or a carried-forward note. This is what `/todd-loop` runs, so it's the regime a plan headed for an unattended run has to survive. |
 
 No ticket id → show usage and stop.
 
@@ -447,7 +447,7 @@ Plan: <linear comment url>
 - [E13] "Rejoin after clean disconnect" and "expired presence allows rejoin" may be
   the same scenario in different words.
 - [D7] Section 2 is 520 lines across 3 slices. This looks like two tickets.
-  ⚠️ book severity 🔴 — this one fails under `--strict`, which is what `/todd-phase` runs.
+  ⚠️ book severity 🔴 — this one fails under `--strict`, which is what `/todd-loop` runs.
 
 ⚠️ [E11] also fired on pass 1. The resolution didn't take — last pass it was slice 2 only,
    and the scenario added there asserts a refusal the target can't observe.
@@ -468,7 +468,7 @@ Under `--report-only` the 🟡 section becomes **Would fix** and nothing is writ
   take. Put it *below* the finding sections so it reads as commentary on them.
 - **`⚖️ Held by decision`** — one line, findings already settled and never re-argued: Todd's rulings,
   plus any over-ceiling B1 you decided yourself, marked `(auto, …)`.
-- **`⚠️ book severity 🔴` on a 🔵** — a flag that would fail under `--strict`. `/todd-phase` runs
+- **`⚠️ book severity 🔴` on a 🔵** — a flag that would fail under `--strict`. `/todd-loop` runs
   `--strict`, so without this a plan passes here and red-lines there, and Todd finds out a lap later.
   Seen on DEVOPS-2241: `✅ passed · 4 flagged`, two of them book-🔴.
 
@@ -651,22 +651,18 @@ had the checker telling Todd something false on every run.
 | Call site | What it does with a `❌` |
 |---|---|
 | `commands/todd/loop.md:67` | **Stops the loop.** An unstamped plan makes it run this command with `--strict` inline first. |
-| `skills/todd-phase/SKILL.md:174` | **Won't dispatch impl.** Returns `STATUS: recoverable` — deliberately not `plan-required`, which would re-dispatch `plan` and post a duplicate comment. It also runs this command with `--strict` after any `/todd-coder plan`, which is what catches the duplicate (A4). |
 | `skills/todd-coder/SKILL.md:103` | **Surfaces loudly but does not refuse.** "This gate surfaces, it doesn't refuse." |
 
 Two consequences worth naming in a report rather than assuming Todd remembers:
 
 - **A bare `/todd-coder impl <TICKET>` is the hole.** It's the one path that will build a plan this
-  command failed. When you return a `❌`, say that `loop` and `phase` are blocked and a direct `impl`
+  command failed. When you return a `❌`, say that `loop` is blocked and a direct `impl`
   is not.
-- **`/todd-phase` runs `--strict`, and `/todd-plan` phase 7 doesn't.** So a plan you pass with 🔵
-  flags or advisories can red-line the moment `/todd-phase` re-checks it — a guaranteed extra lap that
+- **`/todd-loop` runs `--strict`, and `/todd-plan` phase 7 doesn't.** So a plan you pass with 🔵
+  flags or advisories can red-line the moment `/todd-loop` re-checks it — a guaranteed extra lap that
   this run had every piece of information to prevent. That's why the report marks a flag
   `⚠️ book severity 🔴`: it tells Todd which of today's flags are tomorrow's blockers, while he's
   still looking at the plan.
-
-The path note: `phase` lives as a **skill** at `skills/todd-phase/SKILL.md`. There is no
-`commands/todd/phase.md`.
 
 ---
 

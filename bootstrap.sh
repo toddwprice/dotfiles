@@ -43,6 +43,15 @@ fi
 info "Linking dotfiles with rcup"
 env RCRC="$DOTFILES/rcrc" rcup
 
+# -- 3b. Shared agent config (skills, AGENTS.md) into every installed harness
+# rcm only manages per-file symlinks under $HOME/.<dir>, which doesn't fit
+# ai/skills — one shared tree that needs to fan out whole into ~/.claude,
+# ~/.codex, ~/.config/opencode, and ~/.zcode. link-agents does that instead.
+# `|| true`: a harness not installed yet on this machine is a gated row, not
+# a failure, and shouldn't abort bootstrap.
+info "Linking shared agent config"
+"$DOTFILES/bin/link-agents" || true
+
 # -- 4. Brewfile toolchain -------------------------------------------------
 info "Installing Brewfile packages"
 brew bundle --file="$DOTFILES/Brewfile"
