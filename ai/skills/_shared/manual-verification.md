@@ -279,22 +279,15 @@ checklist in the results comment instead — ticked, with evidence.
 
 ### Attaching the screenshots
 
-Per-file, and **strictly one file at a time** — the signed URL expires in 60 seconds, so
-batching the prepare calls lets the earlier ones die:
+Use the `linctl` skill to attach evidence. For a URL that already hosts the screenshot, run
+`linctl issue attach <TICKET> --url <URL> --title "Manual verification screenshot"`. For a local
+file, inspect `linctl mcp tools` after `linctl mcp sync` and use the current attachment-upload
+operation it exposes; it is the CLI-backed path for Linear API operations that do not yet have a
+first-class command. Upload each file one at a time because signed upload URLs expire quickly.
 
-1. `mcp__claude_ai_Linear__prepare_attachment_upload` — issue, filename, `image/png`, exact
-   byte size (`wc -c`).
-2. `PUT` the raw bytes to `uploadRequest.url`, sending **every** header from
-   `uploadRequest.headers` verbatim, casing included. Any omission or edit returns 403.
-   Don't base64 or otherwise transform the file:
-   ```bash
-   curl -X PUT --data-binary @<file> -H '<each signed header>' "<uploadRequest.url>"
-   ```
-3. `mcp__claude_ai_Linear__create_attachment_from_upload` with the returned `assetUrl`.
-
-Then embed the same `assetUrl` in the comment body as `![MT1](<assetUrl>)` so the image
-renders inline. If an embed doesn't render, the attachment row from step 3 is the durable
-copy — say so rather than silently dropping the evidence.
+Embed the returned attachment URL in the comment body as `![MT1](<assetUrl>)` so the image renders
+inline. If an embed doesn't render, the attachment row is the durable copy — say so rather than
+silently dropping the evidence.
 
 ### Release the reservation
 

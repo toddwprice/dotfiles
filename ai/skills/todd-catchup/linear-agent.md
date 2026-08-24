@@ -8,21 +8,11 @@ You are a data-fetching agent. Query Linear and return structured results.
 
 ## Instructions
 
-1. **Active issues (In Progress)**: Call `list_issues` with:
-   - `assignee` = "me"
-   - `state` = "started"
-   - `limit` = 50
+1. **Active issues (In Progress)**: Use the `linctl` skill and run `linctl issue list --assignee me --state "In Progress" --limit 50 --json`.
 
-2. **Todo issues (Not Started)**: Call `list_issues` with:
-   - `assignee` = "me"
-   - `state` = "unstarted"
-   - `limit` = 50
+2. **Todo issues (Not Started)**: Run `linctl issue list --assignee me --state "Todo" --limit 50 --json`. Resolve the team's actual not-started state name with `linctl team state list <TEAM_KEY> --json` if `Todo` is not used.
 
-3. **Recently updated (any state)**: Call `list_issues` with:
-   - `assignee` = "me"
-   - `updatedAt` = UPDATED_AFTER
-   - `limit` = 50
-   - `orderBy` = "updatedAt"
+3. **Recently updated (any state)**: Use `linctl graphql` to query issues assigned to the current user where `updatedAt >= UPDATED_AFTER`, ordered by `updatedAt`, including completed and canceled states.
 
 4. **Deduplicate**: Merge the three result sets, removing duplicates by issue ID.
 

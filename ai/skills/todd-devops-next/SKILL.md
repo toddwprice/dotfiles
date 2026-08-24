@@ -27,7 +27,7 @@ Three consequences, all of which change how you read the queue:
 2. **Team is a constant.** Every row is `DEVOPS`, so don't waste a shortlist column on it. Show the label/area and project instead.
 3. **The URL's display params are UI-only and the API ignores them.** `showCompletedIssues=week`, `showSubIssues=true`, `showTriageIssues=true`, `ordering=priority`, `grouping=workflowState` are not in `filterData`. The API returns *everything* matching the assignee clause — including Done, Canceled, and Duplicate issues from months ago. Apply the state allow-list yourself in Step 3; the view will not do it for you.
 
-The Linear MCP tools cannot read a saved view — there is no "get custom view" tool. Use `linctl graphql`, which passes raw GraphQL to Linear's API where `customViews` and `customView.issues` do exist.
+First-class `linctl` commands cannot read a saved view. Use `linctl graphql`, which passes raw GraphQL to Linear's API where `customViews` and `customView.issues` do exist.
 
 ## Step 1 — Parse `$ARGUMENTS`
 

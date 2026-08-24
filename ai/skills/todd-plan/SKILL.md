@@ -86,7 +86,7 @@ Four call sites, in two directions:
 |---|---|---|
 | this command | writes the comment; phase 0 finds and updates in place, stops if there's more than one | **W** |
 | `skills/todd-coder/SKILL.md` **Plan** Mode step 5 | posts the same first line as a **new comment every time** — no existence check, no comment id | **W** |
-| `skills/todd-coder/SKILL.md` **Impl** Mode step 4 | `list_comments` → the first comment starting with that string | R |
+| `skills/todd-coder/SKILL.md` **Impl** Mode step 4 | `linctl comment list` → the first comment starting with that string | R |
 | `commands/todd/loop.md` phase 0 | same lookup, as the gate on whether the loop may start | R |
 
 So:
@@ -95,7 +95,7 @@ So:
   preamble above it.
 - Everything else goes **inside that same comment**, below the brief — the Behavior Spec and the
   implementation detail both. One comment, one plan. Two comments means the impl agent reads
-  whichever `list_comments` hands back first and the other one silently does nothing.
+whichever `linctl comment list` returns first and the other one silently does nothing.
 - **Section 2's heading starts with the literal `## 🥒 Behavior Spec` whenever there is Gherkin.**
   `todd-coder` Impl Mode step 4 and `loop.md` phase 0 both branch on that string to decide whether
   the Scenarios are the acceptance criteria or the prose is.
@@ -158,8 +158,7 @@ local history; check the file, or check GitHub.
 
 ## Phase 0 — Resolve the ticket
 
-**Read it.** `mcp__claude_ai_Linear__get_issue` with the ticket id. If the MCP returns truncated or
-blocked content, fall back to `linctl issue get $TICKET --json` — it bypasses the MCP filter. Note
+**Read it.** Use the `linctl` skill and run `linctl issue get $TICKET --json`. Note
 that `attachments` is a GraphQL connection (`{nodes: [...]}`), not a flat array; `.attachments[].url`
 errors out.
 
@@ -169,7 +168,7 @@ Not found → report the id you tried and stop.
 a parent ticket, fetch it. A plan written against half the requirements is worse than no plan,
 because it looks complete.
 
-**An existing plan.** `mcp__claude_ai_Linear__list_comments` and look for a comment starting
+**An existing plan.** Run `linctl comment list $TICKET --json` and look for a comment starting
 `## 📋 Implementation Plan`.
 
 - **None** → normal path, post a new comment at the end.
@@ -191,7 +190,7 @@ because it looks complete.
   **The replace path** — you are replacing the plan, and you must not lose it. Write the old body
   verbatim to
   `.claude/tmp/<branch-or-ticket>/plan-<TICKET>-superseded-<YYYYMMDD-HHMM>.md`, then **update that
-  same comment in place** (`save_comment` with the existing comment id) so exactly one plan comment
+  same comment in place** (`linctl comment update` with the existing comment id) so exactly one plan comment
   survives. Say in your report that you replaced a plan, when it was written, and where the backup
   went.
 
@@ -992,8 +991,9 @@ Before writing, verify the plan has exactly one current `*Plan approval: ✅ …
 part of the plan body, not the plan-check stamp, and must survive every later stamp replacement. A
 caller-owned provisional plan has zero approval lines and must be reported as provisional.
 
-**Post** with `mcp__claude_ai_Linear__save_comment` — new comment, or the existing comment id if
-phase 0 found one. Under `--dry-run`, post nothing and say so plainly.
+**Post** with `linctl comment create $TICKET --body "<markdown>"`, or `linctl comment update
+<COMMENT_ID> --body "<markdown>"` when phase 0 found one. Under `--dry-run`, post nothing and say
+so plainly.
 
 **Report to Todd, blockers first.** He reads the top three lines:
 
@@ -1164,9 +1164,8 @@ Its $ARGUMENTS: <TICKET>
 Resolve every `.claude/tmp/<branch-or-ticket>/…` path in that file against this absolute directory:
 <ABSOLUTE TMP DIR>
 
-The Linear MCP tools may be deferred in your session — load them with ToolSearch before its phase 0.
-If `save_comment` is unavailable or fails, follow `/todd-plan-check`'s `linctl comment update`
-fallback and verify the updated comment through `linctl issue get`.
+Use the `linctl` skill before phase 0. If a comment write fails, inspect its current state, correct
+the command or payload, and verify the updated comment through `linctl issue get`.
 
 Return its phase-6 report verbatim, plus the stamp text you wrote.
 ````
@@ -1373,7 +1372,7 @@ then checked normally.
 | Failure | Do |
 |---|---|
 | Ticket not found | Report the id attempted. Stop. |
-| Linear MCP blocked or truncating | Fall back to `linctl issue get $TICKET --json`. |
+| Linear read fails or is incomplete | Re-run `linctl issue get $TICKET --json` with the exact ticket id and inspect the error. |
 | Todd does not approve the plan | Keep the revised draft local, record what he wants changed, and stop before Linear or the cold check. Resume phase 5A after the changes are grounded. |
 | Todd's answer shows that part of the design is unclear | Explain that part with one concrete request, record, event, or user flow. Ask about the specific decision again; do not move to final approval yet. |
 | Multiple existing plan comments | Stop and report. Todd picks. |
@@ -1387,7 +1386,7 @@ then checked normally.
 | More than 3 blockers survive the phase-2 ranking | The ticket is under-specified. Walk Todd through the blocked brief and detail, name the three that matter most, and post only if he explicitly approves recording it. Don't ship a twelve-question plan. |
 | Section 2 runs past ~400 lines | Walk Todd through why it looks like two or three tickets. Never trim the detail to hit a number, and post only after phase 5A approval. |
 | Section 1 runs past ~300 words | Relocate the detail into section 2 — that's the fix, at any length up to ~500 words. Past ~500, relocating is a re-plan: leave the brief as written and walk Todd through that scope in phase 5A. `/todd-plan-check` records it `(auto, …)` so it's settled once. |
-| `save_comment` fails | The local copy is already on disk — report its path so nothing is retyped. |
+| `linctl comment update` fails | The local copy is already on disk — report its path so nothing is retyped. |
 | Phase 7's subagent errors, times out, or returns no verdict | The plan is approved and posted but unchecked. Say exactly that and give Todd `/todd-plan-check <TICKET>`. Never infer the verdict from your own read of the plan. |
 | The check comes back `⚠️ passed (ungrounded)` | You probably passed the wrong tmp directory — phase 2 always writes the anchor file. Re-dispatch once with the absolute path corrected. Still degraded → report it as degraded, and say grounding went unchecked. |
 | The check comes back `❌`, every blocker mechanical | Resolve them here via phase 0B step 5, sweep each class, then return to phase 5A for delta walkthrough and fresh approval before re-dispatching once. Report both verdicts. |

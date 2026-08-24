@@ -43,7 +43,7 @@ Do this inline (it's small) and report a one-line summary.
 
 **Gate on the plan. This command assumes one exists; verify rather than trust.** Check both places:
 
-1. `mcp__claude_ai_Linear__list_comments` for a comment starting `## 📋 Implementation Plan`.
+1. Use the `linctl` skill and run `linctl comment list $TICKET --json` for a comment starting `## 📋 Implementation Plan`.
 2. A `notion.so` URL in the ticket body or its attachments — both are in the payload you already fetched. Note `attachments` is a GraphQL connection (`{nodes: [...]}`), **not** a flat array; `.attachments[].url` errors out:
    ```bash
    linctl issue get $TICKET --json \

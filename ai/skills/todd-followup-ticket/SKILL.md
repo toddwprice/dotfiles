@@ -75,8 +75,8 @@ linctl project list --json       # find the Templates-in-DYS project id (match b
 linctl issue create --help       # confirm the exact flags for title/description/team/project/labels
 ```
 
-Use `linctl` flags as reported by `--help` (don't assume flag names). If `linctl` isn't available or
-auth fails, fall back to the Linear MCP `save_issue` tool with the resolved team/project ids.
+Use the `linctl` skill and flags reported by `--help` (don't assume flag names). If `linctl` isn't
+available or auth fails, stop and ask the user to authenticate or install it.
 
 **Project may not appear in `project list`.** "Templates in DYS Q2 2026" can be in a
 completed/archived state and drop out of the default `project list` output. That's fine — `linctl`
@@ -119,7 +119,7 @@ After approval:
 2. If a source PR exists, add the ticket link as a PR comment or attach the PR URL to the issue so
    the two are cross-linked.
 3. If Todd asked to attach an HTML report (e.g. a `todd-html-report` / `todd-describe-pr` artifact),
-   attach it to the issue (`linctl` attachment flags, or the Linear MCP `create_attachment`).
+   attach it to the issue with `linctl issue attach`.
 4. Return the new ticket identifier + URL, one line.
 
 ## Notes

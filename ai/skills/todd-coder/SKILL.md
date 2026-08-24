@@ -44,7 +44,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 1. **Detect worktree environment** (see above)
 
-2. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
+2. **Read ticket**: Use the `linctl` skill and run `linctl issue get <TICKET_ID> --json`. If not found, report error and stop.
 
 3. **Explore codebase — delegate the search, keep only the findings**: Broad exploration is a fan-out that bloats context fast, and when this skill runs as a subagent under `/todd-loop` its context budget directly feeds implementation quality. So dispatch read-only search agents rather than grepping and reading files inline: `dev-flow:codebase-locator` to find the relevant files, `dev-flow:codebase-analyzer` to trace how they work, `dev-flow:codebase-pattern-finder` for conventions and examples to model. Run independent lookups in parallel (multiple Agent calls in one message), and fold their **returned findings** — not their raw file dumps — into the plan. You're trying to understand:
    - What files/modules are involved
@@ -76,7 +76,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
    If the ticket genuinely has no user-observable surface — a refactor, a CI config change, an internal rename — say so in one line under the heading instead of padding it. `_No user-observable surface; nothing to verify by hand._` is a legitimate manual test plan.
 
-6. **Post plan to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format the plan as markdown. Prefix the comment with `## 📋 Implementation Plan`.
+6. **Post plan to Linear**: Use the `linctl` skill and run `linctl comment create <TICKET_ID> --body "<markdown>"`. Prefix the markdown with `## 📋 Implementation Plan`.
 
 7. **Report to user**: Show the plan and highlight any questions/blockers.
 
@@ -88,9 +88,9 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
 
 2. **Check git state**: Ensure worktree is clean (no uncommitted changes) OR report what will be staged. If in a worktree with uncommitted changes from previous work, ask the user whether to continue or stash — **unless `--orchestrated`**, where you can't wait on a prompt: if the changes look like a resumed prior attempt on *this* ticket, continue on top of them; otherwise stop with a `fatal` status. (An unexpected dirty tree in an unattended run is a real problem, not something to silently stash.)
 
-3. **Read ticket**: Call `mcp__claude_ai_Linear__get_issue` with the TICKET_ID. If not found, report error and stop.
+3. **Read ticket**: Use the `linctl` skill and run `linctl issue get <TICKET_ID> --json`. If not found, report error and stop.
 
-4. **Find plan**: Call `mcp__claude_ai_Linear__list_comments` with `issueId` set to TICKET_ID. Look for a comment starting with `## 📋 Implementation Plan`. If that comment also carries a `## 🥒 Behavior Spec` section — written by `/todd-plan` — then **the Scenarios are the acceptance criteria**: the prose above them is context, the Gherkin is the contract. Say which kind of plan you found when you report.
+4. **Find plan**: Use the `linctl` skill and run `linctl comment list <TICKET_ID> --json`. Look for a comment starting with `## 📋 Implementation Plan`. If that comment also carries a `## 🥒 Behavior Spec` section — written by `/todd-plan` — then **the Scenarios are the acceptance criteria**: the prose above them is context, the Gherkin is the contract. Say which kind of plan you found when you report.
 
    **Note whether it carries a `### 🧪 Manual Test Plan`** and how many `MT` items. That's what step 7 drives in a browser. A plan without one means nothing gets hand-verified — say so plainly rather than letting it pass unremarked, and don't invent a checklist now to cover the gap (a plan authored after the code is written tests what you built, not what was asked for).
 
@@ -173,7 +173,7 @@ One asymmetry worth knowing before you pick a door: **this mode emits a `### �
    - **Manual verification**: the counts from step 7 — verified / failed / not verifiable — and a pointer to the `## 🧪 Manual Verification` comment holding the evidence. If step 7 was skipped, why.
    - **Remaining work**: Anything deferred or out of scope
 
-9. **Post summary to Linear**: Use `mcp__claude_ai_Linear__save_comment` with `issueId` set to TICKET_ID. Format as markdown. Prefix with `## ✅ Implementation Summary`.
+9. **Post summary to Linear**: Use the `linctl` skill and run `linctl comment create <TICKET_ID> --body "<markdown>"`. Prefix the markdown with `## ✅ Implementation Summary`.
 
 10. **Report to user**: Show the summary and test plan. **In `--orchestrated` mode, skip the chatty report** — the orchestrator reads the structured status block instead (see "Structured Return").
 
@@ -272,7 +272,7 @@ When `/todd-loop` (or any orchestrator) dispatches this skill into a subagent, t
 ## Error Handling
 - **Invalid args**: Show usage: `/todd-coder [plan|impl] TICKET_ID`
 - **Ticket not found**: Report error with the TICKET_ID attempted
-- **Linear MCP unavailable**: Tell user to check Linear plugin configuration
+- **linctl unavailable or unauthenticated**: Tell user to install it or run `linctl auth`
 - **No plan for complex ticket**: Suggest running plan mode first, explain why
 - **Worktree has uncommitted changes**: Ask user whether to stash, commit, or abort
 - **Dirty worktree from previous work**: Offer to clean up or continue

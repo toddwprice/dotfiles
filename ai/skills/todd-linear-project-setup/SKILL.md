@@ -64,16 +64,16 @@ Bootstraps a complete Linear project structure — project, milestones, issues, 
 
 Before creating anything, verify the team exists:
 
-1. Use `mcp__claude_ai_Linear__list_teams` to get available teams.
+1. Use the `linctl` skill and run `linctl team list --json` to get available teams.
 2. Match the team name (case-insensitive, partial match OK).
 3. If no match, show available teams and ask the user to pick one.
 
 ### Step 3: Create Project
 
-Use `mcp__claude_ai_Linear__save_project` with:
+Use `linctl project create` with:
 - `name`: resolved project name
 - `description`: from plan or user input
-- `addTeams`: [resolved team ID or name]
+- `--team`: resolved team key or keys
 - `lead`: resolved lead (default "me")
 
 Report the created project name and URL.
@@ -82,11 +82,7 @@ Report the created project name and URL.
 
 For each milestone in order:
 
-1. Use `mcp__claude_ai_Linear__save_milestone` with:
-   - `project`: project name
-   - `name`: milestone name
-   - `targetDate`: if provided (ISO format)
-   - `description`: if provided
+1. Use the `linctl` skill. `linctl` has no first-class milestone command, so use `linctl graphql` with Linear's current milestone-create mutation after resolving the project id. Set the project, name, target date (if provided), and description (if provided).
 
 2. Track milestone names for linking issues in the next step.
 
@@ -96,15 +92,7 @@ Report created milestones with their order.
 
 For each issue, grouped by milestone:
 
-1. Use `mcp__claude_ai_Linear__save_issue` with:
-   - `title`: issue title
-   - `team`: resolved team
-   - `project`: project name
-   - `milestone`: milestone name
-   - `description`: issue details (from plan or user input, as markdown)
-   - `priority`: if specified (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
-   - `estimate`: if specified
-   - `assignee`: if specified
+1. Use `linctl issue create` with the title, resolved team, project, project milestone, description, priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low), estimate, and assignee when specified.
 
 2. Capture the returned issue identifier (e.g., `DEV-75`) for dependency wiring.
 
@@ -114,11 +102,9 @@ Report issues created per milestone.
 
 For each dependency pair identified from the plan or user input:
 
-1. Use `mcp__claude_ai_Linear__save_issue` with:
-   - `id`: the blocked issue identifier
-   - `blockedBy`: [array of blocking issue identifiers]
+1. Use `linctl issue relation add <BLOCKED_ISSUE> --blocked-by <BLOCKING_ISSUE>` for each pair.
 
-This appends to existing relations (never removes).
+This appends to existing relations; never remove an existing one.
 
 Common dependency patterns to recognize:
 - "X depends on Y" → X `blockedBy` Y
@@ -190,5 +176,5 @@ A plan file can be any markdown document. The skill looks for:
 
 ## Dependencies
 
-- Linear MCP server (plugin:linear:linear) must be configured and authenticated
+- The `linctl` skill and authenticated `linctl` CLI must be available
 - `AskUserQuestion` tool for interactive information gathering

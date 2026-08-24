@@ -16,7 +16,7 @@ Todd's saved view **"My & Unassigned Bugs"**:
 
 Its filter is: label `Bug` (or a label whose parent is `Bug`) **AND** assignee is null-or-Todd. It spans the whole workspace, not one team.
 
-The Linear MCP tools cannot read a saved view — there is no "get custom view" tool. Use `linctl graphql`, which passes raw GraphQL to Linear's API where `customViews` and `customView.issues` do exist.
+First-class `linctl` commands cannot read a saved view. Use `linctl graphql`, which passes raw GraphQL to Linear's API where `customViews` and `customView.issues` do exist.
 
 ## Step 1 — Parse `$ARGUMENTS`
 

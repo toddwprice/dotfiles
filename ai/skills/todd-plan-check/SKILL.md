@@ -108,18 +108,17 @@ Under `--strict`, nothing is advisory-eligible. Advisories become blockers, same
 
 ## Phase 0 — Load the plan and its evidence
 
-**The plan.** `mcp__claude_ai_Linear__list_comments` for the ticket, find the comment whose first
-line is `## 📋 Implementation Plan`. If the Linear MCP is unavailable, deferred, or errors, run
-`linctl auth status` and `linctl issue get $TICKET --json`; read the same comment from
-`.comments.nodes`. The fallback has the same duplicate-plan stop: do not choose between two plan
-comments just because the MCP is absent.
+**The plan.** Use the `linctl` skill and run `linctl comment list $TICKET --json`; find the comment
+whose first line is `## 📋 Implementation Plan`. If the command errors, run `linctl auth status`,
+then inspect `linctl issue get $TICKET --json` and read the same comment from `.comments.nodes`.
+The duplicate-plan stop still applies: do not choose between two plan comments.
 
 - **None** → nothing to check. Report that, and say whether `/todd-plan` or `/todd-coder plan` has
   been run. Stop.
 - **More than one** → 🔴 BLOCKER, and stop. This is the known duplicate-writer bug: `/todd-coder
   plan` posts a new comment every time without checking for an existing one, so a ticket can carry
   two plans while both readers say "a comment", singular. Report both comment ids and their
-  timestamps, say which one `list_comments` returns first (that's the one `impl` will read), and
+  timestamps, say which one `linctl comment list` returns first (that's the one `impl` will read), and
   let Todd pick. Never merge them yourself.
 - **One** → that's the plan. Note its comment id; you'll need it to write the stamp.
 
@@ -176,8 +175,7 @@ across the audited runs and fixed zero times; ENA-443's ninth findings file read
 by decision since pass 7."* Re-raising a settled call is noise that makes a passing plan look like a
 failing one.
 
-**The ticket.** `mcp__claude_ai_Linear__get_issue`, falling back to `linctl issue get $TICKET
---json` if the MCP truncates. You need the original requirements to check coverage — a plan can't
+**The ticket.** Run `linctl issue get $TICKET --json`. You need the original requirements to check coverage — a plan can't
 tell you what it left out. Pull linked Notion and Figma context too, for the same reason.
 
 **The anchors.** `.claude/tmp/<branch-or-ticket>/anchors-<TICKET>.md`, written by `/todd-plan`
@@ -584,9 +582,9 @@ means. `/todd-plan` reads this block; keep it parseable by a human and an LLM, n
 
 **Rules for the stamp:**
 
-- It goes **inside the existing comment**, at the end. Use `save_comment` with the comment id from
-  phase 0 when the Linear MCP is available. If it is unavailable, deferred, or the write fails, run
-  `linctl auth status`, then `linctl comment update <COMMENT_ID> --body "$(<CHECKED_PLAN_PATH)"`.
+- It goes **inside the existing comment**, at the end. Use the `linctl` skill and run
+  `linctl comment update <COMMENT_ID> --body "$(<CHECKED_PLAN_PATH)"`. If it fails, run
+  `linctl auth status`, inspect the current comment, and correct the command or payload.
   `CHECKED_PLAN_PATH` is the checked local copy written below, and `COMMENT_ID` is the one plan
   comment selected in phase 0. Never create a new comment — a second comment on the ticket is the
   duplicate-plan bug you exist partly to catch. Re-read `linctl issue get $TICKET --json` and verify
@@ -712,8 +710,8 @@ Two consequences worth naming in a report rather than assuming Todd remembers:
 | The stamp carries a `⚖️ Held by decision` block | Read it, carry it forward verbatim, and raise nothing in it — Todd's rulings and `(auto, …)` entries alike. |
 | Section 1 runs past ~500 words | Your call, not Todd's. The brief stays as written; append the `(auto, pass N)` entry to `⚖️ Held by decision` and say once in the report that it reads like a brief for more than one ticket. |
 | An anchor's line number is off but the symbol is in the file | 🟡. Correct the number. Not a blocker — the grounding was done. |
-| Ticket not found or MCP truncating | Fall back to `linctl issue get $TICKET --json`. If that also fails, run groups A–D and skip E1 — you can't check coverage against a ticket you can't read. Say which group you skipped. |
+| Ticket not found or `linctl` read fails | Run `linctl issue get $TICKET --json` with the exact ticket id. If that also fails, run groups A–D and skip E1 — you can't check coverage against a ticket you can't read. Say which group you skipped. |
 | Plan contradicted by the code | 🔴 Report it as a finding. Don't correct the plan; the correction may change the approach, which is Todd's call. |
-| `save_comment` is unavailable or fails | Fall back to `linctl auth status` then `linctl comment update <COMMENT_ID> --body "$(<CHECKED_PLAN_PATH)"`; re-read the issue and verify the one plan comment carries the new stamp. Report the local path only if both writes fail. |
+| `linctl comment update` fails | Run `linctl auth status`, then retry `linctl comment update <COMMENT_ID> --body "$(<CHECKED_PLAN_PATH)"`; re-read the issue and verify the one plan comment carries the new stamp. Report the local path only if both writes fail. |
 
 Now check $ARGUMENTS.
