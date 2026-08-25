@@ -170,7 +170,8 @@
     "warp@claude-code-warp": true,
     "understand-anything@understand-anything": true,
     "agent-skills@addy-agent-skills": false,
-    "config-manager@ai-config-sync-manager": true
+    "config-manager@ai-config-sync-manager": true,
+    "eli5@claude-community": true
   },
   "extraKnownMarketplaces": {
     "claude-code-warp": {
@@ -195,6 +196,12 @@
       "source": {
         "source": "directory",
         "path": "/Users/toddprice/.nvm/versions/node/v24.13.1/lib/node_modules/ai-config-sync-manager/dist/claude-marketplace"
+      }
+    },
+    "claude-community": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-community"
       }
     }
   },

@@ -19,6 +19,12 @@
 	enabled = true
 [safe]
 	directory = /Users/toddprice/dscout-wt
+	directory = /Users/toddprice/dscout-wt/frg-1258
+	directory = /Users/toddprice/dscout-wt/frg-1258
+	directory = /Users/toddprice/dscout-wt/frg-1258
+	directory = /Users/toddprice/dscout-wt/frg-1258
+	directory = /Users/toddprice/dscout-wt/frg-1258
+	directory = /Users/toddprice/dscout-wt/frg-1258
 [difftool "zed"]
 	cmd = zed --diff $LOCAL $REMOTE
 [diff]
