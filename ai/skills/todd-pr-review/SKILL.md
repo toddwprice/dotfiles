@@ -18,19 +18,59 @@ building or posting a review.
 
 ## Arguments and modes
 
-`$ARGUMENTS` contains a required PR number and an optional `--json-only` flag,
-in either order. Strip the flag before using the number.
+`$ARGUMENTS` contains a required PR number and optional `--json-only`,
+`--refresh`, and `--since-head <SHA>` flags, in any order. Strip the flags
+before using the number. `--refresh` and `--since-head` select incremental
+review mode; reject their use together.
 
 - `<N>`: PR number.
 - `--json-only`: after Todd has resolved the decision checkpoint, write the
   JSON payload and stop; do not post.
+- `--refresh`: use the latest compatible local review snapshot as the baseline.
+- `--since-head <SHA>`: use this explicit prior PR head as the baseline. Use
+  this when the local snapshot is unavailable or the reviewer wants to choose
+  the exact comparison point.
 
-Without `--json-only`, build and post one atomic GitHub review.
+Without `--json-only`, build and post one atomic GitHub review. Without an
+incremental flag, perform a full review.
+
+## Incremental review state
+
+After every decision-complete run, including `--json-only`, write
+`$HOME/reviews/pr-<N>-review-state.json`. It is review-local working state,
+not a GitHub payload. Store the repository, PR number, reviewed head SHA,
+the normalized current checks (`name`, `workflow`, `state`, `link`), each
+review-thread root and latest comment ID, and the retained findings with their
+classification, location, wording, decision, blocking status, and whether
+they were posted. Keep enough plain-language context to tell whether a later
+change fixes or supersedes the finding. Do not store dropped findings.
+
+For `--refresh`, load that state. It must match the current repository and PR;
+otherwise stop and ask for `--since-head <SHA>` or a full review. For
+`--since-head`, use matching local state when available. If it is not
+available, recover prior retained findings from the authenticated reviewer's
+submitted review and inline comments at that SHA; say when no recoverable
+prior findings exist.
+
+Before treating a baseline as incremental, compare it with the current head
+using `repos/<OWNER>/<REPO>/compare/<BASELINE>...<HEAD>`. Continue only when
+the baseline is an ancestor and the comparison is complete. A force-push,
+missing SHA, diverged history, or truncated/ambiguous comparison requires a
+full review; say why rather than guessing at a partial delta.
 
 ## Performance rules
 
-- Read metadata, the diff, threads, and checks once. Re-fetch only when the
-  head SHA changes before posting.
+- In a full review, read metadata, the diff, threads, and checks once. Re-fetch
+  only when the head SHA changes before posting.
+- In an incremental review, read the comparison from the selected baseline,
+  current threads, and current checks once. Analyze only commits after the
+  baseline, new thread roots or replies, and checks whose normalized snapshot
+  changed. Use the comparison's file patches as the diff; do not read the full
+  PR diff as a shortcut.
+- Carry forward retained prior findings. Do not re-post or re-ask Todd to
+  decide one unless the delta changes its factual basis, fixes it, or an author
+  reply needs a decision. A retained blocking finding remains blocking until
+  the changed code fixes it or its thread resolves it.
 - Most PRs need zero to three surfaced findings.
 - Dispatch sub-agents only for a finding that needs codebase evidence to avoid
   a wrong recommendation. Do not spend sub-agent time on a pure preference.
@@ -68,7 +108,7 @@ now.`
 
 ## Workflow
 
-### 1. Gather once
+### 1. Gather the selected scope once
 
 ```bash
 gh pr view <N> --json title,body,author,baseRefName,headRefName,headRefOid,files,labels,additions,deletions,state,mergedAt,isDraft,url
@@ -78,6 +118,21 @@ gh api repos/<OWNER>/<REPO>/pulls/<N>/reviews --paginate
 gh pr checks <N>
 gh api user -q .login
 ```
+
+For a full review, use the commands above as written. For an incremental
+review, still read current PR metadata, comments, reviews, checks, and the
+authenticated user once, but replace `gh pr diff <N>` with the verified
+comparison API response:
+
+```bash
+gh api repos/<OWNER>/<REPO>/compare/<BASELINE>...<HEAD>
+```
+
+Use its commit list and file patches as the only code delta. Compare current
+thread roots/latest comments and normalized checks with the saved snapshot.
+Treat a new reply on an existing root as changed thread evidence. Do not spend
+review time on unchanged threads or unchanged green checks, except for a
+retained finding that needs its status confirmed.
 
 Group comments by root (`in_reply_to_id` when present). Read the latest reply
 in each thread before making a new finding.
@@ -105,7 +160,7 @@ call may predate the current diff. If nobody has submitted a review, say **No
 submitted reviews yet**. Inline review-thread comments are evidence, not
 reviewer verdicts; keep their status in the normal PR summary.
 
-If the diff includes `priv/repo/migrations/`, read
+If the selected diff includes `priv/repo/migrations/`, read
 `apps/axon/safe_ecto_migrations/README.md` and apply its guidance.
 
 If `state != OPEN`, this is a body-only post-merge note: force
@@ -114,6 +169,11 @@ result. If the author is the authenticated user, force `event: COMMENT`;
 GitHub rejects approve/request-changes events on self-authored PRs.
 
 ### 2. Analyze
+
+An incremental review is still a cold review of the selected delta. Trace new
+callers and consumers, inspect the changed code without assuming the earlier
+review was right, and apply every check below to the new commits. Prior
+findings are context, not proof that the delta is safe.
 
 For changed behavior, trace actual callers and consumers. Prioritize:
 
@@ -125,7 +185,9 @@ For changed behavior, trace actual callers and consumers. Prioritize:
 - established local helpers and module boundaries, only when reuse prevents a
   real defect or materially reduces complexity.
 
-Red or missing required checks on new logic are blocking until explained.
+Red or missing required checks on new logic are blocking until explained. In
+incremental mode, this applies to newly changed checks; retain any earlier
+blocking check finding until it is green or explained.
 Missing PR-body verification is non-blocking. Do not block on aesthetics, inputs
 nobody can create, or adjacent unrelated code.
 
@@ -189,7 +251,18 @@ Then continue with:
 End with: `Reply with D1, D2, ...; I will update the verdict and review from those calls.`
 Then stop and wait for Todd. Do not infer silence as approval.
 
-When Todd replies, verify that every decision has an unambiguous disposition.
+For an incremental review, put the baseline SHA, current head SHA, new commit
+count, changed-thread count, and changed-check count in **PR summary**. List
+carried findings separately with their current status: still open, fixed by
+the delta, or answered in a thread. Only assign `D1`, `D2`, ... to newly
+surfaced or materially changed findings. Do not make Todd repeat settled
+calls. If the delta fixes a carried finding, explain the evidence and remove
+it from the carried set; if that changes a prior blocking disposition, call it
+out before the new decision list.
+
+When Todd replies, verify that every new or materially changed finding has an
+unambiguous disposition. Carried findings keep their stored disposition unless
+the evidence briefing identified them as fixed or answered.
 Ask a short follow-up only for a missing or ambiguous decision. Once all are
 resolved, use Todd's calls as the source of truth:
 
@@ -223,6 +296,13 @@ Write `$HOME/reviews/pr-<N>-review.json`:
 Map Approve to `APPROVE`, Request Changes to `REQUEST_CHANGES`, and Request
 Clarification to `COMMENT`. For a closed/merged or self-authored PR, rewrite
 the event to `COMMENT`.
+
+Do not emit a duplicate inline comment for a carried finding already posted on
+GitHub. A carried blocking finding still determines `REQUEST_CHANGES` on a new
+head when it remains unresolved. After writing the payload, update the review
+state with the current head, checks, thread snapshot, and retained findings.
+Mark findings posted only after a successful post; for `--json-only`, retain
+their unposted status so the next run knows they were decided but not sent.
 
 Inline comments are action requests Todd chose to retain. Their body is the
 plain-language decision; never include `How I checked`, a header, praise, or
@@ -260,8 +340,10 @@ If either duplicate check succeeds, release the lock, report the existing
 review/payload, and stop. Immediately before posting, rerun the duplicate guard.
 
 Re-fetch the head SHA. If it changed, read the new commits and comments; remove
-findings fixed on the new head and re-anchor the rest. Validate anchors against
-the authoritative files API:
+findings fixed on the new head and re-anchor the rest. If this began as an
+incremental review, re-run the baseline comparison against the new head and
+extend the cold check to that additional delta. Validate anchors against the
+authoritative files API:
 
 ```bash
 gh api repos/<OWNER>/<REPO>/pulls/<N>/files --paginate > /tmp/pr-<N>-files.json
@@ -286,11 +368,31 @@ rmdir "$LOCK" 2>/dev/null
 echo "$URL"
 ```
 
+After a successful post, update the state file's posted markers and current
+head. If posting fails, leave the decision-complete state intact but do not
+mark any finding posted.
+
 On a 422 anchor failure, rebuild the anchor set, demote invalid entries, and
 retry once. For any other failure, release the lock, report the error and JSON
 path, and do not fall back to a body-only review.
 
 ## Final response
+
+## Outcome record
+
+Before the final response, append one terminal-state record. This must not block the review: if the helper cannot write, say so and still finish the requested review.
+
+```bash
+~/.dotfiles/ai/skills/_shared/record-skill-outcome.sh \
+  --skill todd-pr-review --target "PR-<N>" --head-sha "<current SHA or empty>" \
+  --phase "<gather|decision|payload|post>" \
+  --tests "<green checks, red checks, or not-run>" \
+  --manual-verification not-applicable --posted-url "<review URL or empty>" \
+  --outcome "<completed|awaiting-user|blocked|failed>" \
+  --stop-reason "<posted|awaiting-decision|duplicate-review|checks-red|head-changed|error>"
+```
+
+Use `awaiting-user` / `awaiting-decision` at the decision checkpoint. One record per terminal handoff is intentional: it lets a later audit distinguish an interactive pause from a completed review.
 
 Default mode: lead with the verdict, then the posted review URL,
 `<count> inline comments · <count> PR-wide notes`, the JSON path, and up to

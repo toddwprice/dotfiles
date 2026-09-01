@@ -220,9 +220,8 @@ fi
 
 # --- locating the child -------------------------------------------------------
 #
-# Sibling first: these two scripts travel together, and ~/.claude/scripts holds
-# a symlink to each, so dirname of $0 finds pr-review-queue whether you ran the
-# symlink or the file in ~/.dotfiles. PATH is the fallback for the case where
+# Sibling first: these two scripts travel together in the dotfiles scripts
+# directory, which zshrc adds to PATH. PATH is the fallback for the case where
 # only one of them is installed somewhere odd.
 
 if [[ -z "$QUEUE_BIN" ]]; then

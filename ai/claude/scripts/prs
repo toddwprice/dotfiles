@@ -6,9 +6,60 @@
 
 set -euo pipefail
 
-REPO="dscout/dscout"
+ORG="dscout"
+REPO=""
 LIMIT=100
 SKIP_DRAFTS=false
+PR_REF_WIDTH=32
+SUBMITTER_WIDTH=18
+LINEAR_WIDTH=64
+
+# Bash printf measures its field widths in UTF-8 bytes, not the terminal cells
+# they occupy. Format each column by display width instead, so an em dash in a
+# Linear title (and the ASCII truncation marker) cannot shift Created left or
+# right. Perl ships with macOS and its Unicode properties cover wide glyphs.
+format_column() {
+  local value="$1"
+  local max_length="$2"
+
+  perl -CSDA -e '
+    sub cell_width {
+      my ($character) = @_;
+      return 0 if $character =~ /\p{Mark}/ || $character eq "\x{200D}";
+      return $character =~ /\p{East_Asian_Width=Wide}/ ||
+        $character =~ /\p{East_Asian_Width=Fullwidth}/ ? 2 : 1;
+    }
+
+    sub display_width { my $width = 0; $width += cell_width($_) for split //, $_[0]; return $width; }
+
+    my ($value, $max_width) = @ARGV;
+    if (display_width($value) > $max_width) {
+      my ($width, @characters) = (0);
+      for my $character (split //, $value) {
+        my $character_width = cell_width($character);
+        last if $width + $character_width > $max_width - 3;
+        push @characters, $character;
+        $width += $character_width;
+      }
+      $value = join("", @characters) . "...";
+    }
+
+    my $padding = $max_width - display_width($value);
+    print $value, " " x ($padding > 0 ? $padding : 0);
+  ' "$value" "$max_length"
+}
+
+format_created_at() {
+  local created_at="$1"
+  local epoch formatted
+
+  # GitHub timestamps are UTC. Parse them in UTC first, then let date render
+  # the resulting instant in this machine's current timezone.
+  epoch="$(TZ=UTC date -j -f '%Y-%m-%dT%H:%M:%SZ' "$created_at" '+%s')" || return 1
+  formatted="$(date -r "$epoch" '+%a %b %-d %-I:%M%p (%Z)')" || return 1
+  formatted="${formatted/AM/am}"
+  printf '%s' "${formatted/PM/pm}"
+}
 
 usage() {
   cat <<'EOF'
@@ -19,11 +70,11 @@ Lists open PRs that have requested your review, oldest first.
   #       GitHub PR number
   Submitter  GitHub author
   Linear  Linear ticket and its current title
-  Created  When the PR was opened (UTC)
+  Created  When the PR was opened (your current timezone)
 
 Options:
-  -r, --repo OWNER/NAME  Search one repo (default: dscout/dscout)
-  -a, --all-repos        Search every repo
+  -r, --repo OWNER/NAME  Search one repo instead of the dscout organization
+  -a, --all-repos        Search every repo you can access
   -n, --limit N          Max PRs to return (default: 100)
   -d, --no-drafts        Leave draft PRs out
   -h, --help             Show this help
@@ -35,8 +86,8 @@ need_value() { [[ $# -ge 2 && -n "${2:-}" ]] || die "$1 needs a value"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -r|--repo)      need_value "$@"; REPO="$2"; shift 2 ;;
-    -a|--all-repos) REPO=""; shift ;;
+    -r|--repo)      need_value "$@"; REPO="$2"; ORG=""; shift 2 ;;
+    -a|--all-repos) REPO=""; ORG=""; shift ;;
     -n|--limit)     need_value "$@"; LIMIT="$2"; shift 2 ;;
     -d|--no-drafts) SKIP_DRAFTS=true; shift ;;
     -h|--help)      usage; exit 0 ;;
@@ -56,6 +107,7 @@ linctl auth status >/dev/null 2>&1 || die "linctl is not authenticated; run: lin
 
 qualifiers=("archived:false")
 [[ -n "$REPO" ]] && qualifiers+=("repo:$REPO")
+[[ -n "$ORG" ]] && qualifiers+=("org:$ORG")
 
 if ! json="$(gh search prs "${qualifiers[@]}" \
     --review-requested=@me \
@@ -73,11 +125,22 @@ fi
 
 count="$(jq 'length' <<<"$json")"
 if [[ "$count" -eq 0 ]]; then
-  echo "No open PRs are waiting for your review${REPO:+ in $REPO}."
+  if [[ -n "$REPO" ]]; then
+    scope=" in $REPO"
+  elif [[ -n "$ORG" ]]; then
+    scope=" in the $ORG organization"
+  else
+    scope=""
+  fi
+  echo "No open PRs are waiting for your review$scope."
   exit 0
 fi
 
-printf '%-8s %-18s %-64s %s\n' '#' 'Submitter' 'Linear' 'Created (UTC)'
+printf '\033[1m%s %s %s %s\033[0m\n' \
+  "$(format_column '#' "$PR_REF_WIDTH")" \
+  "$(format_column 'Submitter' "$SUBMITTER_WIDTH")" \
+  "$(format_column 'Linear' "$LINEAR_WIDTH")" \
+  'Created'
 
 while IFS=$'\t' read -r number author pr_title created repo; do
   # PR titles conventionally carry the Linear identifier, e.g. [FRG-1234] or
@@ -103,9 +166,15 @@ while IFS=$'\t' read -r number author pr_title created repo; do
     pr_ref="$repo#$number"
   fi
 
-  # GitHub gives an ISO-8601 timestamp, so the opening date and time stay
-  # unambiguous regardless of the machine's local timezone.
-  printf '%-8s %-18s %-64s %s\n' "$pr_ref" "@$author" "$linear" "$created"
+  if ! created="$(format_created_at "$created")"; then
+    die "could not format GitHub creation time '$created'"
+  fi
+
+  printf '%s %s %s %s\n' \
+    "$(format_column "$pr_ref" "$PR_REF_WIDTH")" \
+    "$(format_column "@$author" "$SUBMITTER_WIDTH")" \
+    "$(format_column "$linear" "$LINEAR_WIDTH")" \
+    "$created"
 done < <(jq -r '.[] | [
   (.number | tostring),
   (.author.login // "ghost"),

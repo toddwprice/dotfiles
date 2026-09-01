@@ -980,6 +980,22 @@ revision returns here for a delta walkthrough and a fresh approval date before a
 
 ## Phase 6 — Post and report
 
+## Outcome record
+
+Before a terminal report or approval wait, append one observational record. Failure to write this record never blocks the plan, Linear comment, or cold check.
+
+```bash
+~/.dotfiles/ai/skills/_shared/record-skill-outcome.sh \
+  --skill todd-plan --target "<TICKET>" --head-sha "<source SHA or empty>" \
+  --phase "<resolve|ground|walkthrough|post|cold-check>" \
+  --tests "<plan-check result, or not-run>" \
+  --manual-verification not-applicable --posted-url "<Linear comment URL or empty>" \
+  --outcome "<completed|awaiting-user|blocked|failed>" \
+  --stop-reason "<posted-and-checked|awaiting-approval|plan-check-blockers|missing-context|error>"
+```
+
+Use `awaiting-user` / `awaiting-approval` for the walkthrough. A check that returns blockers is `blocked` / `plan-check-blockers`, even though the comment was posted.
+
 **Rewrite the current local copies first**, always, including under `--dry-run`:
 
 - `.claude/tmp/<branch-or-ticket>/plan-<TICKET>.md` — the plan body exactly as posted. Cheap

@@ -4,10 +4,12 @@ description: >
   Pull, triage, fact-check, and respond to PR review comments end-to-end. Use this WHENEVER Todd
   wants to deal with comments on a pull request — phrasings like "pull comments for the PR and
   propose how to address them", "address the baz comments", "resolve the comments on PR 25840",
-  "respond to sam's comments", "process pr comments for 25834", "look at the feedback baz left and
-  resolve it", "reply to the low-severity comments", "check for baz comments on my open PRs", or
-  "what needs to be done to satisfy the comments on this PR". Trigger even when Todd doesn't say the
-  word "skill" and even when he names a specific reviewer (baz, sam, mbrashid62) or a PR number.
+  "respond to sam's comments on PR 25834", "process PR comments for 25834", "look at the feedback
+  baz left on PR 25834 and resolve it", "reply to the low-severity comments on PR 25834", or "what
+  needs to be done to satisfy the comments on PR 25834". A pull request number (or a PR URL / review
+  filename that contains one) is required; do not infer one from the current branch or an open-PR list.
+  Trigger even when Todd doesn't say the word "skill" and when he names a specific reviewer (baz, sam,
+  mbrashid62) together with a PR reference.
   This skill fetches the threads itself (you do NOT need them pasted in), fact-checks each claim
   against the actual code, and by default PROPOSES a plan + draft replies and waits for approval
   before changing code or pushing. It also accepts a local self-review JSON produced by
@@ -74,15 +76,15 @@ contract mismatch. Those get fixed.
 where "won't fix in this PR" is the author's call and he accepts it in one round. Here the PR is his,
 so no one else's scope is at stake and the ticket has nothing to hide behind.
 
-## Step 1 — Identify the PR and pick a mode
+## Step 1 — Require the PR number and pick a mode
 
-`$ARGUMENTS` may contain a PR number, reviewer name(s), a path to a review JSON, or be empty.
+`$ARGUMENTS` must contain a pull request reference: a PR number, a PR URL, or a review artifact path
+whose filename contains the PR number (for example, `~/reviews/pr-27600-review.json`). A reviewer name
+alone, an empty argument list, "this PR", and "my open PRs" are not enough.
 
-- PR number → use it.
-- Empty → `gh pr view --json number,headRefName,url -q '{n:.number,b:.headRefName,u:.url}'` for the
-  current branch. If there's no PR for the branch, say so and stop.
-- "check my open/drafted PRs for baz comments" → `gh pr list --author @me --json number,title,url`
-  then loop the steps below over each, reporting which PRs actually have unaddressed comments.
+- PR reference → resolve and use that PR number.
+- No PR reference → stop before making any GitHub calls and ask Todd for the PR number. Do not use
+  `gh pr view` to infer the current branch's PR and do not enumerate open or drafted PRs.
 
 Resolve `{owner}/{repo}` once: `gh repo view --json nameWithOwner -q .nameWithOwner`.
 
@@ -300,6 +302,22 @@ gh api repos/{owner}/{repo}/pulls/<N>/comments -f body="<reply>" -F in_reply_to=
   sha, and the PR URL.
 
 ## Notes
+
+## Outcome record
+
+Before every terminal handoff, append one record. It is observational only; a write failure must not prevent the requested PR work from completing.
+
+```bash
+~/.dotfiles/ai/skills/_shared/record-skill-outcome.sh \
+  --skill todd-address-comments --target "PR-<N>" --head-sha "<current SHA or empty>" \
+  --phase "<resolve|triage|implement|reply|push>" \
+  --tests "<commands and result, or not-run>" \
+  --manual-verification not-applicable --posted-url "<PR URL or empty>" \
+  --outcome "<completed|awaiting-user|blocked|failed>" \
+  --stop-reason "<pushed|awaiting-approval|no-pr-reference|no-actionable-threads|test-failure|error>"
+```
+
+At the propose-first checkpoint, record `awaiting-user` / `awaiting-approval`; after implementation, record the actual terminal result.
 
 - Never push without showing the triage table first.
 - A local review file (`~/reviews/pr-XXXX-review.{md,json,html}`) is ambiguous on its face — resolve

@@ -95,6 +95,20 @@ If `$ARGUMENTS` contains `--html`, also write the same content to `.claude/tmp/a
 
 ## Voice
 
+## Outcome record
+
+Before the final diagnosis, append one terminal-state record. Recording failure is non-blocking: return the diagnosis and name the telemetry error briefly.
+
+```bash
+~/.dotfiles/ai/skills/_shared/record-skill-outcome.sh \
+  --skill todd-diagnose-alert --target "<monitor ID, incident, or URL>" --head-sha "<suspect SHA or empty>" \
+  --phase "<identify|evidence|correlate|deep-dive|verdict>" \
+  --tests "<not-run or validation performed>" \
+  --manual-verification not-applicable --posted-url "<HTML report URL/path or empty>" \
+  --outcome "<completed|blocked|failed>" \
+  --stop-reason "<diagnosis-written|insufficient-evidence|datadog-unavailable|error>"
+```
+
 Use Todd's voice for the writeup. Defer to the `speak-as-todd` skill if available. Key rules:
 - State the call directly. No "perhaps", "maybe consider".
 - 1–4 sentence paragraphs. No throat-clearing.

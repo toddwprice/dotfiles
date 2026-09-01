@@ -50,7 +50,6 @@ ROWS=(
   "claude/settings.json|$HOME/.claude/settings.json|$HOME/.claude"
   "claude/statusline-command.sh|$HOME/.claude/statusline-command.sh|$HOME/.claude"
   "claude/agents|$HOME/.claude/agents|$HOME/.claude"
-  "claude/scripts|$HOME/.claude/scripts|$HOME/.claude"
 )
 
 # The tilde has to come from a variable: bash 3.2 emits an escaped \~

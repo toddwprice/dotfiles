@@ -243,6 +243,22 @@ Then poll again for the next round. Stop when a poll comes back clean or `--max-
 
 ## Final report
 
+## Outcome record
+
+Before the final report, append one record for the run's actual terminal state. This is telemetry only: do not leave a PR or shared environment in a worse state because recording failed.
+
+```bash
+~/.dotfiles/ai/skills/_shared/record-skill-outcome.sh \
+  --skill todd-loop --target "<TICKET>" --head-sha "<current SHA or empty>" \
+  --phase "<resolve|impl|pr|review|address|manual|ready|baz>" \
+  --tests "<green/red/not-run; include the failing command when red>" \
+  --manual-verification "<passed N/M|failed N/M|unverified: reason>" \
+  --posted-url "<PR URL or empty>" --outcome "<completed|awaiting-user|blocked|failed>" \
+  --stop-reason "<baz-quiet|round-cap|no-ready|awaiting-judgement|red-check|manual-failure|missing-plan|phase-error>"
+```
+
+For a resume, record the phase that stopped this invocation. This makes resume churn visible without pretending a partial run completed.
+
 Keep it short:
 
 - Ticket, PR URL, current state (ready / draft), and whether CI is green.

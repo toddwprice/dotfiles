@@ -5,7 +5,7 @@ setup() {
   export HOME="$BATS_TEST_TMPDIR/home"
   export DOTFILES="$HOME/.dotfiles"
   local ai="$DOTFILES/ai"
-  mkdir -p "$ai/skills/demo" "$ai/claude/agents" "$ai/claude/scripts"
+  mkdir -p "$ai/skills/demo" "$ai/claude/agents"
   echo "skill"  > "$ai/skills/demo/SKILL.md"
   echo "agents" > "$ai/AGENTS.md"
   echo "{}"     > "$ai/claude/settings.json"
@@ -30,13 +30,12 @@ setup() {
 @test "links every ~/.claude row to the path the harness actually reads" {
   # Source-column typos surface as MISSING, but a destination-column typo just
   # links somewhere nothing reads. Every ~/.claude row needs its own assertion;
-  # skills and CLAUDE.md have one above, these are the remaining five.
+  # skills and CLAUDE.md have one above, these are the remaining four.
   run "$SCRIPT"
   [ "$status" -eq 0 ]
   [ "$(readlink "$HOME/.claude/settings.json")" = "$DOTFILES/ai/claude/settings.json" ]
   [ "$(readlink "$HOME/.claude/statusline-command.sh")" = "$DOTFILES/ai/claude/statusline-command.sh" ]
   [ "$(readlink "$HOME/.claude/agents")" = "$DOTFILES/ai/claude/agents" ]
-  [ "$(readlink "$HOME/.claude/scripts")" = "$DOTFILES/ai/claude/scripts" ]
 }
 
 @test "creates ~/.agents/skills even though ~/.agents does not exist" {
