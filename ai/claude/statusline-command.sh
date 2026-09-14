@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code status line
-# Displays (left to right): model | ctx% | effort | worktree | PR#
+# Displays (left to right): model | ctx% | effort | worktree | PR# | daily spend
 
 input=$(cat)
 
@@ -82,6 +82,18 @@ fi
 
 if [ -n "$pr_part" ]; then
   out="${out}${sep}${pr_part}"
+  sep=" | "
+fi
+
+# Daily spend vs. pace segment (credit %, $used/$limit, and a bar showing
+# spend pace against how far the UTC day has gotten). Silent on any failure
+# by design — see claude-daily-spend-statusline.sh for details.
+# Resolve through the ~/.claude symlink to this file's real (dotfiles) home,
+# since BASH_SOURCE reflects the invocation path, not the symlink target.
+script_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || readlink "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
+spend_part=$(bash "$script_dir/scripts/claude-daily-spend-statusline.sh" 2>/dev/null)
+if [ -n "$spend_part" ]; then
+  out="${out}${sep}${spend_part}"
 fi
 
 printf '%s' "$out"

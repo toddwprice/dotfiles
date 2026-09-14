@@ -78,6 +78,7 @@ alias rebaseFromMain="git fetch && git pull && git rebase origin/main && git pus
 alias gp="git push --force-with-lease"
 alias gbcp="git branch --show-current | tee >(tr -d '\n' | pbcopy)"
 alias ddu="dscout-down && docker compose --profile deps up -d --build"
+alias wt="git worktree"
 
 # Docker compose shorthand
 alias dc="docker compose"

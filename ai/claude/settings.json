@@ -206,19 +206,24 @@
     }
   },
   "effortLevel": "xhigh",
+  "modelSettings": {
+    "claude-sonnet-5": {
+      "effortLevel": "high"
+    },
+    "claude-opus-5": {
+      "effortLevel": "high"
+    }
+  },
   "askUserQuestionTimeout": "never",
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "theme": "light-daltonized",
   "editorMode": "normal",
   "preferredNotifChannel": "auto",
+  "switchModelsOnFlag": false,
   "autoScrollEnabled": false,
+  "crossSessionInbound": "accept",
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": false,
-  "skipAutoPermissionPrompt": true,
-  "modelSettings": {
-    "claude-sonnet-5": {
-      "effortLevel": "xhigh"
-    }
-  }
+  "skipAutoPermissionPrompt": true
 }

@@ -9,21 +9,27 @@ Two callers read this file, and they must not drift:
 - **`/todd-loop`** — runs this as its own phase, after the self-review fixes land and
   before the PR flips to ready.
 
-Everything below was verified against the running stack on 2026-08-11. Where a command
+Everything below was verified against the running stack on 2026-09-02. Where a command
 looks redundant, it's because the obvious shorter version fails — the notes say how.
 
 ---
 
 ## The rule that makes the evidence worth anything
 
-**Every worktree shares one Compose project.** `compose.yaml` pins `name: dscout`, so
-the containers that answer `localhost:5000` are bound to whichever worktree last brought
-them up — not to the one you just edited. Browse without checking, and you produce
-screenshots that "prove" code you never ran.
+**Each worktree gets its own Compose project, and they all fight over the same host
+ports.** `compose.yaml` reads `name: ${COMPOSE_PROJECT_NAME:-dscout}` and each worktree
+supplies its own name through `.env.compose.local` (`frg-1313`, `dscout-main`, …) — but
+every one of those files still pins `DSCOUT_AXON_PORT=5000`. Only one worktree's stack can
+hold that port, and the holder is whichever came up last.
 
-So: **confirm the running stack is bound to the worktree holding your changes, or don't
-claim verification at all.** A wrong-worktree screenshot is worse than no screenshot,
-because it looks like proof.
+**The URL cannot tell you which worktree you reached.** Verified: `frg-1313.localhost` and
+`dscout-main.localhost` both resolve to `127.0.0.1`, both on `:5000`. A `200` proves a
+stack is up, not that it is *your* stack. Browse on that alone and you produce screenshots
+that "prove" code you never ran.
+
+So: **confirm the running stack is bound to the worktree holding your changes — by Compose
+label, never by URL — or don't claim verification at all.** A wrong-worktree screenshot is
+worse than no screenshot, because it looks like proof.
 
 Record the binding and the commit SHA alongside the results. That provenance is what
 makes a reader trust the ticks.
@@ -36,64 +42,72 @@ Stop, and report the items as unverified with the reason, if any of these hold:
 
 | Guard | Why |
 |---|---|
-| Base URL isn't `http://localhost:5000` | This procedure signs in with shared local dev credentials. Never point it at staging or production. |
+| The base URL isn't the loopback URL `bin/dscout-compose status` reports for this worktree | This procedure signs in with shared local dev credentials. The host must be `localhost` or a `*.localhost` name — never staging, never production. |
 | Docker isn't running (`docker info` fails) | Nothing to verify against. |
 | The plan carries no `### 🧪 Manual Test Plan` | Nothing to run. Say so; don't invent a checklist at verification time. |
 | Every item is marked not browser-verifiable | Report why, skip the browser entirely, don't spin the stack up for nothing. |
+| `../reset-stack.sh` is missing or not executable | Step 1 has no supported fallback. Report every item unverified; never improvise with direct `docker compose` calls. |
 
 ---
 
 ## Step 1 — Bring the stack up
 
-### 1a. Reserve the shared environment first
+### 1a. Reset the stack onto this worktree
 
-The app containers and Chrome are a single-machine resource. **Do not probe,
-restart, or drive `localhost` until this session owns the reservation.**
-`acquire` waits in FIFO order, so a manual-verification agent queues behind an
-active browser session instead of replacing the checkout it is testing.
-
-Prefer the command from the worktree under test once this feature is on `main`.
-Until then, `$HOME/dscout-wt/shared-docker-resources` is the local rollout copy.
-`DSCOUT_SHARED_ENV_BIN` lets a caller supply a different copy explicitly.
+`../reset-stack.sh` is the one supported way in. Run it from inside the worktree holding
+your changes — the script resolves the worktree root itself (`git rev-parse
+--show-toplevel`) and hands off to `bin/dscout-compose`, which resolves that worktree's
+project name, env file, and ports.
 
 ```bash
-shared_env_bin="$WT/bin/shared-env"
-if [ ! -x "$shared_env_bin" ]; then
-  shared_env_bin="${DSCOUT_SHARED_ENV_BIN:-$HOME/dscout-wt/shared-docker-resources/bin/shared-env}"
-fi
-
-if [ ! -x "$shared_env_bin" ]; then
-  echo "shared-env is unavailable; cannot safely run browser verification" >&2
-  exit 1
-fi
-
-cd "$WT" && "$shared_env_bin" acquire \
-  --purpose "manual verification: $TICKET" \
-  --up
+cd "$WT" && ../reset-stack.sh
 ```
 
-- Exit `0` means the reservation is yours and the app services are ready for
-  this worktree. Continue below.
-- Exit `7` means the reservation is yours but Compose could not start the app
-  services. Capture the service failure, release the reservation, and mark all
-  items unverified. Do not test a previous checkout by accident.
-- Any other nonzero exit means no reservation was acquired. Report the queue or
-  timeout result; do not start Compose directly and do not drive the browser.
+`WT` is the absolute worktree path holding your changes. `../reset-stack.sh` resolves
+because every worktree lives one level under `~/dscout-wt/`.
 
-The reservation spans every browser tool call in this procedure. Release it
-after posting results, including when a checklist item fails or verification
-becomes impossible.
+| Invocation | Use |
+|---|---|
+| `../reset-stack.sh` | First bring-up of this worktree's stack in the session. Runs `dscout-compose setup` — re-prepares Axon dev/test DB state, re-runs Astro migrations — then `up`. |
+| `../reset-stack.sh --quick` | Restarting a stack that already exists. Skips `setup`, goes straight to `up`. Much faster; use it for a mid-session restart. |
 
-Each Bash tool call starts with a fresh shell. Repeat the resolver block when a
-later command needs `$shared_env_bin`; do not assume that variable or `cd "$WT"`
-survives from the acquisition call.
+**Give it a long timeout.** `bin/dscout-compose up` runs `up -d --wait --wait-timeout 300`
+and a full `setup` adds more on top — well past the Bash tool's 120s default. Call it with
+`timeout: 600000`. Because of `--wait`, **exit 0 means the configured services reported
+healthy**, so there is nothing to poll or sleep on afterwards.
 
-### Never call `ddu` from the Bash tool. It is guaranteed to fail.
+If it exits nonzero, capture the failure, report every item unverified, and continue. Don't
+retry blind, and don't fall back to direct `docker compose` — see the trap below.
 
-`ddu` is `alias ddu="dscout-down && dscout-up"` (`~/.dotfiles/zshrc:80`), and those
-functions live in `~/.config/zsh/dscout.zsh`. The Bash tool replays a snapshot of the
-interactive profile, and that snapshot **keeps the alias and the two public functions but
-drops every `_`-prefixed helper** plus the `_DSCOUT_APPS` array. Verified:
+### It stops every container on the machine. Record what you evicted.
+
+`reset-stack.sh` runs `docker ps -q | xargs docker stop` before it starts anything. That is
+deliberate: the ports collide, so the previous worktree's stack has to go before yours can
+bind `:5000`. Two consequences you own:
+
+- **Note what you evicted.** Capture the bindings *before* you run it and say in the
+  results which worktree previously held the ports. Another session may have been mid-run.
+- **Nothing queues.** There is no reservation or mutex. If a second agent runs this while
+  you're browsing, your stack goes down under you. A page that suddenly can't connect
+  mid-checklist means you lost the ports — report the remaining items unverified rather
+  than re-running and re-screenshotting into a race.
+
+```bash
+docker ps --format '{{.Label "com.docker.compose.project"}}\t{{.Label "com.docker.compose.project.working_dir"}}' | sort -u
+```
+
+### Don't reach for `ddu`, `dscout-up`, or bare `docker compose`
+
+**Bare `docker compose` addresses the wrong project.** Without the worktree's env file it
+interpolates `name: ${COMPOSE_PROJECT_NAME:-dscout}` down to `dscout` — verified: run from
+inside `frg-1313`, `docker compose config` reports `name: dscout`, a project that doesn't
+exist. Every `exec`, `logs`, and `down` aimed that way silently misses.
+
+**`ddu` cannot work from the Bash tool.** It is `alias ddu="dscout-down && dscout-up"`
+(`~/.dotfiles/zshrc:80`), and those functions live in `~/.config/zsh/dscout.zsh`. The Bash
+tool replays a snapshot of the interactive profile, and that snapshot **keeps the alias and
+the two public functions but drops every `_`-prefixed helper** plus the `_DSCOUT_APPS`
+array. Verified:
 
 ```
 ddu                   PRESENT (alias)
@@ -104,39 +118,67 @@ _dscout_running_root  MISSING
 _DSCOUT_APPS          UNSET
 ```
 
-The failure is quiet and misleading rather than loud: `_dscout_root` returns empty,
-`cd ""` doesn't error in zsh, and `docker compose down` then runs **in whatever directory
-the shell happens to be in** with an empty service list — `no such service:`. Nothing is
-destroyed (no `-v`, no services matched), but nothing you wanted happened either.
+The failure is quiet and misleading rather than loud: `_dscout_root` returns empty, `cd ""`
+doesn't error in zsh, and `docker compose down` then runs **in whatever directory the shell
+happens to be in** with an empty service list — `no such service:`. Nothing is destroyed
+(no `-v`, no services matched), but nothing you wanted happened either.
 
-The reservation command above replaces `ddu` and direct `docker compose` calls.
-`WT` is the absolute worktree path holding your changes.
+`../reset-stack.sh` replaces all of these.
 
-### 1b. Confirm the reservation loaded this worktree
+### 1b. Confirm the stack is bound to this worktree
+
+Read the identity `bin/dscout-compose` resolves, and take the base URL from it:
 
 ```bash
-curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:5000/auth/sign_in
-docker inspect dscout-axon-1 \
-  --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+cd "$WT" && bin/dscout-compose status
+AXON_URL="$(cd "$WT" && bin/dscout-compose status 2>/dev/null | sed -n 's/^urls:.*axon=\([^ ]*\).*/\1/p')"
 ```
 
-- `200` **and** the binding equals `$WT` → the stack is right. Continue to step 2.
-- A different binding, or no successful response → report every item unverified and
-  release the reservation. Do not bypass the mutex with direct Compose commands; the
-  reservation is specifically what keeps another session's browser run intact.
+`status` prints `root:`, `project:`, `ports:`, and `urls: axon=… dendra=… astro=…`. **Do not
+assume `localhost:5000`** — on a linked worktree it is `http://<name>.localhost:5000`.
 
-If `acquire --up` failed because the worktree is missing required `.env` files,
-create or link those files, then run `cd "$WT" && "$shared_env_bin" up` while
-you still hold the reservation. The repository's shared-env guide lists the
-required files and one-time database setup.
+Two notes on that command, both verified:
+
+- **Anchor the extraction to the `urls:` line.** `ports:` also contains `axon=`, so an
+  unanchored `sed -n 's/.*axon=\([^ ]*\).*/\1/p'` returns two lines (`5000` and the URL).
+- **`status` exits 1 when any service is unhealthy but still prints the identity block
+  first.** Read the identity even on a nonzero exit; just don't treat it as readiness.
+
+Then check the binding by label — the only check that can actually distinguish worktrees:
+
+```bash
+docker ps --filter "label=com.docker.compose.project.working_dir=$WT" \
+  --format '{{.Names}}\t{{.Label "com.docker.compose.service"}}'
+curl -fsS -o /dev/null -w '%{http_code}\n' "$AXON_URL/auth/sign_in"
+```
+
+- Containers listed for `$WT` **and** `200` from that worktree's own `urls: axon=` value →
+  the stack is right. Continue to step 2.
+- No containers for `$WT`, or `status` reports a different `root:` → report every item
+  unverified. Something else owns the ports.
+
+**Never substitute the URL check for the label check.** `curl` returning `200` on `:5000`
+tells you a stack is up, not whose — both `*.localhost` names resolve to `127.0.0.1`. And
+don't hardcode a container name: `docker inspect dscout-axon-1`, which this doc used to
+prescribe, now errors `no such object`, because containers are named `<project>-axon-1`
+(`frg-1313-axon-1`, `dscout-main-axon-1`).
+
+If `reset-stack.sh` failed on missing files: a linked worktree **must** have its own
+untracked `.env.compose.local` — the tracked `.env.compose.sample` is read only when the
+worktree is on `main` — plus `apps/axon/.env` and `apps/astro/.env`. Create those, then
+re-run.
 
 ### 1c. Migrations, if the work added one
 
-The code reloader covers `lib/`. It does **not** cover migrations, `config/`, `mix.exs`,
-or new deps — those need the restart above, and a migration needs running:
+The code reloader covers `lib/`. It does **not** cover migrations, `config/`, `mix.exs`, or
+new deps — those need the restart above, and a migration needs running. Resolve the
+container by label rather than guessing its name:
 
 ```bash
-cd "$WT" && docker compose -f compose.yaml exec -T axon mix ecto.migrate
+axon="$(docker ps --filter "label=com.docker.compose.project.working_dir=$WT" \
+  --filter 'label=com.docker.compose.service=axon' --format '{{.Names}}' | head -1)"
+[ -n "$axon" ] || { echo "axon service is not running for $WT" >&2; exit 1; }
+docker exec "$axon" mix ecto.migrate
 ```
 
 ---
@@ -155,13 +197,13 @@ echo "${TEST_USER_PASSWORD:+set}"      # never echo the value itself
 - Fallback is `dev@dscout.com` / `Password1234*`, the user seeded by
   `apps/axon/lib/axon/dev_tools/seed.ex:75` and documented in the repo's own AGENTS.md as
   local-only. **Say which pair you used** in the results.
-- These are local-only credentials. That is the entire reason step 0 refuses any host
-  other than `localhost:5000`.
+- These are local-only credentials. That is the entire reason step 0 refuses any host that
+  isn't loopback.
 
 ### The verified sequence
 
 ```
-browser_navigate    http://localhost:5000/auth/sign_in
+browser_navigate    $AXON_URL/auth/sign_in      ← from step 1b, not a hardcoded port
 browser_fill_form   input[type=email]     ← email
                     input[type=password]  ← password
 browser_click       button[type=submit]
@@ -289,28 +331,21 @@ Embed the returned attachment URL in the comment body as `![MT1](<assetUrl>)` so
 inline. If an embed doesn't render, the attachment row is the durable copy — say so rather than
 silently dropping the evidence.
 
-### Release the reservation
+### Leave the stack up
 
-After the results comment is posted — whether it says verified, failed, or
-unverified — stop the app services, then release the browser slot. Re-resolve
-the command path because this is normally a different Bash tool call:
+There is nothing to release — `../reset-stack.sh` takes no lock. **Leave the stack
+running.** Tearing it down only makes the next session pay for a full rebuild, and a
+`down` aimed at the wrong project is how you break a run that isn't yours.
+
+State the binding in the results comment so the next reader knows who owns the ports:
 
 ```bash
-shared_env_bin="$WT/bin/shared-env"
-if [ ! -x "$shared_env_bin" ]; then
-  shared_env_bin="${DSCOUT_SHARED_ENV_BIN:-$HOME/dscout-wt/shared-docker-resources/bin/shared-env}"
-fi
-
-cd "$WT" && "$shared_env_bin" down || down_rc=$?
-cd "$WT" && "$shared_env_bin" release \
-  --note "manual verification: $TICKET complete"
-
-[ -z "${down_rc:-}" ] || echo "shared-env down failed with $down_rc" >&2
+cd "$WT" && bin/dscout-compose status | grep -E '^(root|project|urls):'
 ```
 
-If this reports exit `5`, the lock is still yours and the release must be
-retried. Report a failed `down`, but do not keep the reservation merely because
-the app containers could not be removed. Never use `--force` for normal cleanup.
+Never run `purge`, `down --volumes`, or `docker compose down -v` here. `purge` is the only
+lifecycle command that deletes named volumes, and those volumes hold the local database,
+MinIO contents, and the warm build caches.
 
 If uploading fails, **still post the comment** with the local paths and a note that the
 upload failed. Losing the results because the attachment step broke is the worse outcome.
@@ -320,7 +355,8 @@ upload failed. Losing the results because the attachment step broke is the worse
 ```markdown
 ## 🧪 Manual Verification
 
-**Stack:** worktree `<WT>` @ `<short-sha>` · signed in as `<email>` (`TEST_USER_EMAIL` | seeded dev fallback)
+**Stack:** worktree `<WT>` @ `<short-sha>` · Compose project `<project>` · `<axon-url>` · signed in as `<email>` (`TEST_USER_EMAIL` | seeded dev fallback)
+**Evicted:** `<project previously holding the ports, or "nothing running">`
 **Verified:** <n> of <total> · **Failed:** <n> · **Not verifiable:** <n>
 
 - [x] **MT1** — <action> → **Expect:** <result>

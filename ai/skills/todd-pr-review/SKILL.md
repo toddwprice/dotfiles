@@ -1,14 +1,18 @@
 ---
 name: todd-pr-review
-allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr checkout:*), Bash(gh api:*), Bash(git:*), Bash(linctl auth status), Bash(linctl issue get:*), Bash(mkdir:*), Bash(date:*), Write, Read, Agent
+allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr checkout:*), Bash(gh api:*), Bash(git:*), Bash(linctl auth status), Bash(linctl issue get:*), Bash(mkdir:*), Bash(date:*), Write, Read
 description: >
   Review a dscout PR, gather and explain the evidence, get Todd's decision on every
   surfaced nit, comment, and change request, then build and post the approved GitHub review.
 ---
 
-You are reviewing a PR in the dscout monorepo. Optimize for real defects:
-correctness, security, cross-service contracts, and regression coverage. Hold
-the change to the approval standard, not perfection.
+You are reviewing a PR in the dscout monorepo. `claude[bot]`'s automated
+review is the primary source of findings: read its comments and verdict
+first, then other human reviewers' comments, then the diff for context. This
+is a triage of what has already been flagged, not an independent code
+investigation — do not perform your own deep-dive analysis of the diff and do
+not dispatch sub-agents. Hold the change to the approval standard, not
+perfection.
 
 Do not create or update tickets, comments, or other Linear data, or offer to
 take follow-up work. A read-only `linctl issue get` is allowed solely to show
@@ -72,11 +76,11 @@ full review; say why rather than guessing at a partial delta.
   reply needs a decision. A retained blocking finding remains blocking until
   the changed code fixes it or its thread resolves it.
 - Most PRs need zero to three surfaced findings.
-- Dispatch sub-agents only for a finding that needs codebase evidence to avoid
-  a wrong recommendation. Do not spend sub-agent time on a pure preference.
-- Send independent questions in one parallel batch. Use the strongest model
-  only for a suspected bug, security issue, or cross-service mismatch; use a
-  cheaper model for the rest.
+- Findings come from `claude[bot]`'s review first, then other human
+  reviewers' comments. Do not re-derive findings yourself by tracing
+  callers/consumers, and do not dispatch sub-agents to research one — read
+  what has already been flagged and use the diff only to judge whether it
+  still applies to the current head.
 - Never produce a rendered report, reproduce the whole diff in chat, or run a
   second diff parser.
 
@@ -137,6 +141,13 @@ retained finding that needs its status confirmed.
 Group comments by root (`in_reply_to_id` when present). Read the latest reply
 in each thread before making a new finding.
 
+From that fetched data, separate `claude[bot]`'s review and inline comments
+first — its verdict, every point it raised, and whether the author or a human
+reviewer already replied to it. Then separate every other human reviewer's
+threads the same way. These two sets are the finding candidates; the diff is
+for context and for judging whether a candidate still applies to the current
+head, not a prompt to go find more.
+
 Resolve the linked Linear ticket before analyzing. Look for an issue identifier
 matching `[A-Za-z]+-[0-9]+` in the PR title, body, and head branch, preferring a
 Linear issue URL in the body when present. Uppercase the identifier and run:
@@ -170,20 +181,21 @@ GitHub rejects approve/request-changes events on self-authored PRs.
 
 ### 2. Analyze
 
-An incremental review is still a cold review of the selected delta. Trace new
-callers and consumers, inspect the changed code without assuming the earlier
-review was right, and apply every check below to the new commits. Prior
-findings are context, not proof that the delta is safe.
+Build the finding set from `claude[bot]`'s review first, then other human
+reviewers' threads, following the split from step 1. Read the diff to
+understand what actually changed — enough to categorize it into the Scope by
+app slice format below and to judge whether a carried-over or still-open
+`claude[bot]`/human finding still applies to the current head. That is the
+extent of the diff read: do not trace callers and consumers, do not re-derive
+nil/empty/race-condition/contract findings from scratch, and do not surface a
+finding nobody (bot or human) already raised, unless Todd explicitly asks you
+to check something specific.
 
-For changed behavior, trace actual callers and consumers. Prioritize:
-
-- nil, empty, zero, stale-closure, pattern-match, and race-condition paths;
-- Elixir/OpenAPI/Pydantic/GraphQL/frontend contract alignment;
-- authorization, untrusted input, PII, shell execution, and atom exhaustion;
-- regression coverage for new validation and bug fixes;
-- lockfile changes and new runtime dependencies;
-- established local helpers and module boundaries, only when reuse prevents a
-  real defect or materially reduces complexity.
+An incremental review is the same split, scoped to the delta: identify which
+`claude[bot]`/human threads are new since the baseline, which are unchanged,
+and which the delta already resolved. Prior findings are context, not proof
+the delta is safe, but re-confirming them is a read of the existing thread,
+not a fresh investigation.
 
 Red or missing required checks on new logic are blocking until explained. In
 incremental mode, this applies to newly changed checks; retain any earlier
@@ -191,33 +203,17 @@ blocking check finding until it is green or explained.
 Missing PR-body verification is non-blocking. Do not block on aesthetics, inputs
 nobody can create, or adjacent unrelated code.
 
-### 3. Research unresolved findings
+### 3. Evidence briefing and Todd decision checkpoint
 
-Keep zero to three findings. Each must name the file/line, possible failure or
-tradeoff, and exact uncertainty. Send independent research questions in parallel.
+Keep zero to three surfaced findings, drawn from `claude[bot]` and human
+reviewer threads per step 2. Each must name the file/line, the possible
+failure or tradeoff as `claude[bot]` or the human reviewer stated it, and
+who raised it.
 
-For each question, ask the sub-agent to read
-`~/.claude/skills/_shared/voice-brief.md`, inspect the relevant code, and
-return exactly:
-
-```text
-Verdict: requires changes | requires clarification | non blocking
-Answer: <clear, terse, kind; no citations>
-How I checked: <file:line evidence and mechanism>
-```
-
-Give it the PR summary, question, relevant hunk, and this rule: do not load the
-full `speak-as-todd` skill; do not create tickets; verify third-party behavior
-before prescribing a change. Use an expensive model only for a suspected
-blocking defect. Use a cheaper model for clarification and non-blocking
-research.
-
-### 4. Evidence briefing and Todd decision checkpoint
-
-After gathering and research are complete, do not render a verdict, write a
-payload, acquire the post lock, or post anything. Give Todd the entire review
-context first. The very first section must be this review header, before any
-finding question or decision list:
+After gathering is complete, do not render a verdict, write a payload,
+acquire the post lock, or post anything. Give Todd the entire review context
+first. The very first section must be this review header, before any finding
+question or decision list:
 
 ```markdown
 ## Review header
@@ -236,13 +232,47 @@ without copying the body or adding the reviewer's opinion.
 
 Then continue with:
 
-1. **PR summary:** purpose, scope, changed systems/files, and verification
-   state (checks, tests, and existing review-thread status).
-2. **How the change fits:** explain the relevant caller/consumer flow and any
-   contract or product context needed to judge the findings together.
-3. **Evidence:** for each finding, state its classification, file/line, what
-   happens now, impact, evidence, and the proposed review wording/destination.
-   Include nits and comments, not only blocking concerns.
+1. **PR summary:** purpose and verification state (checks, tests, and existing
+   review-thread status). Then render the scope as its own heading block —
+   one `####` sub-heading per touched app, each followed by a flat bulleted
+   list of that slice's changes:
+
+   ```markdown
+   ### Scope by app slice
+
+   #### <App slice>
+
+   - <one to two sentence summary of what changed and why>
+   - API: `<METHOD/operation> <route, resolver, or mutation name>` — <exact
+     change: request/response shape, params, auth, status codes, side effects>
+   - Frontend: <what changes visually, in component state, or in user-facing
+     behavior — not just which component/file changed>
+
+   #### <Next app slice>
+
+   - <summary of what changed and why>
+   ```
+
+   The `### Scope by app slice` heading is REQUIRED on every review, including
+   a single-slice one, and every touched app gets its own `####` sub-heading
+   (Axon, Astro, Dendra, dscout_core_py, ai_mod, e2e, ...). Every change under
+   a sub-heading is a top-level bullet in that slice's list — no nesting
+   beneath the summary bullet, no prose paragraph, no table. Repeat the `API:`
+   bullet once per changed endpoint. Omit the `API:` or `Frontend:` bullet when
+   the slice has no surface of that kind, and skip a slice with no real change
+   (lockfile bump, generated types, config only) — it gets no sub-heading.
+
+   "API" covers any Phoenix route, Absinthe resolver/mutation, or FastAPI
+   endpoint. Name every changed one individually; do not summarize a batch as
+   "API updates." "Frontend" covers Dendra, Axon SPA assets (dscript, eyd,
+   ai_studio), or any other UI slice; describe the concrete visual, state, or
+   behavior delta a user would notice, not the diff.
+2. **How the change fits:** explain the flow and product context needed to
+   judge the findings together, from the diff and the threads read in step 1.
+3. **Evidence:** for each finding, state its source (`claude[bot]` or the
+   reviewer's name), classification, file/line, what happens now, impact, and
+   the proposed review wording/destination. Include nits and comments, not
+   only blocking concerns.
 4. **Decision list:** ask one explicit question per finding. Use stable IDs
    (`D1`, `D2`, ...), state the recommendation, and offer the concrete choices:
    **request change**, **post as comment**, or **drop**. For a proposed change,
@@ -275,7 +305,7 @@ Update each inline comment or body note to match Todd's selected wording and
 severity. Dropped findings disappear. Name blocking issues only for Request
 Changes. Keep positive callouts to one or two concrete sentences.
 
-## 5. JSON payload
+## 4. JSON payload
 
 ```bash
 mkdir -p "$HOME/reviews"
@@ -315,7 +345,7 @@ concise summary, PR-wide notes, existing-thread updates, positive callouts, and:
 
 _Review generated with `/todd-pr-review`. Evidence gathered autonomously; review decisions made with Todd._
 
-## 6. Validate and post
+## 5. Validate and post
 
 Skip this section in `--json-only` mode.
 
