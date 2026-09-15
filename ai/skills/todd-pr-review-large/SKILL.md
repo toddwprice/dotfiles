@@ -1,8 +1,8 @@
 ---
-name: todd-pr-review
+name: todd-pr-review-large
 allowed-tools: Bash(gh pr list:*), Bash(gh pr status:*), Bash(gh pr checks:*), Bash(gh pr diff:*), Bash(gh pr view:*), Bash(gh pr checkout:*), Bash(gh api:*), Bash(git:*), Bash(linctl auth status), Bash(linctl issue get:*), Bash(mkdir:*), Bash(date:*), Write, Read, Agent
 description: >
-  Review a dscout PR, gather and explain the evidence, get Todd's decision on every
+  Larger review of a dscout PR, gather and explain the evidence, get Todd's decision on every
   surfaced nit, comment, and change request, then build and post the approved GitHub review.
 ---
 

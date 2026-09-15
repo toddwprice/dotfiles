@@ -3,12 +3,12 @@ name: todd-address-comments
 description: >
   Pull, triage, fact-check, and respond to PR review comments end-to-end. Use this WHENEVER Todd
   wants to deal with comments on a pull request — phrasings like "pull comments for the PR and
-  propose how to address them", "address the baz comments", "resolve the comments on PR 25840",
+  propose how to address them", "address the claude comments", "resolve the comments on PR 25840",
   "respond to sam's comments on PR 25834", "process PR comments for 25834", "look at the feedback
-  baz left on PR 25834 and resolve it", "reply to the low-severity comments on PR 25834", or "what
+  claude left on PR 25834 and resolve it", "reply to the low-severity comments on PR 25834", or "what
   needs to be done to satisfy the comments on PR 25834". A pull request number (or a PR URL / review
   filename that contains one) is required; do not infer one from the current branch or an open-PR list.
-  Trigger even when Todd doesn't say the word "skill" and when he names a specific reviewer (baz, sam,
+  Trigger even when Todd doesn't say the word "skill" and when he names a specific reviewer (claude, sam,
   mbrashid62) together with a PR reference.
   This skill fetches the threads itself (you do NOT need them pasted in), fact-checks each claim
   against the actual code, and by default PROPOSES a plan + draft replies and waits for approval
@@ -64,8 +64,9 @@ If the honest completion is "nothing," say so in one line and move on:
 > Leaving this — both forms behave identically here, and `<file>` already does it this way.
 
 Two things that reply must **not** do: comply anyway to be agreeable, or convert the nit into a
-ticket. Those are how a nit ends up costing more than the code it was about. baz's low-severity
-comments are the common case, and a human's nit gets the same one-line decline — just warmer.
+ticket. Those are how a nit ends up costing more than the code it was about. An AI reviewer's
+low-severity comments are the common case, and a human's nit gets the same one-line decline — just
+warmer.
 
 Guard against the inverse too. "Nit" is not a label for anything inconvenient: a comment about a
 docstring or comment that states something **false** has a real failure mode (the wrong belief it
@@ -128,7 +129,7 @@ Convert it into the same thread records the rest of this skill expects:
 Then **rejoin the normal flow at Step 3** and fact-check every one of them. Yes, even though a
 previous pass of yours wrote them: a review generated without the ability to run the tests is
 exactly the kind of thing that produces confident, wrong findings, and Step 3 is the check that
-catches it. Treat `self-review` with the same skepticism as baz, not the deference given a human.
+catches it. Treat `self-review` with the same skepticism as an AI reviewer, not the deference given a human.
 
 Two things differ downstream, both flagged where they land: the triage table's Reviewer column reads
 `self-review`, and Step 6 posts **no replies** — there are no threads to reply to.
@@ -178,18 +179,19 @@ revisit them. Report how many you skipped and why.
 
 ### Reviewer awareness
 
-- **baz** is the AI reviewer (a GitHub App) and is the dominant commenter on Todd's PRs. Its
-  comments often carry a severity and an embedded `<details>Instructions for AI Agents</details>`
-  block. Weight baz comments by their stated severity, and **decline low-severity baz nits by
-  default** — a one-line rationale, no fix and no ticket. "It's only one line, may as well" is how a
-  review of 12 nits becomes 12 commits; run the Gate 4 sentence from Disposition on each one.
+- **An AI reviewer** — triggered by mentioning `@claude` on the PR, or by a locally-run
+  `/dscout-automated-code-review` — often carries a severity and an embedded
+  `<details>Instructions for AI Agents</details>` block. Weight its comments by their stated
+  severity, and **decline low-severity AI-reviewer nits by default** — a one-line rationale, no fix
+  and no ticket. "It's only one line, may as well" is how a review of 12 nits becomes 12 commits;
+  run the Gate 4 sentence from Disposition on each one.
 - **Humans** (e.g. `sam`, `mbrashid62`, `snkutkoski`) are authoritative — fact-check, but lean
   toward addressing or explicitly explaining. A human nit still gets declined, just warmer; what
   changes is the tone and the amount of evidence you show, not the disposition.
 
 ## Step 3 — Fact-check each comment against the code
 
-Don't take any comment at face value, including baz's. For each unaddressed thread:
+Don't take any comment at face value, including an AI reviewer's. For each unaddressed thread:
 
 1. Fetch the file from the PR head branch: `git show origin/<headRef>:<path>` (run
    `git fetch origin <headRef>` first if needed). Read the lines the comment references.
@@ -219,8 +221,8 @@ Show Todd a compact table, then the draft replies and the fix plan. Stop here in
 ```
 | # | Thread (file:line)        | Reviewer | Severity | Verdict            | Disposition          |
 |---|---------------------------|----------|----------|--------------------|----------------------|
-| 1 | errorhandling.ts:42       | baz      | medium   | Accurate&actionable| fix here + reply     |
-| 2 | study_setup.py:1283       | baz      | low      | Accurate but a nit | decline (1-line)     |
+| 1 | errorhandling.ts:42       | claude   | medium   | Accurate&actionable| fix here + reply     |
+| 2 | study_setup.py:1283       | claude   | low      | Accurate but a nit | decline (1-line)     |
 | 3 | screener_pair.ex:88       | sam      | —        | Partially accurate | fix part             |
 | 4 | quota_config.ex:210       | sam      | —        | True scope creep   | ticket (needs a flag)|
 ```

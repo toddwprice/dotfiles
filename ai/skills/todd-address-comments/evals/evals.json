@@ -10,8 +10,8 @@
     },
     {
       "id": 2,
-      "prompt": "look at the baz comments on PR <PR_NUMBER> and resolve them for me",
-      "expected_output": "Recognizes baz as the AI reviewer, pulls its comments, fact-checks (including declining low-severity nits with rationale), and STILL shows the triage table before any action. Does not push.",
+      "prompt": "look at the claude comments on PR <PR_NUMBER> and resolve them for me",
+      "expected_output": "Recognizes claude as the AI reviewer, pulls its comments, fact-checks (including declining low-severity nits with rationale), and STILL shows the triage table before any action. Does not push.",
       "files": []
     }
   ]

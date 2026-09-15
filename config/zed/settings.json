@@ -81,5 +81,16 @@
     "Shell Script": {
       "language_servers": ["bash-language-server"],
     },
+    "dscout Study DSL": {
+      "formatter": {
+        "external": {
+          "command": "python3",
+          "arguments": [
+            "/Users/toddprice/dscout-wt/vscode-dsl-formatter/apps/dscout_core_py/dscout_core_py/study_dsl_zed_extension/helper/normalize_helper.py",
+            "/Users/toddprice/dscout-wt/vscode-dsl-formatter/apps/dscout_core_py",
+          ],
+        },
+      },
+    },
   },
 }

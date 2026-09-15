@@ -477,8 +477,8 @@ and it depends only on whether there are blockers:
 |---|---|
 | ≥1 🔴 blocker, and this is pass 1 or 2 | ``Blocked. Run `/todd-plan <TICKET>` to resolve the N blockers.`` |
 | ≥1 🔴 blocker, and this is **pass 3** | ``Three passes haven't settled this. Not a fourth lap — <the one thing that's actually unresolved>, and that's a scoping call.`` |
-| 0 blockers, ≥1 advisory | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
-| 0 blockers, 0 advisories | ``Plan checked. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
+| 0 blockers, ≥1 advisory | ``Plan checked, N advisories riding along as impl notes. Next: `/clear`, then `/todd-code <TICKET>`.`` |
+| 0 blockers, 0 advisories | ``Plan checked. Next: `/clear`, then `/todd-code <TICKET>`.`` |
 
 **Pass 3 is a stop, not a failure.** By the third check the loop has demonstrated it can't settle the
 thing on its own, and a fourth lap is the shape that took ENA-443 to nine. Name the one finding that

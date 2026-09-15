@@ -290,7 +290,7 @@ missing writer in one body line. It still isn't an inline thread.
 
 1. **Replies on other reviewers' threads**, not just your own. The worst measured case, #27661: the
    author had answered the identical scope question *"By design"* **twice, 62 minutes earlier**, in
-   replies to baz. Step 1's thread grouping surfaces those — read them.
+   replies to the AI reviewer. Step 1's thread grouping surfaces those — read them.
 2. **The PR body**, including any "how I verified" or "out of scope" section.
 3. **The linked Linear ticket and its planning/requirements doc.** #27900 and #27570 were both settled
    there before review started; on #27900 the doc had explicitly considered and rejected the reuse
@@ -607,7 +607,7 @@ parentheses:
 - **Hedging the answer into the question.** Writing "I'd guess that's intended" and posting anyway
   (#27606 — cost the author a 16-reserved-word verification to reply "confirmed deliberate").
 - **Re-raising something the author already answered on this PR.** (#27661 — answered *"By design"*
-  twice, 62 minutes earlier, in replies to baz.) Read the replies on *other* reviewers' threads.
+  twice, 62 minutes earlier, in replies to the AI reviewer.) Read the replies on *other* reviewers' threads.
 - **Re-opening a decision settled in the ticket's planning doc.** (*"The ticket's own requirements doc
   explicitly considered and rejected reusing `Checkpoints.brand_new_scout?/1`"* — #27900, where the
   `AGENTS.md` line cited as evidence was itself the stale artifact.)
@@ -887,7 +887,7 @@ When a single finding has both a specific anchor *and* PR-wide relevance, inline
 - **`side: "RIGHT"`** for added/modified lines (default). Only use `"LEFT"` to comment on a removed line by its old-file line number, and only if the removed line is still surfaceable on the diff.
 - **Multi-line concerns** — pick a single representative line (the API supports `start_line` + `line` for ranges, but single-line + a body that references the range is simpler and equally readable).
 - **Pre-existing review threads** — don't try to reply via the reviews API. Either (a) leave the reply in the top-level body as a "Thread reply" block, or (b) open a fresh inline comment at the same `line` (creates a parallel thread — only do this if your reply adds new information that gates a decision and deserves its own discussion).
-- **`baz-reviewer` threads are a dead letter for prose.** Replying into one does not correct baz and does not train it — it earns a canned *"I can only save feedback to memory for specific code review findings, not general feedback or PR-level discussion."* That fired **8 times** in a single week against carefully-traced rebuttals. So when the disposition is "baz is wrong", keep the in-thread reply to **one line** for the human author's benefit, and put the actual reasoning in your own review body under "Existing thread replies", where a human reads it.
+- **An AI reviewer bot's threads are a dead letter for prose.** Replying into one with an argument does not correct it and does not train it — an automated reviewer often answers with a canned line about only accepting structured findings, not general discussion. So when the disposition is "the AI reviewer is wrong", keep the in-thread reply to **one line** for the human author's benefit, and put the actual reasoning in your own review body under "Existing thread replies", where a human reads it.
 
 #### When in doubt
 
@@ -1278,8 +1278,8 @@ up doesn't bind; a `jq` check against the payload does. So enforce them here, be
 > per PR to 3, PRs over the cap from 29% to 11%), comment length (now inside the bar), anchor validity,
 > duplicate posts: all clean. Ungated, and all still leaking at the time of the audit: routing (36% of
 > comments non-blocking against **1 comment in 785** that says blocking), praise-goes-in-the-body (59
-> comments opened with praise anyway), the baz dead letter (18 comments still addressed baz after the
-> rule landed), never-promise-follow-up-work (7 comments promised Todd would file), and reachability
+> comments opened with praise anyway), the AI-reviewer dead letter (18 comments still addressed the
+> AI reviewer after the rule landed), never-promise-follow-up-work (7 comments promised Todd would file), and reachability
 > (which had no rule at all). The top-level `body` had grown to **682 words on average** for the
 > simple reason that the lint only ever read `.comments[]`.
 >
@@ -1323,15 +1323,15 @@ jq -r --arg rx "happy to (file|pick|take)|\\bi'?ll (file|open|take|pick)\\b|\\bi
   '(.comments[]?), . | select(.body | test($rx; "i"))
    | "FOLLOW-UP PROMISE — hand the decision back: \(.path // "BODY"):\(.line // "-")"' "$P"
 
-# g. Prose aimed at baz on a channel baz cannot read.
-jq -r '.comments[] | select(.body | test("baz"; "i")) | "ADDRESSES BAZ: \(.path):\(.line)"' "$P"
+# g. Prose aimed at the AI reviewer on a channel it cannot read.
+jq -r '.comments[] | select(.body | test("\\bclaude\\b"; "i")) | "ADDRESSES AI REVIEWER: \(.path):\(.line)"' "$P"
 
 # h. The top-level body. Until 2026-08-13 the lint never read it, so every demoted note landed
 #    somewhere unmeasured and the body grew to 682 words on average.
 jq -r '.body | "BODY: \(split(" ") | length) words"' "$P"
 
 # h1. CI narration — the author can see their own checks. This belongs in Todd's terminal output.
-jq -r --arg rx 'CI (was|is) green|nothing red|still in progress|Baz Reviewer (pending|still)|checks (were|are) (green|passing)' \
+jq -r --arg rx 'CI (was|is) green|nothing red|still in progress|Automated review (pending|still)|checks (were|are) (green|passing)' \
   'select(.body | test($rx; "i")) | "BODY CARRIES CI NARRATION — move it to the terminal output"' "$P"
 
 # h2. Bullets whose only content is that the reviewer looked.
@@ -1371,7 +1371,7 @@ jq -r --arg rx 'would be free\b|\bis free\b|free (precision|and\b)|strictly chea
 | **(d) unreachable claim** | any output | **Cut the unreachable passage from the comment.** Then decide on what's left: a surviving concrete ask stays inline (shorter, and better for it); nothing surviving means the whole finding is one body line. Do not post a comment that proves its own finding can't happen. |
 | **(e) self-defeat** | any output | Same surgery as (d) on the conceding sentence. This is a prompt, not a hard gate — a non-blocking *change request* is legitimate ("I want this changed, don't block on it"). What isn't legitimate is a comment that talks the author out of the finding it just made. |
 | **(f) follow-up promise** | any output, and PR author `!= $ME` | Rewrite the close to one of the three approved fills. Never say Todd will file, take, or own it. On Todd's own PR (`author.login == $ME`) this check is informational — his code, his backlog. |
-| **(g) addresses baz** | any output | baz cannot read prose: 12 of 13 replies to it were the canned *"I can only save feedback to memory for specific code review findings."* Keep any in-thread reply to **one line** for the human author, and move the reasoning into the body under "Existing thread replies." |
+| **(g) addresses AI reviewer** | any output | An AI reviewer bot cannot hold a conversation in-thread — replies addressed to it are wasted effort. Keep any in-thread reply to **one line** for the human author, and move the reasoning into the body under "Existing thread replies." |
 | **(h) body length** | `> 600` words | Not a hard cap, but past 600 the body has become the dumping ground the routing rule created. Cut in this order: CI narration, reviewer-effort bullets, surplus praise, then anything restating a finding already stated inline. |
 | **(h1) CI narration** | any output | Delete from the posted body. It goes in Todd's terminal output (7d) — the author already sees their own checks. |
 | **(h2) reviewer-effort bullets** | any output | Delete. "Noting it so you know it was looked at rather than missed" is a claim about the reviewer, not about the code. |

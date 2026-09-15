@@ -1228,38 +1228,37 @@ fixes and flags in its words, then close with the line its verdict dictates:
 
 | Verdict returned | Closing line |
 |---|---|
-| `✅ passed` | ``Plan approved and checked. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
-| `✅ passed with N advisories` | ``Plan approved and checked, with N advisories riding along as impl notes. Next: `/clear`, then `/todd-loop <TICKET>`.`` — and list them, one line each. They're notes for the implementer, not open questions for Todd |
-| `⚠️ passed (ungrounded)` | Re-dispatch once with the path corrected. Still degraded → ``Plan approved and checked, grounding unchecked — no anchor file found at <path>. Next: `/clear`, then `/todd-loop <TICKET>`.`` |
+| `✅ passed` | ``Plan approved and checked. Next: `/clear`, then `/todd-code <TICKET>`.`` |
+| `✅ passed with N advisories` | ``Plan approved and checked, with N advisories riding along as impl notes. Next: `/clear`, then `/todd-code <TICKET>`.`` — and list them, one line each. They're notes for the implementer, not open questions for Todd |
+| `⚠️ passed (ungrounded)` | Re-dispatch once with the path corrected. Still degraded → ``Plan approved and checked, grounding unchecked — no anchor file found at <path>. Next: `/clear`, then `/todd-code <TICKET>`.`` |
 | `❌ N blockers` | Triage first — see below. Either you resolve them here and re-dispatch, or ``Blocked. Run `/todd-plan <TICKET>` to resolve the N blockers.`` |
 | `❌` at **pass 3** | Don't resolve, don't re-dispatch. ``Three passes haven't settled this.`` Then the one scoping question, and stop |
 | nothing usable — the dispatch failed | ``Approved and posted, but unchecked — the check didn't run. Run `/todd-plan-check <TICKET>`.`` |
 
 **Report the `⚠️ book severity 🔴` flags whatever the verdict.** A 🔵 marked that way passes here and
-fails the moment `/todd-loop` re-checks the plan under `--strict`. Todd is looking at the plan right
+fails the moment `/todd-code` re-checks the plan under `--strict`. Todd is looking at the plan right
 now; a lap from now he isn't. One line each.
 
-**On a pass, the next step is `/clear` and `/todd-loop <TICKET>` — and the `/clear` is half the
-instruction, not politeness.** `/todd-loop` runs a ticket to a reviewed PR across eight phases, and
+**On a pass, the next step is `/clear` and `/todd-code <TICKET>` — and the `/clear` is half the
+instruction, not politeness.** `/todd-code` runs a ticket to a draft PR across four phases, and
 its own architecture note says why it can't do this for itself: a command cannot call `/clear`, so
 every phase runs in a dispatched subagent and the orchestrator deliberately holds almost nothing but
 the ticket id, the worktree path and each phase's one-line return. Start that orchestrator in the tail
 of this session and it inherits a window already full of anchors, Scenario drafts and search-agent
 findings — the one command most likely to compact mid-flow, handed the fullest possible starting
-context. A loop that compacts during its baz round has lost the thread. Todd pressing `/clear` is the
+context. A loop that compacts mid-flow has lost the thread. Todd pressing `/clear` is the
 only thing that actually empties the window, which is why the closing line asks for it by name rather
 than just naming the command.
 
-`/todd-loop` is the destination rather than `/todd-coder impl` because its phase 0 gates on the stamp
+`/todd-code` is the destination because its phase 0 gates on the stamp
 you just earned: `✅` and `⚠️` proceed, `❌` stops, and an unstamped plan makes it run the check
-itself. Sending Todd to `impl` skips the PR, the self-review, the manual test plan and the baz round —
-all work he'd then do by hand. `impl` stays the right call when he wants to drive it himself; it just
-isn't the default worth printing.
+itself. Skipping straight to implementing by hand loses the local automated code review and the
+printed local-verification steps — work Todd would then reconstruct himself. Driving it by hand
+stays the right call when he wants full control; it just isn't the default worth printing.
 
 A degraded pass goes to the same place. `⚠️` means grounding went unchecked, not that a check failed,
-and `/todd-loop` accepts it explicitly — so the handoff names the loop and the missing anchor file in
-the same breath, and Todd decides whether unchecked grounding is worth a re-plan before an unattended
-run.
+and `/todd-code` accepts it explicitly — so the handoff names the command and the missing anchor file
+in the same breath, and Todd decides whether unchecked grounding is worth a re-plan first.
 
 ### On `❌` — triage, then either fix it here or hand it back
 

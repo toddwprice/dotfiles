@@ -84,7 +84,7 @@ PR #26728): open with the observation or question; no bold title/`Bug:`/`Nit:` p
   mechanism tracing belong in the HTML review artifact for Todd's own verification, **not** in the
   comment the author reads. Cite a symbol inline only when it's load-bearing for the point itself.
 - **No `<details>Instructions for AI Agents</details>` block on Todd's review comments.** That block
-  is the *AI reviewer* (baz) convention; Todd's human reviews don't carry it. Default = omit it on
+  is an *AI reviewer* convention; Todd's human reviews don't carry it. Default = omit it on
   line comments **and** on thread replies. (Only add it if Todd explicitly asks to post
   agent-actionable instructions.)
 - **Non-blocking status**, when stated, is a trailing plain caveat — `NON-BLOCKING.` on its own line
