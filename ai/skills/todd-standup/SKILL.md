@@ -14,7 +14,7 @@ Generate a lean standup covering **Yesterday** and **Today**, grouped by workstr
 
 ## Research
 
-Gather raw material, then compress hard — you're distilling this to a couple of lines per workstream.
+Gather raw material, then compress hard — you're distilling this to a couple of cards per workstream.
 
 **First compute the window as real dates.** Do NOT pass the word `"yesterday"` to `gh search
 --updated` — that flag wants a date (or `>=`/range), and the literal `"yesterday"` silently matches
@@ -41,25 +41,45 @@ gather for one branch, so let it own that and just fan it over my active branche
 
 ## Format
 
-> **Canonical shape + voice:** `speak-as-todd` → "Standup updates" is the single source of truth for
-> the standup form (two date headers, ALL-CAPS area labels incl. `REVIEWS`, link-dense one-clause
-> bullets, no greeting/sign-off). Follow it; the rules below are the standup-command specifics
-> (workstream ordering, brevity ceilings) that layer on top — don't re-litigate the voice here.
-> One carve-out: the **TL;DR** section below is this command's own addition. `speak-as-todd` doesn't
-> describe it, and that absence is not a reason to drop it.
+> **Canonical voice:** this command is the single source of truth for the standup shape
+> (two date headers, ALL-CAPS area labels incl. `REVIEWS`, terse one-clause lines, the card
+> shape below, no greeting/sign-off). Sentence-level style follows the `ste-writer` skill
+> (STE), per AGENTS.md — don't re-litigate the voice here. The **TL;DR** section is this
+> command's own addition — keep it regardless.
 
 Two top-level sections, **Yesterday** and **Today**. Under each, group by **workstream** (Linear team / prefix): `FRG-*` → **FORGE**, `DEVOPS-*` → **DEVOPS**, any other prefix → that team's short name. Order **FORGE first, DEVOPS last**, others between — same order in both sections. Skip a workstream with nothing that day.
 
-Brevity rules — this is the point:
+**Every entry is a card, never a bullet** — exactly this shape:
 
-- **≤4 lines per workstream, aim for 2–3.** Collapse related items into one line (e.g. several reviews for one person, a stack of PRs).
-- One short line each: ID/PR + status + what it is. Plain verb, no flourish, no verb-variety.
-- **Cut the "why"** unless it's a blocker or genuinely non-obvious. No process breadcrumbs, no step-by-step asides, no parenthetical sub-detail.
-- Yesterday = what landed/moved, past tense. Today = next action + blocker if any, forward, one clause. E.g. "Land FRG-900 (#26558) before FRG-885 (#26572) — stacked."
-- Inline IDs with status in parens: `(#26886, merged)`, `(#26933, draft)`, `(#26533, open)`.
-- **Reviews subsection** — under *Yesterday* only, after the workstreams: one line per PR I reviewed, attributed to the PR's ticket ("Reviewed Chris's Stroma cluster PR (#26131) for DEVOPS-2014."). Collapse several reviews for one person/stack into one line. Skip the subsection entirely if I reviewed nothing that day. Keep reviews here — first-class, not folded into my own workstreams (matches `speak-as-todd`).
+```
+====================================================================
+[LINEAR_ID](https://linear.app/dscout/issue/ID) LINEAR_TICKET_TITLE
+[#PR_NUMBER](https://github.com/dscout/dscout/pull/N) GITHUB_PR_TITLE (merged)
+**Progress:** STEPS_TO_DATE
+**Next:** NEXT_STEPS
+```
 
-Tone: terse, first-person, plain — how I'd say it out loud. No corporate-speak, no rationale padding. If `speak-as-todd` is available, defer to its voice.
+Worked example:
+
+```
+====================================================================
+[FRG-957](https://linear.app/dscout/issue/FRG-957) Over-length scale anchor refuses
+[#26886](https://github.com/dscout/dscout/pull/26886) Export guard (merged)
+**Progress:** Refuses over-length anchors before the export runs.
+**Next:** Land before FRG-885 (#26572) — stacked.
+```
+
+Card rules — this is the point:
+
+- The `=` separator line precedes every card.
+- **≤3 cards per workstream, aim for 2.** Collapse related items into one card (e.g. several reviews for one person, a stack of PRs).
+- Omit a line with nothing to put in it — no PR yet → drop the PR line; no next step → drop `**Next:**`. Never leave a blank field.
+- `**Progress:**` = what landed/moved (Yesterday, past tense) or where the work stands (Today). `**Next:**` = next action + blocker if any, forward, one clause.
+- Status rides at the end of the PR title line: `(merged)`, `(draft)`, `(open)`.
+- One clause per field. Plain verb, no flourish, no verb-variety. **Cut the "why"** unless it's a blocker or genuinely non-obvious. No process breadcrumbs, no step-by-step asides, no parenthetical sub-detail.
+- **Reviews subsection** — under *Yesterday* only, after the workstreams: one card per PR I reviewed, attributed to the PR's ticket — `**Progress:**` = "Reviewed Chris's Stroma cluster PR", PR line `[#26131](…)` for DEVOPS-2014; omit `**Next:**`. Collapse several reviews for one person/stack into one card. Skip the subsection entirely if I reviewed nothing that day. Keep reviews here — first-class, not folded into my own workstreams.
+
+Tone: terse, first-person, plain — how I'd say it out loud. No corporate-speak, no rationale padding. Sentence-level style follows the `ste-writer` skill (STE), per AGENTS.md.
 
 ## TL;DR (experimental)
 
@@ -69,11 +89,11 @@ as a trial: drop the tag if it graduates, delete this section if it doesn't.
 What it's for: someone who doesn't know my tickets reads only this and comes away knowing what I did
 and what I'm doing. Two sentences, no bookkeeping.
 
-**Build it from the bullets already written above — don't re-research anything.** Take each line, keep
-the behavior clause, drop the parenthetical, then merge everything sharing a theme into one sentence:
+**Build it from the cards already written above — don't re-research anything.** Take each card's
+`**Progress:**` clause, drop the identifiers, then merge everything sharing a theme into one sentence:
 
-> `FRG-1240` (`#28026`, merged) — an over-length scale anchor refuses before it 400s the DYS export
-> → *an over-length scale anchor now refuses instead of failing the export*
+> `FRG-1240` / `#28026` (merged), **Progress:** an over-length scale anchor refuses before it 400s
+> the DYS export → *an over-length scale anchor now refuses instead of failing the export*
 
 The shape:
 
@@ -105,8 +125,12 @@ Write to `.claude/tmp/standup-YYYY-MM-DD.html` (today's date). The base typograp
 the shared shell at `~/.claude/skills/_shared/report-shell.html` (single source of truth for the
 look) — the standup-specific bits below (narrower `max-width`, muted `h1`, uppercased `h3`) layer on
 top of those tokens; keep them in sync with the shell rather than re-inventing colors. Structure:
-`Yesterday`/`Today` as `h2`; each workstream an `h3` (uppercased via CSS) with lines in a `<ul>`. Link
-Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PRs (`https://github.com/dscout/dscout/pull/<num>` — infer repo from `gh`). FORGE first, DEVOPS last.
+`Yesterday`/`Today` as `h2`; each workstream an `h3` (uppercased via CSS); under it one `.card` div
+per entry — the HTML rendering of the card shape above: an `<hr>` between cards stands in for the
+`=` separator, the linked ID + ticket title and `#N` + PR title (+ status) form the first block, and
+`**Progress:**`/`**Next:**` become `<strong>Progress:</strong>` / `<strong>Next:</strong>` lines.
+Link Linear IDs (`https://linear.app/dscout/issue/<ID>`) and PRs
+(`https://github.com/dscout/dscout/pull/<num>` — infer repo from `gh`). FORGE first, DEVOPS last.
 The `TL;DR` is the last `h2`, with its own `Yesterday`/`Today` `h3`s and plain unlinked text — it's the
 one part of the page with no anchors in it.
 
@@ -124,8 +148,10 @@ one part of the page with no anchors in it.
          margin: 2rem 0 0.75rem; padding-bottom: 0.3rem; border-bottom: 1px solid #d0d7de; }
     h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em;
          color: #57606a; font-weight: 600; margin: 1.25rem 0 0.4rem; }
-    ul { margin: 0 0 0.5rem; padding-left: 1.25rem; }
-    li { margin: 0 0 0.4rem; }
+    .card { margin: 0 0 0.5rem; }
+    .card p { margin: 0 0 0.25rem; }
+    .card .ids { font-weight: 600; }
+    hr { border: 0; border-top: 1px solid #d0d7de; margin: 0.75rem 0; }
     a  { color: #0969da; text-decoration: none; }
     /* TL;DR (experimental) — muted gray matches h1/h3 rather than adding a color */
     .tldr { margin-top: 2.5rem; }
@@ -140,29 +166,37 @@ one part of the page with no anchors in it.
 
   <h2>Yesterday</h2>
   <h3>Forge</h3>
-  <ul>
-    <li><!-- line --></li>
-    <li><!-- line --></li>
-  </ul>
+  <div class="card">
+    <p class="ids"><a href="https://linear.app/dscout/issue/ID">ID</a> Ticket title<br>
+       <a href="https://github.com/dscout/dscout/pull/N">#N</a> PR title (merged)</p>
+    <p><strong>Progress:</strong> <!-- one clause --></p>
+    <p><strong>Next:</strong> <!-- one clause --></p>
+  </div>
+  <hr>
+  <div class="card">
+    <!-- next card — omit any line with nothing in it (PR line, Next line) -->
+  </div>
   <h3>DevOps</h3>
-  <ul>
-    <li><!-- line --></li>
-  </ul>
+  <div class="card">
+    <!-- ... -->
+  </div>
   <!-- Reviews subsection (Yesterday only) — omit if no reviews that day -->
   <h3>Reviews</h3>
-  <ul>
-    <li><!-- Reviewed X's PR (#NNNNN) for TICKET --></li>
-  </ul>
+  <div class="card">
+    <p class="ids"><a href="https://linear.app/dscout/issue/ID">ID</a> Ticket title<br>
+       <a href="https://github.com/dscout/dscout/pull/N">#N</a> PR title</p>
+    <p><strong>Progress:</strong> <!-- Reviewed X's PR --></p>
+  </div>
 
   <h2>Today</h2>
   <h3>Forge</h3>
-  <ul>
-    <li><!-- line --></li>
-  </ul>
+  <div class="card">
+    <!-- ... -->
+  </div>
   <h3>DevOps</h3>
-  <ul>
-    <li><!-- line --></li>
-  </ul>
+  <div class="card">
+    <!-- ... -->
+  </div>
 
   <section class="tldr">
     <h2>TL;DR <span class="tag">experimental</span></h2>
@@ -184,12 +218,17 @@ After opening the HTML, **always** post the same standup as a Slack DM via `mcp_
 - Title: `**Standup — <weekday, Month D, YYYY>**`
 - Section headers (`Yesterday`/`Today`): `**bold**` on their own line.
 - Workstream labels: `_italic_` on their own line (`_Forge_`, `_DevOps_`) — not bold. Under *Yesterday*, add a `_Reviews_` label after the workstreams when I reviewed anything (same content as the HTML Reviews subsection); omit it when there were none.
-- Lines: `-` bullets. Same ordering as the HTML.
+- Entries: the card shape from the Format section — not bullets. A separator line of `=` characters
+  before each card, then the linked ID + ticket title line, the `[#N](…)` + PR title (+ status) line,
+  `**Progress:** …`, `**Next:** …`. Omit lines with nothing in them; blank line between cards. Same
+  ordering as the HTML.
 - Links: `[FRG-957](https://linear.app/dscout/issue/FRG-957)`, `[#26887](https://github.com/dscout/dscout/pull/26887)`.
 - **TL;DR last**, after `Today`: `**TL;DR** _(experimental)_` on its own line, then `**Yesterday** — …`
   and `**Today** — …`, one sentence each, as plain text. No bullets, no links, no IDs — same words as
   the HTML section.
 
 **Spacing guard:** keep a real space on both sides of every link and inline-`code` token so nothing glues together when flattened (`Shipped [FRG-957](…) (…)`, not `Shipped[FRG-957](…)`).
+
+**Line-break guard:** standard markdown merges consecutive lines into one paragraph. If the converted Slack message glues a card's field lines together, put a blank line between each field line inside the card.
 
 Report the file path and the Slack message link when done.

@@ -6,7 +6,7 @@ sync my dotfiles. They sit on top of any repo's own `CLAUDE.md`.
 ## How to talk to me
 
 ### Style
-Use the `ste-writer` skill (ASD-STE100 Simplified Technical English) in your prompt replies, questions, summaries, and plans. Any text you write in a Claude Code session window — including your thoughts/insights — follow STE rules: approved-word vocabulary, one thought per sentence, active imperative voice, 20/25-word sentence caps, 6-sentence paragraph caps. Do not use /speak-as-todd for this; that skill is now reserved for cases where I explicitly ask for content in my own voice (e.g., a Slack message, a standup update).
+Always use the `ste-writer` skill (ASD-STE100 Simplified Technical English) for every kind of text you write — prompt replies, questions, summaries, plans, and any content you draft in my own voice (e.g., a Slack message, a standup update). Any text you write in a Claude Code session window — including your thoughts/insights — follows STE rules: approved-word vocabulary, one thought per sentence, active imperative voice, 20/25-word sentence caps, 6-sentence paragraph caps.
 
 ### Banned phrases
 
@@ -34,3 +34,5 @@ comments, code comments.
   identifier in parentheses is the pointer for traceability.
 - Applies whenever referencing prior work, a past decision, or an existing
   feature — carry the ID along so I can trace it.
+
+@RTK.md

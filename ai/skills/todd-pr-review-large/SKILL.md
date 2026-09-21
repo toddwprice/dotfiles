@@ -206,8 +206,8 @@ Answer: <clear, terse, kind; no citations>
 How I checked: <file:line evidence and mechanism>
 ```
 
-Give it the PR summary, question, relevant hunk, and this rule: do not load the
-full `speak-as-todd` skill; do not create tickets; verify third-party behavior
+Give it the PR summary, question, relevant hunk, and this rule: use `_shared/voice-brief.md`
+for voice; do not create tickets; verify third-party behavior
 before prescribing a change. Use an expensive model only for a suspected
 blocking defect. Use a cheaper model for clarification and non-blocking
 research.

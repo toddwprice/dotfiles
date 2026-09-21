@@ -147,4 +147,4 @@ Ingested files keep their original markup — they don't need the `report-*` met
 
 ## Voice for narrative sections
 
-Use Todd's voice. Defer to `speak-as-todd` if available. Tight, declarative, no preamble. If something's a guess, mark it (`probably`, `from what I can tell`).
+Use Todd's voice. Follow the `ste-writer` skill (STE) for sentence-level style. Tight, declarative, no preamble. If something's a guess, mark it (`probably`, `from what I can tell`).

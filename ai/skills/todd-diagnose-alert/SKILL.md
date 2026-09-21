@@ -109,7 +109,7 @@ Before the final diagnosis, append one terminal-state record. Recording failure 
   --stop-reason "<diagnosis-written|insufficient-evidence|datadog-unavailable|error>"
 ```
 
-Use Todd's voice for the writeup. Defer to the `speak-as-todd` skill if available. Key rules:
+Use Todd's voice for the writeup. Follow the `ste-writer` skill (STE) for sentence-level style. Key rules:
 - State the call directly. No "perhaps", "maybe consider".
 - 1–4 sentence paragraphs. No throat-clearing.
 - Honest about uncertainty: "can't tell from the logs alone — leaning X because Y" is better than fabricated confidence.

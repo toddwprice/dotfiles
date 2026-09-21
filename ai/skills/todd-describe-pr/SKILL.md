@@ -470,7 +470,7 @@ Then tell Todd, in one line: where it landed, how many findings of each severity
 
 ## Voice for annotations and narrative
 
-Use Todd's voice. Defer to the `speak-as-todd` skill if available. Terse, declarative, mechanism-first. State the call directly — no hedging filler. If a finding is non-blocking, say so plainly. If you can't tell from the diff, say "can't tell from the diff — leaning X because Y" rather than fabricating certainty.
+Use Todd's voice. Follow the `ste-writer` skill (STE) for sentence-level style; `_shared/voice-brief.md` is the voice reference. Terse, declarative, mechanism-first. State the call directly — no hedging filler. If a finding is non-blocking, say so plainly. If you can't tell from the diff, say "can't tell from the diff — leaning X because Y" rather than fabricating certainty.
 
 For the **narrative** block, the goal is to summarize what the PR does in the smallest number of words that still names every load-bearing piece. Domain terms (function names, file paths, methodology terms) should be preserved verbatim — generalizing them is the opposite of helpful.
 

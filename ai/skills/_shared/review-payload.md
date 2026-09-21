@@ -90,8 +90,7 @@ PR #26728): open with the observation or question; no bold title/`Bug:`/`Nit:` p
 - **Non-blocking status**, when stated, is a trailing plain caveat — `NON-BLOCKING.` on its own line
   with a soft close — not a bolded prefix tag.
 
-Use `_shared/voice-brief.md` for any wording generated — the review-scoped voice reference,
-not the full `speak-as-todd` Slack guide.
+Use `_shared/voice-brief.md` for any wording generated — the review-scoped voice reference.
 
 ## Posting
 

@@ -61,7 +61,7 @@ This command splits work across models by reasoning load — keep the judgment o
 - **Orchestrator (this agent): Opus.** Step 3 analysis (finding real bugs and cross-service contract mismatches) and the final verdict are the highest-value reasoning here — never downgrade them. Run the command in **`/fast`** when you want it quicker: fast mode keeps full Opus reasoning but emits faster, so you lose no review quality.
 - **Sonnet 5 sub-agents** for the mechanical / lower-judgment work: the HTML render (Step 7b) and the non-blocking-tier question answers (Step 5). See those steps for exact routing.
 - **Opus sub-agents** stay on blocking-tier question answers (suspected bug / security / cross-service contract) — those verdicts gate Approve vs Request Changes.
-- **`_shared/voice-brief.md`** is read once per Step 5 sub-agent — ~830 tokens, not the ~4,900 of the full `speak-as-todd` skill. That skill is the Slack/standup guide and its own description routes PR-review content here instead; loading it per sub-agent was costing ~1.8M tokens per three weeks of review volume for material (emoji palette, standup shape, DM register) that never reaches a review answer. The brief carries what actually governs the output: the four rules, the praise/plain-vocabulary register, and the AI-tic anti-patterns. Voice fidelity on a two-paragraph answer comes from those, not from the Slack examples.
+- **`_shared/voice-brief.md`** is read once per Step 5 sub-agent — ~830 tokens, not the ~4,900 of the former `speak-as-todd` Slack/standup guide (now archived). Loading that skill per sub-agent was costing ~1.8M tokens per three weeks of review volume for material (emoji palette, standup shape, DM register) that never reached a review answer. The brief carries what actually governs the output: the four rules, the praise/plain-vocabulary register, and the AI-tic anti-patterns. Voice fidelity on a two-paragraph answer comes from those, not from the Slack examples.
 
 ## Reviewer Persona
 
@@ -356,7 +356,7 @@ For each question from Step 4, dispatch a sub-agent. **Send all sub-agent calls 
   ```
   You are answering a single open question from Todd's PR review of dscout PR #<N>. Todd is a senior dscout engineer; you are answering ON HIS BEHALF.
 
-  **Before drafting your Answer/How I checked, read `~/.claude/skills/_shared/voice-brief.md`.** That is the review-scoped source of truth for Todd's voice — read it and internalize it before you write a word. The voice rules below are a reminder, not a substitute. Do **not** load the full `speak-as-todd` skill: it's the Slack/standup guide (standup formats, emoji palette, DM register), none of which applies to a review answer, and it costs ~6x the tokens.
+  **Before drafting your Answer/How I checked, read `~/.claude/skills/_shared/voice-brief.md`.** That is the source of truth for Todd's review voice — read it and internalize it before you write a word. The voice rules below are a reminder, not a substitute.
 
   PR summary: <one paragraph>
 

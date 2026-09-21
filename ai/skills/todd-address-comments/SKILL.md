@@ -238,8 +238,7 @@ with the answer; cite `file:line` evidence) and, for the ones you'll fix, a one-
 change**. Then ask Todd to confirm, edit, or drop any before you proceed.
 
 Use `~/.claude/skills/_shared/voice-brief.md` for reply wording — that's the review-scoped
-voice reference. Don't load the full `speak-as-todd` skill here; it's the Slack/standup guide
-and costs ~6x the tokens for material a PR reply never uses.
+voice reference.
 
 **In Local findings mode** the Reviewer column reads `self-review` and there are no draft replies to
 write — nothing was ever posted, so there's nothing to reply to. Show the table, the one-line *what

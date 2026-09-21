@@ -79,9 +79,10 @@ alias gp="git push --force-with-lease"
 alias gbcp="git branch --show-current | tee >(tr -d '\n' | pbcopy)"
 alias ddu="dscout-down && docker compose --profile deps up -d --build"
 alias wt="git worktree"
-
+alias mlx="python -m mlx_vlm.server --model mlx-community/Qwen3.8-27B-4bit --port 8080"
 # Docker compose shorthand
 alias dc="docker compose"
+alias oc="opencode"
 
 # Personal + work zsh config (kept out of the public repo)
 [[ -r ~/.config/zsh/personal.zsh ]] && source ~/.config/zsh/personal.zsh
