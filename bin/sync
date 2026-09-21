@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Sync dotfiles: scan watched directories for new (non-symlinked) files,
-# offer to mkrc them, then surface uncommitted edits and prompt for a commit.
+# Sync dotfiles: refresh the agent-harness symlinks (bin/link-agents), scan
+# watched directories for new (non-symlinked) files, offer to mkrc them, then
+# surface uncommitted edits and prompt for a commit.
 #
 # rcm uses per-file symlinks. Edits to tracked files flow through automatically,
 # but NEW files in tracked directories live outside the repo until you mkrc them.
@@ -13,7 +14,7 @@ set -euo pipefail
 # managing a new dotfile location.
 #
 # ~/.claude/skills, ~/.claude/agents, and their siblings in ~/.codex,
-# ~/.config/opencode, and ~/.zcode are NOT here: bin/link-agents symlinks
+# ~/.config/opencode, ~/.pi, and ~/.zcode are NOT here: bin/link-agents symlinks
 # those whole to ai/, so a new file saved there already lives inside the
 # repo — it needs `git add`, not `mkrc`, and phase 2 below already surfaces
 # it as an uncommitted change.
@@ -67,7 +68,15 @@ else
   echo "No new files in watched dirs."
 fi
 
-# -- 2. Show uncommitted changes in the repo -------------------------------
+# -- 2. Refresh agent-harness symlinks ---------------------------------------
+
+# Re-create or re-point the whole-directory links from ai/ into each installed
+# harness (~/.claude, ~/.agents, ~/.codex, ~/.config/opencode, ~/.pi, ~/.zcode).
+# Idempotent: rows already correct print "ok". `|| true`: a refusal (real
+# content in the way) reports and keeps going, so it cannot abort the sync.
+"$DOTFILES/bin/link-agents" || true
+
+# -- 3. Show uncommitted changes in the repo -------------------------------
 
 cd "$DOTFILES"
 
@@ -89,7 +98,7 @@ if [[ "$ans" =~ ^[Nn]$ ]]; then
   exit 0
 fi
 
-# -- 3. Commit and push ----------------------------------------------------
+# -- 4. Commit and push ----------------------------------------------------
 
 default_msg="Sync dotfiles ($(date +%Y-%m-%d))"
 read -r -p "Commit message [${default_msg}]: " msg

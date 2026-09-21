@@ -7,7 +7,7 @@
 # that aren't installed are skipped. Real content is never deleted: a
 # destination holding a real file or directory is refused and reported, the
 # rows after it are still linked, and the run exits non-zero at the end. One
-# bad row shouldn't cost you the other eleven, so callers that must not abort
+# bad row shouldn't cost the others, so callers that must not abort
 # on a refusal should invoke this with `|| true` and read the output.
 #
 # --dry-run reports what would change and still exits non-zero when a row
@@ -44,6 +44,7 @@ ROWS=(
   "skills|$HOME/.codex/skills|$HOME/.codex"
   "skills|$HOME/.config/opencode/skills|$HOME/.config/opencode"
   "skills|$HOME/.zcode/skills|$HOME/.zcode"
+  "skills|$HOME/.pi/agent/skills|$HOME/.pi/agent"
   "AGENTS.md|$HOME/.claude/CLAUDE.md|$HOME/.claude"
   "AGENTS.md|$HOME/.codex/AGENTS.md|$HOME/.codex"
   "AGENTS.md|$HOME/.config/opencode/AGENTS.md|$HOME/.config/opencode"
