@@ -1,0 +1,103 @@
+{
+  "expectations": [
+    {
+      "text": "Uses gh pr create (not gh api or other approach)",
+      "passed": true,
+      "evidence": "Output response.md line 6 shows `gh pr create \\` as the primary command. No `gh api` or other approach was used."
+    },
+    {
+      "text": "Includes --title with the exact title 'Fix screen recording loop on Android'",
+      "passed": true,
+      "evidence": "Output response.md line 8: `--title \"Fix screen recording loop on Android\"` — exact match."
+    },
+    {
+      "text": "Includes --label bug (or --labels bug)",
+      "passed": true,
+      "evidence": "Output response.md line 9: `--label \"bug\"`."
+    },
+    {
+      "text": "Includes --reviewer alice,bob (or --reviewer alice --reviewer bob)",
+      "passed": true,
+      "evidence": "Output response.md line 10: `--reviewer alice,bob` — both reviewers in comma-separated format."
+    },
+    {
+      "text": "Body contains 'Closes #540' or 'Fixes #540' (GitHub auto-close keywords)",
+      "passed": true,
+      "evidence": "Output response.md line 16: `Closes #540` appears in the PR body within the HEREDOC."
+    },
+    {
+      "text": "Includes --base main to target the main branch",
+      "passed": true,
+      "evidence": "Output response.md line 7: `--base main`."
+    },
+    {
+      "text": "Mentions that 'Closes' or 'Fixes' in the body is what triggers auto-close",
+      "passed": true,
+      "evidence": "Output response.md lines 42-50: Dedicated section titled 'Why `Closes #540` for Auto-Close' explains that GitHub recognizes keywords (Closes, Fixes, Resolves) that link a PR to an issue and auto-close it on merge, and that 'The keyword must appear in the PR body (not the title) for GitHub to register the auto-close link.'"
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_tokens": 20258,
+    "duration_ms": 61494,
+    "total_duration_seconds": 61.5
+  },
+  "claims": [
+    {
+      "claim": "The label must already exist in the repository; gh pr create will not create labels on the fly",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct gh CLI behavior — --label requires the label to pre-exist."
+    },
+    {
+      "claim": "Multiple reviewers are comma-separated with no spaces",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Correct per gh CLI docs — --reviewer accepts comma-separated usernames."
+    },
+    {
+      "claim": "The comma-separated syntax for multiple labels (--label 'bug,android') does not work",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Correct — gh CLI requires repeated --label flags for multiple labels."
+    },
+    {
+      "claim": "Auto-close only triggers when merging into the repository's default branch",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Correct per GitHub documentation on auto-closing keywords."
+    },
+    {
+      "claim": "The keyword must appear in the PR body (not the title) for GitHub to register the auto-close link",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Correct — GitHub only parses auto-close keywords from the PR body and commit messages, not the PR title."
+    },
+    {
+      "claim": "No files were read for this task",
+      "type": "process",
+      "verified": true,
+      "evidence": "Transcript confirms the task was answered from built-in knowledge with no file reads beyond system context."
+    }
+  ],
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Uses gh pr create (not gh api or other approach)",
+        "reason": "This assertion could be strengthened slightly by also checking that the command was presented as the recommended/primary approach, not just mentioned among alternatives. However, in practice this is fine since any reasonable response would lead with gh pr create."
+      },
+      {
+        "reason": "No assertion checks whether the command is syntactically valid as a whole (e.g., proper quoting, correct HEREDOC usage, no conflicting flags). The output here is well-formed, but a malformed command could pass all individual flag assertions while being un-runnable."
+      },
+      {
+        "reason": "No assertion checks quality of the PR body beyond the auto-close keyword. The output included a well-structured body with summary, changes, and test plan sections — this quality is unassessed. Consider an assertion like 'Body includes a meaningful description beyond just the auto-close keyword.'"
+      }
+    ],
+    "overall": "Assertions are well-targeted and cover all the explicit requirements from the eval prompt. The main gap is that they check individual flags in isolation but don't verify the command is syntactically valid as a whole. Overall, this is a solid set of assertions for the task."
+  }
+}

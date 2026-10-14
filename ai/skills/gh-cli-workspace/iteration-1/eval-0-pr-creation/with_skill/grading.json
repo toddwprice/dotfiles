@@ -1,0 +1,101 @@
+{
+  "expectations": [
+    {
+      "text": "Uses gh pr create (not gh api or other approach)",
+      "passed": true,
+      "evidence": "The response output shows the primary command as `gh pr create \\` with all flags. No gh api or other approach was used."
+    },
+    {
+      "text": "Includes --title with the exact title 'Fix screen recording loop on Android'",
+      "passed": true,
+      "evidence": "Response line: `--title \"Fix screen recording loop on Android\"` — exact match to the requested title."
+    },
+    {
+      "text": "Includes --label bug (or --labels bug)",
+      "passed": true,
+      "evidence": "Response line: `--label bug` — correctly uses the --label flag with value 'bug'."
+    },
+    {
+      "text": "Includes --reviewer alice,bob (or --reviewer alice --reviewer bob)",
+      "passed": true,
+      "evidence": "Response line: `--reviewer alice,bob` — both reviewers specified as comma-separated values on a single --reviewer flag."
+    },
+    {
+      "text": "Body contains 'Closes #540' or 'Fixes #540' (GitHub auto-close keywords)",
+      "passed": true,
+      "evidence": "The --body content includes `Closes #540` on its own line within the HEREDOC body text."
+    },
+    {
+      "text": "Includes --base main to target the main branch",
+      "passed": true,
+      "evidence": "Response line: `--base main` — explicitly targets main as the merge base."
+    },
+    {
+      "text": "Mentions that 'Closes' or 'Fixes' in the body is what triggers auto-close",
+      "passed": true,
+      "evidence": "Dedicated section titled 'Why \"Closes #540\" works for auto-close' explains: 'GitHub recognizes several keywords that, when followed by an issue reference in a PR body, will auto-close the linked issue upon merge: Closes #540, Fixes #540, Resolves #540'. Also notes the keyword must be in the PR body (not just the title) for auto-close to trigger."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "output_chars": 5304,
+    "transcript_chars": 2729
+  },
+  "timing": {
+    "total_tokens": 28226,
+    "total_duration_seconds": 82.8
+  },
+  "claims": [
+    {
+      "claim": "The skill file showed the example 'gh pr create --title \"Fix login crash\" --body \"Closes #456\"'",
+      "type": "process",
+      "verified": true,
+      "evidence": "Transcript states it read the SKILL.md file and found this pattern. Consistent with the skill providing PR creation examples."
+    },
+    {
+      "claim": "GitHub auto-close keywords are case-insensitive",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is a well-documented GitHub feature — 'closes', 'Closes', 'CLOSES' all work."
+    },
+    {
+      "claim": "Auto-close only works when merged into the default branch",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is accurate per GitHub documentation — closing keywords only trigger when the PR merges into the default branch."
+    },
+    {
+      "claim": "gh pr create will fail entirely if a label does not exist",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct behavior for gh CLI — creating a PR with a non-existent label causes an error."
+    },
+    {
+      "claim": "Single quotes around EOF prevent variable expansion inside the body text",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct bash behavior — <<'EOF' prevents parameter expansion within the heredoc."
+    }
+  ],
+  "user_notes_summary": null,
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Uses gh pr create (not gh api or other approach)",
+        "reason": "This assertion would pass even if the command were syntactically incorrect or missing critical flags — it only checks that 'gh pr create' appears somewhere. The other assertions cover specific flags, so this is mostly redundant as a quality gate, but it does serve as a useful sanity check for the approach."
+      },
+      {
+        "reason": "No assertion checks whether the command is actually syntactically valid and runnable. The response produced a well-formed command, but a garbled command that happened to contain all the right flag names would also pass all 7 assertions. Consider adding an assertion like 'The gh pr create command is syntactically correct and could be copy-pasted to run'."
+      },
+      {
+        "reason": "No assertion checks the quality of the PR body beyond the auto-close keyword. The response included a structured Summary and Test Plan, which adds real value. An assertion like 'Body includes a meaningful summary of the changes' would reward higher-quality outputs."
+      }
+    ],
+    "overall": "The assertions are well-targeted and cover all the explicit requirements from the prompt. They form a strong set for verifying flag-level correctness. The main gap is that they don't test the overall quality or runnability of the output beyond checking individual flags."
+  }
+}

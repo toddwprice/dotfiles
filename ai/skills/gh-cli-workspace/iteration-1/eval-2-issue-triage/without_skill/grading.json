@@ -1,0 +1,107 @@
+{
+  "expectations": [
+    {
+      "text": "Uses gh issue list with --label bug and --state open",
+      "passed": true,
+      "evidence": "In response.md lines 6-12, the command clearly uses `gh issue list --label \"bug\" --state open`. This appears in both the step-by-step explanation and the complete script."
+    },
+    {
+      "text": "Filters by creation date (last month) using --search or --jq",
+      "passed": true,
+      "evidence": "The command uses `--search \"created:>=2026-03-08\"` (response.md line 9). The transcript also explains this choice: 'The `--search` flag passes through to GitHub's search API, which supports date qualifiers like created:>=YYYY-MM-DD.' The date 2026-03-08 is correctly calculated as one month before the current date 2026-04-08."
+    },
+    {
+      "text": "Uses --json with number, title, and assignees fields",
+      "passed": true,
+      "evidence": "The command uses `--json number,title,assignees` (response.md line 10). All three requested fields are present."
+    },
+    {
+      "text": "Uses --jq or column formatting to produce readable table output",
+      "passed": true,
+      "evidence": "Uses both `--jq` for JSON-to-TSV transformation and `| column -t -s $'\\t'` for aligned table formatting (response.md lines 11-12). Also provides a variant with printf header row for column labels (lines 33-39). The complete script (lines 106-116) includes headers and separator lines for a polished table."
+    },
+    {
+      "text": "Uses a pipeline (xargs or loop) to close stale issues in bulk",
+      "passed": true,
+      "evidence": "Uses `| while read -r issue_num; do ... done` loop piped from the output of `gh issue list` (response.md lines 69-81). The complete script (lines 135-139) uses the same pattern with `echo \"$STALE_ISSUES\" | while read -r issue_num`."
+    },
+    {
+      "text": "The close command includes --comment with a cleanup message",
+      "passed": true,
+      "evidence": "The close command is `gh issue close \"$issue_num\" --comment \"Closing as part of stale bug cleanup. If this issue is still relevant, please reopen it or file a new issue.\"` (response.md lines 78-79). The comment message is clear and includes guidance on reopening."
+    },
+    {
+      "text": "Warns about irreversibility or suggests a dry-run/preview before bulk close",
+      "passed": true,
+      "evidence": "Edge case #8 (response.md line 173): 'Before running the close loop, it's wise to first run Step 2 alone to see the list of issues that would be closed. Review the output before proceeding with Step 3. The script above naturally supports this.' Edge case #9 (line 176) also clarifies that closing is reversible and issues can be reopened with `gh issue reopen`."
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "execution_metrics": {
+    "total_tokens": 21890,
+    "output_chars": 8940,
+    "transcript_chars": 2728
+  },
+  "timing": {
+    "total_duration_seconds": 129.1
+  },
+  "claims": [
+    {
+      "claim": "Multiple --label flags in gh issue list are treated as AND conditions",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct per gh CLI documentation. Using --label 'bug' --label 'stale' returns only issues with both labels."
+    },
+    {
+      "claim": "The --comment flag on gh issue close was added in gh v2.14.0+",
+      "type": "factual",
+      "verified": false,
+      "evidence": "Cannot verify the exact version from available outputs. The claim is plausible but the specific version number is unverifiable."
+    },
+    {
+      "claim": "GitHub's API rate limit is 5,000 requests/hour for authenticated users",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is the standard GitHub REST API rate limit for authenticated users."
+    },
+    {
+      "claim": "The jq alternative operator (//) correctly handles empty assignees arrays producing empty strings",
+      "type": "factual",
+      "verified": true,
+      "evidence": "In jq, `join(\", \")` on an empty array produces `\"\"` which is falsy, so `// \"unassigned\"` correctly provides the fallback. The explanation is accurate."
+    },
+    {
+      "claim": "The date qualifier created:>=YYYY-MM-DD uses UTC timezone",
+      "type": "factual",
+      "verified": true,
+      "evidence": "GitHub search API date qualifiers operate in UTC, as documented by GitHub."
+    },
+    {
+      "claim": "gh issue close is reversible via gh issue reopen",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct. Closed issues can be reopened with gh issue reopen."
+    }
+  ],
+  "user_notes_summary": null,
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Warns about irreversibility or suggests a dry-run/preview before bulk close",
+        "reason": "The assertion passed because the output mentions dry-run in an 'Edge Cases' section. However, it's buried in a list of 10 edge cases at the bottom of the response. A stronger assertion might require the dry-run/preview to appear prominently in the main workflow (e.g., before the close command section), not just as an afterthought. That said, the output is genuinely helpful here."
+      },
+      {
+        "reason": "No assertion checks whether the executor correctly combined --label and --search flags (which could conflict on some gh versions). The transcript itself flags this as an uncertainty: 'The main area of uncertainty is whether --search combined with --label works as expected or if they conflict.' This is an important correctness concern that no assertion covers."
+      },
+      {
+        "reason": "No assertion checks that the script handles the empty result case (no stale issues found). The complete script does handle this with an `if [ -z \"$STALE_ISSUES\" ]` check (line 132), which is good practice that goes unrecognized by the current assertions."
+      }
+    ],
+    "overall": "The assertions are well-structured and cover the key aspects of the task. They test both the querying and the mutation sides of the workflow. The main gap is the lack of assertions around correctness of flag composition (--label + --search) and error handling for edge cases like empty results."
+  }
+}

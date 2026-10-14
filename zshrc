@@ -52,11 +52,6 @@ ccc() {
     claude "$@"
 }
 
-# # Node Version Manager
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-
 export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
@@ -82,8 +77,15 @@ alias wt="git worktree"
 alias mlx="python -m mlx_vlm.server --model mlx-community/Qwen3.8-27B-4bit --port 8080"
 # Docker compose shorthand
 alias dc="docker compose"
-alias oc="opencode"
+alias oc="opencode 2>/dev/null"
 
 # Personal + work zsh config (kept out of the public repo)
 [[ -r ~/.config/zsh/personal.zsh ]] && source ~/.config/zsh/personal.zsh
 [[ -r ~/.config/zsh/dscout.zsh ]]   && source ~/.config/zsh/dscout.zsh
+
+# >>> Magnitude CLI PATH >>>
+case "$PATH" in
+  "$HOME/.magnitude/bin"|"$HOME/.magnitude/bin":*) ;;
+  *) export PATH="$HOME/.magnitude/bin:$PATH" ;;
+esac
+# <<< Magnitude CLI PATH <<<

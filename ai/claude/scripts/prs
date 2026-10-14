@@ -12,7 +12,9 @@ LIMIT=100
 SKIP_DRAFTS=false
 PR_REF_WIDTH=32
 SUBMITTER_WIDTH=18
-LINEAR_WIDTH=64
+LINEAR_WIDTH=44
+CHANGE_WIDTH=12
+TIME_WIDTH=20
 
 # Bash printf measures its field widths in UTF-8 bytes, not the terminal cells
 # they occupy. Format each column by display width instead, so an em dash in a
@@ -56,7 +58,7 @@ format_created_at() {
   # GitHub timestamps are UTC. Parse them in UTC first, then let date render
   # the resulting instant in this machine's current timezone.
   epoch="$(TZ=UTC date -j -f '%Y-%m-%dT%H:%M:%SZ' "$created_at" '+%s')" || return 1
-  formatted="$(date -r "$epoch" '+%a %b %-d %-I:%M%p (%Z)')" || return 1
+  formatted="$(date -r "$epoch" '+%a %b %-d %-I:%M%p')" || return 1
   formatted="${formatted/AM/am}"
   printf '%s' "${formatted/PM/pm}"
 }
@@ -70,7 +72,9 @@ Lists open PRs that have requested your review, oldest first.
   #       GitHub PR number
   Submitter  GitHub author
   Linear  Linear ticket and its current title
-  Created  When the PR was opened (your current timezone)
+  +/-  Lines added and removed
+  Created  When the PR was opened in your local time
+  Updated  When the PR was last updated in your local time
 
 Options:
   -r, --repo OWNER/NAME  Search one repo instead of the dscout organization
@@ -115,7 +119,7 @@ if ! json="$(gh search prs "${qualifiers[@]}" \
     --sort=created \
     --order=asc \
     --limit "$LIMIT" \
-    --json number,repository,isDraft,title,author,createdAt)"; then
+    --json number,repository,isDraft,title,author,createdAt,updatedAt)"; then
   die "GitHub PR search failed"
 fi
 
@@ -136,13 +140,15 @@ if [[ "$count" -eq 0 ]]; then
   exit 0
 fi
 
-printf '\033[1m%s %s %s %s\033[0m\n' \
+printf '\033[1m%s %s %s %s %s %s\033[0m\n' \
   "$(format_column '#' "$PR_REF_WIDTH")" \
   "$(format_column 'Submitter' "$SUBMITTER_WIDTH")" \
   "$(format_column 'Linear' "$LINEAR_WIDTH")" \
-  'Created'
+  "$(format_column '+/-' "$CHANGE_WIDTH")" \
+  "$(format_column 'Created' "$TIME_WIDTH")" \
+  'Updated'
 
-while IFS=$'\t' read -r number author pr_title created repo; do
+while IFS=$'\t' read -r number author pr_title created updated repo; do
   # PR titles conventionally carry the Linear identifier, e.g. [FRG-1234] or
   # FRG-1234: title. The Linear title is intentionally fetched fresh instead
   # of echoing the PR title, which often describes the implementation instead.
@@ -170,15 +176,27 @@ while IFS=$'\t' read -r number author pr_title created repo; do
     die "could not format GitHub creation time '$created'"
   fi
 
-  printf '%s %s %s %s\n' \
+  if ! updated="$(format_created_at "$updated")"; then
+    die "could not format GitHub update time '$updated'"
+  fi
+
+  if ! changes="$(gh pr view "$number" --repo "$repo" --json additions,deletions 2>/dev/null)"; then
+    die "could not get change counts for $repo#$number"
+  fi
+  change_counts="+$(jq -r '.additions' <<<"$changes")/-$(jq -r '.deletions' <<<"$changes")"
+
+  printf '%s %s %s %s %s %s\n' \
     "$(format_column "$pr_ref" "$PR_REF_WIDTH")" \
     "$(format_column "@$author" "$SUBMITTER_WIDTH")" \
     "$(format_column "$linear" "$LINEAR_WIDTH")" \
-    "$created"
+    "$(format_column "$change_counts" "$CHANGE_WIDTH")" \
+    "$(format_column "$created" "$TIME_WIDTH")" \
+    "$(format_column "$updated" "$TIME_WIDTH")"
 done < <(jq -r '.[] | [
   (.number | tostring),
   (.author.login // "ghost"),
   .title,
   .createdAt,
+  .updatedAt,
   .repository.nameWithOwner
 ] | @tsv' <<<"$json")

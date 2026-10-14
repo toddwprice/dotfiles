@@ -1,0 +1,92 @@
+{
+  "expectations": [
+    {
+      "text": "Uses gh pr checks 247 (or equivalent) to see check status",
+      "passed": true,
+      "evidence": "Step 1 of response.md shows `gh pr checks 247` as the first command. Transcript confirms: 'I mapped these to `gh pr checks` and `gh run view --log-failed` respectively.'"
+    },
+    {
+      "text": "Uses gh run view with --log-failed or --log to get failure logs",
+      "passed": true,
+      "evidence": "Step 5 of response.md shows `gh run view <run-id> --log-failed`. Step 6 shows `gh run view <run-id> --log --job <job-id>` as a deeper alternative. Both are explained with rationale."
+    },
+    {
+      "text": "Demonstrates a multi-step workflow (not just one command)",
+      "passed": true,
+      "evidence": "Response contains 7 numbered steps forming a progressive funnel: gh pr checks -> gh pr view -> gh run list -> gh run view -> gh run view --log-failed -> gh run view --log --job -> gh run rerun. Transcript explicitly states: 'I decided to structure the response as a progressive debugging workflow rather than a flat list of commands.'"
+    },
+    {
+      "text": "Explains how to identify the run ID from the checks output",
+      "passed": true,
+      "evidence": "Step 3 of response.md explains: 'You need the run ID of the failed run to drill into its logs' and 'Note the run ID (a numeric identifier).' Transcript says: '`gh pr checks` shows check names and statuses but does not directly give you run IDs needed for log retrieval. `gh run list` with the branch filter provides those IDs.' The bridging step from checks to run IDs via `gh run list` is explicitly called out."
+    },
+    {
+      "text": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data",
+      "passed": false,
+      "evidence": "Neither 'statusCheckRollup' nor '--json' appears anywhere in the response.md or transcript. The 'What I Excluded' section of the transcript mentions excluding `gh api` calls but does not mention the --json statusCheckRollup option. This specific alternative was not surfaced."
+    }
+  ],
+  "summary": {
+    "passed": 4,
+    "failed": 1,
+    "total": 5,
+    "pass_rate": 0.8
+  },
+  "execution_metrics": {
+    "total_tokens": 20522,
+    "output_chars": 6196,
+    "transcript_chars": 3293
+  },
+  "timing": {
+    "total_duration_seconds": 95.5
+  },
+  "claims": [
+    {
+      "claim": "CI debugging is inherently iterative and requires dynamic inputs from prior outputs",
+      "type": "quality",
+      "verified": true,
+      "evidence": "The workflow correctly identifies that run IDs are needed from Step 3 output before they can be used in Step 4/5, and job IDs from Step 4 before Step 6."
+    },
+    {
+      "claim": "--log-failed is more useful than --log because it filters to only failed steps",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct per gh CLI documentation. --log-failed filters log output to failed steps only."
+    },
+    {
+      "claim": "gh pr checks shows check names and statuses but does not directly give run IDs",
+      "type": "factual",
+      "verified": true,
+      "evidence": "Correct. gh pr checks shows check name, status, and URL but not the numeric run ID needed for gh run view."
+    },
+    {
+      "claim": "gh run rerun --failed re-runs only the failed jobs",
+      "type": "factual",
+      "verified": true,
+      "evidence": "This is correct per gh CLI documentation."
+    },
+    {
+      "claim": "No commands were actually executed",
+      "type": "process",
+      "verified": true,
+      "evidence": "Transcript states: 'The instructions explicitly stated: DO NOT actually run any gh commands' and no Bash tool calls appear in the transcript."
+    }
+  ],
+  "user_notes_summary": null,
+  "eval_feedback": {
+    "suggestions": [
+      {
+        "assertion": "Mentions gh pr view 247 --json statusCheckRollup as an alternative for structured data",
+        "reason": "This assertion tests for a very specific alternative command that a competent response might reasonably omit. The response instead took the approach of explaining what it excluded and why (gh api calls, --watch, annotation queries). A more discriminating assertion might check whether the response addresses programmatic/scriptable approaches to CI inspection in general, rather than one specific flag."
+      },
+      {
+        "assertion": "Demonstrates a multi-step workflow (not just one command)",
+        "reason": "This is trivially satisfied -- any response that lists more than one command passes. A stronger version would check that the steps have logical dependencies and that the response explains why the ordering matters (which this response does well, but the assertion would pass even for a random list of commands)."
+      },
+      {
+        "reason": "No assertion checks whether the response correctly explains the relationship between checks, runs, and jobs -- the three-level GitHub Actions hierarchy. This is arguably the most important conceptual understanding for CI debugging, and this response handles it well (checks -> runs -> jobs -> steps), but nothing tests for it."
+      }
+    ],
+    "overall": "Assertions cover the key mechanical steps well but miss the conceptual understanding that distinguishes a good CI debugging workflow from a command list. The statusCheckRollup assertion is overly specific for a 'without skill' baseline. Consider adding an assertion about explaining the Actions hierarchy (workflow -> run -> job -> step)."
+  }
+}
